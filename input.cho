@@ -1,5 +1,5 @@
 
-let i = 100
+const i = 100
 
 func add(Int a, Int b) Int {
     return a + b

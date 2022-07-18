@@ -1,0 +1,13 @@
+
+const i = 100 + 100 - 200 
+
+const a = 300
+
+func test() {
+   const a = 1 
+}
+
+func more() {
+    const aNameContainingNumbers123123 = 100 / 0
+    const aString = "test"
+}
