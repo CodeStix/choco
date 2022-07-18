@@ -83,6 +83,7 @@ void parseString(std::string &input, std::list<Token *> &tokenList)
             {
                 tokenList.push_back(new Token(i, TokenType::LITERAL_STRING, currentString));
                 state = TokenizeState::NONE;
+                continue;
             }
             else
             {
@@ -95,6 +96,7 @@ void parseString(std::string &input, std::list<Token *> &tokenList)
             {
                 tokenList.push_back(new Token(i, TokenType::LITERAL_CHAR, currentString));
                 state = TokenizeState::NONE;
+                continue;
             }
             else
             {
@@ -180,6 +182,11 @@ void parseString(std::string &input, std::list<Token *> &tokenList)
                 }
             }
         }
+    }
+
+    if (state != TokenizeState::NONE)
+    {
+        std::cout << "WARNING: Found end of file too early, was still parsing " << static_cast<int>(state) << "\n";
     }
 }
 

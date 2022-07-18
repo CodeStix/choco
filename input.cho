@@ -1,4 +1,5 @@
 
+let i =100
 
 func main()
     print("this is a test!")
