@@ -12,6 +12,8 @@ enum class ASTNodeType
     FUNCTION,
     DECLARATION,
     ASSIGNMENT,
+    INVOCATION,
+    READ_VARIABLE
 };
 
 class ASTNode
@@ -59,6 +61,19 @@ public:
     }
 };
 
+class ASTReadVariable : public ASTNode
+{
+public:
+    ASTReadVariable(const Token *nameToken) : ASTNode(ASTNodeType::READ_VARIABLE), nameToken(nameToken) {}
+    const Token *nameToken;
+
+    virtual std::string toString()
+    {
+        std::string str = this->nameToken->value;
+        return str;
+    }
+};
+
 class ASTLiteralString : public ASTNode
 {
 public:
@@ -98,8 +113,52 @@ public:
     {
         std::string str = "const ";
         str += this->nameToken->value;
+        if (this->value != NULL)
+        {
+            str += " = ";
+            str += this->value->toString();
+        }
+        return str;
+    }
+};
+
+class ASTAssignment : public ASTNode
+{
+public:
+    ASTAssignment(const Token *nameToken, ASTNode *value) : ASTNode(ASTNodeType::ASSIGNMENT), nameToken(nameToken), value(value) {}
+    const Token *nameToken;
+    ASTNode *value;
+
+    virtual std::string toString()
+    {
+        std::string str = this->nameToken->value;
         str += " = ";
         str += this->value->toString();
+        return str;
+    }
+};
+
+class ASTInvocation : public ASTNode
+{
+public:
+    ASTInvocation(const Token *functionNameToken, std::list<ASTNode *> *parameterValues) : ASTNode(ASTNodeType::INVOCATION), functionNameToken(functionNameToken), parameterValues(parameterValues) {}
+    const Token *functionNameToken;
+    std::list<ASTNode *> *parameterValues;
+
+    virtual std::string toString()
+    {
+        std::string str = this->functionNameToken->value;
+        str += "(";
+        bool isFirst = true;
+        for (ASTNode *parameterValue : *this->parameterValues)
+        {
+            if (!isFirst)
+                str += ", ";
+            isFirst = false;
+
+            str += parameterValue->toString();
+        }
+        str += ")";
         return str;
     }
 };
@@ -118,6 +177,7 @@ public:
         str += " {\n";
         for (ASTNode *statement : *this->statements)
         {
+            str += "\t";
             str += statement->toString();
             str += "\n";
         }
@@ -126,7 +186,8 @@ public:
     }
 };
 
-ASTDeclaration *parseConstDeclaration(std::list<Token *> &tokens);
-ASTNode *parseValueOrOperator(std::list<Token *> &tokens);
-ASTNode *parseValue(std::list<Token *> &tokens);
-ASTFunction *parseFunction(std::list<Token *> &tokens);
+ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens);
+ASTNode *parseValueOrOperator(std::list<const Token *> &tokens);
+ASTNode *parseValue(std::list<const Token *> &tokens);
+ASTFunction *parseFunction(std::list<const Token *> &tokens);
+ASTNode *parseSymbolOperation(std::list<const Token *> &tokens);

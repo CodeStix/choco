@@ -1,6 +1,6 @@
 #include "ast.hpp"
 
-ASTFunction *parseFunction(std::list<Token *> &tokens)
+ASTFunction *parseFunction(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
     if (tok == NULL)
@@ -92,25 +92,111 @@ ASTFunction *parseFunction(std::list<Token *> &tokens)
             break;
         }
 
+        ASTNode *statement = NULL;
         switch (tok->type)
         {
         case TokenType::FUNC_KEYWORD:
-            statements->push_front(parseFunction(tokens));
+            statement = parseFunction(tokens);
             break;
         case TokenType::CONST_KEYWORD:
-            statements->push_front(parseConstDeclaration(tokens));
+        case TokenType::LET_KEYWORD:
+            statement = parseDeclaration(tokens);
             break;
+        case TokenType::SYMBOL:
+            statement = parseSymbolOperation(tokens);
+            break;
+        }
 
-        default:
+        if (statement == NULL)
+        {
             std::cout << "ERROR: Invalid function statement\n";
-            break;
+        }
+        else
+        {
+            statements->push_back(statement);
         }
     }
 
     return new ASTFunction(nameToken, statements);
 }
 
-ASTNode *parseValue(std::list<Token *> &tokens)
+// Parses invocation, assingment or a read of a symbol
+ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::SYMBOL)
+    {
+        return NULL;
+    }
+
+    const Token *nameToken = tok;
+
+    tokens.pop_front();
+    tok = tokens.front();
+    switch (tok->type)
+    {
+    case TokenType::BRACKET_OPEN:
+    {
+        // Parse invocation
+        tokens.pop_front();
+
+        std::list<ASTNode *> *parameterValues = new std::list<ASTNode *>();
+        while (true)
+        {
+            tok = tokens.front();
+            if (tok->type == TokenType::BRACKET_CLOSE)
+            {
+                tokens.pop_front();
+                break;
+            }
+
+            ASTNode *value = parseValueOrOperator(tokens);
+            parameterValues->push_back(value);
+
+            tok = tokens.front();
+            if (tok->type != TokenType::COMMA)
+            {
+                if (tok->type != TokenType::BRACKET_CLOSE)
+                {
+                    std::cout << "ERROR: Invocation parameters should be split using commas\n";
+                }
+            }
+            else
+            {
+                tokens.pop_front();
+            }
+        }
+        return new ASTInvocation(nameToken, parameterValues);
+    }
+
+    case TokenType::ASSIGNMENT_OPERATOR:
+    {
+        // Parse assigment
+        tokens.pop_front();
+
+        ASTNode *value = parseValueOrOperator(tokens);
+        if (!value)
+        {
+            std::cout << "ERROR: Assigment value is invalid\n";
+            return NULL;
+        }
+
+        return new ASTAssignment(nameToken, value);
+    }
+
+    default:
+        // Parse read
+        tokens.pop_front();
+        return new ASTReadVariable(nameToken);
+    }
+}
+
+ASTNode *parseValue(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
     if (tok == NULL)
@@ -124,10 +210,12 @@ ASTNode *parseValue(std::list<Token *> &tokens)
     {
     case TokenType::LITERAL_STRING:
         value = new ASTLiteralString(tok);
+        tokens.pop_front();
         break;
 
     case TokenType::LITERAL_NUMBER:
         value = new ASTLiteralNumber(tok);
+        tokens.pop_front();
         break;
 
     case TokenType::BRACKET_OPEN:
@@ -146,8 +234,23 @@ ASTNode *parseValue(std::list<Token *> &tokens)
         {
             std::cout << "ERROR: Brackets must be closed\n";
         }
+        else
+        {
+            tokens.pop_front();
+        }
 
         value = new ASTBrackets(innerValue);
+        break;
+    }
+
+    case TokenType::SYMBOL:
+    {
+        value = parseSymbolOperation(tokens);
+        if (value == NULL)
+        {
+            std::cout << "ERROR: Unexpected symbol \n";
+            return NULL;
+        }
         break;
     }
 
@@ -156,12 +259,10 @@ ASTNode *parseValue(std::list<Token *> &tokens)
         return NULL;
     }
 
-    tokens.pop_front();
-
     return value;
 }
 
-ASTNode *parseValueOrOperator(std::list<Token *> &tokens)
+ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
 {
     ASTNode *top = parseValue(tokens);
     if (top == NULL)
@@ -215,7 +316,7 @@ ASTNode *parseValueOrOperator(std::list<Token *> &tokens)
     }
 }
 
-ASTDeclaration *parseConstDeclaration(std::list<Token *> &tokens)
+ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
     if (tok == NULL)
@@ -223,9 +324,9 @@ ASTDeclaration *parseConstDeclaration(std::list<Token *> &tokens)
         std::cout << "ERROR: Unexpected end of file\n";
         return NULL;
     }
-    if (tok->type != TokenType::CONST_KEYWORD)
+    if (tok->type != TokenType::CONST_KEYWORD && tok->type != TokenType::LET_KEYWORD)
     {
-        std::cout << "ERROR: Constant must start with 'const'\n";
+        std::cout << "ERROR: Declaration must start with 'const' or 'let'\n";
         return NULL;
     }
     tokens.pop_front();

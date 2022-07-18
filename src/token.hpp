@@ -25,6 +25,7 @@ enum class TokenType
     SUBSTRACTION_OPERATOR,
     DIVISION_OPERATOR,
     MULTIPLICATION_OPERATOR,
+    COMMA,
 };
 
 class Token
@@ -39,4 +40,4 @@ public:
 
 const char *getTokenTypeName(TokenType type);
 int getTokenOperatorImportance(TokenType type);
-void parseString(std::string &input, std::list<Token *> &tokenList);
+void parseString(std::string &input, std::list<const Token *> &tokenList);

@@ -10,7 +10,7 @@ enum class TokenizeState
     PARSING_SYMBOL,
 };
 
-void parseString(std::string &input, std::list<Token *> &tokenList)
+void parseString(std::string &input, std::list<const Token *> &tokenList)
 {
     std::string currentString;
     TokenizeState state = TokenizeState::NONE;
@@ -59,7 +59,7 @@ void parseString(std::string &input, std::list<Token *> &tokenList)
         }
         else if (state == TokenizeState::PARSING_SYMBOL)
         {
-            if (isalnum(currentChar))
+            if (isalnum(currentChar) || currentChar == '_')
             {
                 currentString += currentChar;
             }
@@ -153,6 +153,9 @@ void parseString(std::string &input, std::list<Token *> &tokenList)
                     break;
                 case '/':
                     tokenList.push_back(new Token(i, TokenType::DIVISION_OPERATOR, std::string(1, currentChar)));
+                    break;
+                case ',':
+                    tokenList.push_back(new Token(i, TokenType::COMMA, std::string(1, currentChar)));
                     break;
 
                 default:

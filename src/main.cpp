@@ -5,7 +5,7 @@
 #include "token.hpp"
 #include "ast.hpp"
 
-void parseFile(std::list<Token *> &tokens)
+void parseFile(std::list<const Token *> &tokens)
 {
     std::list<ASTNode *> rootNodes;
 
@@ -13,18 +13,29 @@ void parseFile(std::list<Token *> &tokens)
     {
         const Token *tok = tokens.front();
 
+        ASTNode *statement = NULL;
         switch (tok->type)
         {
         case TokenType::FUNC_KEYWORD:
-            rootNodes.push_front(parseFunction(tokens));
+            statement = parseFunction(tokens);
             break;
         case TokenType::CONST_KEYWORD:
-            rootNodes.push_front(parseConstDeclaration(tokens));
+        case TokenType::LET_KEYWORD:
+            statement = parseDeclaration(tokens);
             break;
+        case TokenType::SYMBOL:
+            statement = parseSymbolOperation(tokens);
+            break;
+        }
 
-        default:
-            std::cout << "ERROR: Unexpected " << getTokenTypeName(tok->type) << " at " << tok->position << "\n";
-            break;
+        if (statement == NULL)
+        {
+            tokens.pop_front();
+            std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << " at " << tok->position << "\n";
+        }
+        else
+        {
+            rootNodes.push_back(statement);
         }
     }
 
@@ -32,7 +43,7 @@ void parseFile(std::list<Token *> &tokens)
     {
         if (node != NULL)
         {
-            std::cout << "Node: " << node->toString() << "\n";
+            std::cout << node->toString() << "\n";
         }
         else
         {
@@ -48,7 +59,7 @@ int main()
 
     std::cout << "Tokenizing...\n";
 
-    std::list<Token *> tokens;
+    std::list<const Token *> tokens;
     parseString(fileContent, tokens);
 
     for (const auto &token : tokens)
