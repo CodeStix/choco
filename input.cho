@@ -1,6 +1,13 @@
 
-let i =100
+let i = 100
 
-func main()
+func add(Int a, Int b) Int {
+    return a + b
+}
+
+func main() {
     print("this is a test!")
-end
+}
+
+
+

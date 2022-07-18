@@ -3,11 +3,12 @@
 #include <fstream>
 #include <list>
 
-// Keywords, operators, string literal, number literal, comments
-
 enum class TokenType
 {
     SYMBOL,
+    FUNC_KEYWORD,
+    RETURN_KEYWORD,
+    LET_KEYWORD,
     LITERAL_STRING,
     LITERAL_CHAR,
     LITERAL_NUMBER,
@@ -43,6 +44,12 @@ const char *getTokenTypeName(TokenType type)
         return "CURLY_BRACKET_OPEN";
     case TokenType::CURLY_BRACKET_CLOSE:
         return "CURLY_BRACKET_CLOSE";
+    case TokenType::LET_KEYWORD:
+        return "LET_KEYWORD";
+    case TokenType::FUNC_KEYWORD:
+        return "FUNC_KEYWORD";
+    case TokenType::RETURN_KEYWORD:
+        return "RETURN_KEYWORD";
     default:
         return "Unknown";
     }
@@ -123,7 +130,25 @@ void parseString(std::string &input, std::list<Token *> &tokenList)
             }
             else
             {
-                tokenList.push_back(new Token(i, TokenType::SYMBOL, currentString));
+                TokenType type;
+                if (currentString == "func")
+                {
+                    type = TokenType::FUNC_KEYWORD;
+                }
+                else if (currentString == "return")
+                {
+                    type = TokenType::RETURN_KEYWORD;
+                }
+                else if (currentString == "let")
+                {
+                    type = TokenType::LET_KEYWORD;
+                }
+                else
+                {
+                    type = TokenType::SYMBOL;
+                }
+
+                tokenList.push_back(new Token(i, type, currentString));
                 state = TokenizeState::NONE;
             }
         }
