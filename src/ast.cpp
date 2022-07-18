@@ -154,7 +154,7 @@ ASTNode *parseValueOrOperator(std::list<Token *> &tokens)
             return top;
         }
 
-        int operatorImportance = getTokenOperatorImporance(tok);
+        int operatorImportance = getTokenOperatorImportance(tok->type);
         if (operatorImportance < 0)
         {
             // Isn't an operator, return
@@ -173,7 +173,7 @@ ASTNode *parseValueOrOperator(std::list<Token *> &tokens)
         if (top->type == ASTNodeType::OPERATOR)
         {
             ASTOperator *topOperator = (ASTOperator *)top;
-            int topImportance = getTokenOperatorImporance(topOperator->operatorToken);
+            int topImportance = getTokenOperatorImportance(topOperator->operatorToken->type);
             if (operatorImportance > topImportance)
             {
                 // Current operator should move down in the tree

@@ -38,5 +38,5 @@ public:
 };
 
 const char *getTokenTypeName(TokenType type);
-int getTokenOperatorImporance(const Token *tok); // TODO change signature to use TokenType and fix typo
+int getTokenOperatorImportance(TokenType type);
 void parseString(std::string &input, std::list<Token *> &tokenList);

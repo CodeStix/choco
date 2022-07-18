@@ -216,9 +216,9 @@ const char *getTokenTypeName(TokenType type)
     }
 }
 
-int getTokenOperatorImporance(const Token *tok)
+int getTokenOperatorImportance(TokenType type)
 {
-    switch (tok->type)
+    switch (type)
     {
     case TokenType::ADDITION_OPERATOR:
         return 1;
