@@ -191,7 +191,6 @@ ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
 
     default:
         // Parse read
-        tokens.pop_front();
         return new ASTReadVariable(nameToken);
     }
 }

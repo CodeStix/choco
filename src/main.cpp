@@ -41,14 +41,7 @@ void parseFile(std::list<const Token *> &tokens)
 
     for (ASTNode *node : rootNodes)
     {
-        if (node != NULL)
-        {
-            std::cout << node->toString() << "\n";
-        }
-        else
-        {
-            std::cout << "Node: NULL\n";
-        }
+        std::cout << node->toString() << "\n";
     }
 }
 
@@ -62,10 +55,10 @@ int main()
     std::list<const Token *> tokens;
     parseString(fileContent, tokens);
 
-    for (const auto &token : tokens)
-    {
-        std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
-    }
+    // for (const auto &token : tokens)
+    // {
+    //     std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
+    // }
 
     std::cout << "Parsing...\n";
     parseFile(tokens);

@@ -1,18 +1,5 @@
 
-const TESTING_NUMBER = 100
-
-
-
 func main() {
-
-    let value = 100 * (5 - 2)
-    value(100, 200, 300)
-
-    let a
-    const b
-
-
-    a = add(100, 200)
-    
-
+    let a = 100
+    print(a)
 }
