@@ -44,6 +44,21 @@ public:
     }
 };
 
+class ASTBrackets : public ASTNode
+{
+public:
+    ASTBrackets(ASTNode *inner) : ASTNode(ASTNodeType::OPERATOR), inner(inner) {}
+    ASTNode *inner;
+
+    virtual std::string toString()
+    {
+        std::string str = "(";
+        str += this->inner->toString();
+        str += ")";
+        return str;
+    }
+};
+
 class ASTLiteralString : public ASTNode
 {
 public:

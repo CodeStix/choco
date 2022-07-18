@@ -1,13 +1,20 @@
 
 const i = 100 + 100 - 200 
 
-const a = 300
+const a = (300 + 100 - 10)
 
 func test() {
    const a = 1 
 }
 
+func nice() {}
+
 func more() {
+
+    func innerFunction() {
+
+    }
+
     const aNameContainingNumbers123123 = 100 / 0
     const aString = "test"
 }

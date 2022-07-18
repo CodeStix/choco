@@ -125,9 +125,32 @@ ASTNode *parseValue(std::list<Token *> &tokens)
     case TokenType::LITERAL_STRING:
         value = new ASTLiteralString(tok);
         break;
+
     case TokenType::LITERAL_NUMBER:
         value = new ASTLiteralNumber(tok);
         break;
+
+    case TokenType::BRACKET_OPEN:
+    {
+        tokens.pop_front();
+
+        ASTNode *innerValue = parseValueOrOperator(tokens);
+        if (innerValue == NULL)
+        {
+            std::cout << "ERROR: Invalid brackets content \n";
+            return NULL;
+        }
+
+        tok = tokens.front();
+        if (tok->type != TokenType::BRACKET_CLOSE)
+        {
+            std::cout << "ERROR: Brackets must be closed\n";
+        }
+
+        value = new ASTBrackets(innerValue);
+        break;
+    }
+
     default:
         std::cout << "ERROR: Not a value: " << getTokenTypeName(tok->type) << "\n";
         return NULL;
