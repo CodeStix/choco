@@ -55,10 +55,10 @@ int main()
     std::list<const Token *> tokens;
     parseString(fileContent, tokens);
 
-    // for (const auto &token : tokens)
-    // {
-    //     std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
-    // }
+    for (const auto &token : tokens)
+    {
+        std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
+    }
 
     std::cout << "Parsing...\n";
     parseFile(tokens);

@@ -13,7 +13,8 @@ enum class ASTNodeType
     DECLARATION,
     ASSIGNMENT,
     INVOCATION,
-    READ_VARIABLE
+    READ_VARIABLE,
+    BRACKETS
 };
 
 class ASTNode
@@ -49,7 +50,7 @@ public:
 class ASTBrackets : public ASTNode
 {
 public:
-    ASTBrackets(ASTNode *inner) : ASTNode(ASTNodeType::OPERATOR), inner(inner) {}
+    ASTBrackets(ASTNode *inner) : ASTNode(ASTNodeType::BRACKETS), inner(inner) {}
     ASTNode *inner;
 
     virtual std::string toString()
