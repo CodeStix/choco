@@ -33,6 +33,10 @@ void parseFile(std::list<const Token *> &tokens)
             tokens.pop_front();
             std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << " at " << tok->position << "\n";
         }
+        else if (statement->type == ASTNodeType::READ_VARIABLE)
+        {
+            std::cout << "ERROR: Variable read is not a valid statement\n";
+        }
         else
         {
             rootNodes.push_back(statement);
