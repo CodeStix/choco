@@ -158,6 +158,12 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 case '/':
                     tokenList.push_back(new Token(i, TokenType::DIVISION_OPERATOR, std::string(1, currentChar)));
                     break;
+                case '>':
+                    tokenList.push_back(new Token(i, TokenType::GT_OPERATOR, std::string(1, currentChar)));
+                    break;
+                case '<':
+                    tokenList.push_back(new Token(i, TokenType::LT_OPERATOR, std::string(1, currentChar)));
+                    break;
                 case ',':
                     tokenList.push_back(new Token(i, TokenType::COMMA, std::string(1, currentChar)));
                     break;
@@ -218,6 +224,12 @@ const char *getTokenTypeName(TokenType type)
         return "DIVISION_OPERATOR";
     case TokenType::MULTIPLICATION_OPERATOR:
         return "MULTIPLICATION_OPERATOR";
+    case TokenType::LT_OPERATOR:
+        return "LT_OPERATOR";
+    case TokenType::GT_OPERATOR:
+        return "GT_OPERATOR";
+    case TokenType::COMMA:
+        return "COMMA";
     default:
         return "Unknown";
     }
@@ -227,14 +239,16 @@ int getTokenOperatorImportance(TokenType type)
 {
     switch (type)
     {
+    case TokenType::LT_OPERATOR:
+    case TokenType::GT_OPERATOR:
+        return 1;
     case TokenType::ADDITION_OPERATOR:
-        return 1;
     case TokenType::SUBSTRACTION_OPERATOR:
-        return 1;
+        return 2;
     case TokenType::MULTIPLICATION_OPERATOR:
-        return 2;
     case TokenType::DIVISION_OPERATOR:
-        return 2;
+        return 3;
+
     default:
         return -1;
     }

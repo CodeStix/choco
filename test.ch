@@ -2,9 +2,7 @@
 func print(str) extern
 
 func testFunction(a) {
-    let r = a * 123
-    r = r * 5
-    return r + 5
+    return a * 100 > 200
 }
 
 func main() {
