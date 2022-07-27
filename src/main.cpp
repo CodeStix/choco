@@ -28,7 +28,8 @@ int main()
 
     std::cout << "Generating code...\n";
     auto context = new GenerationContext();
-    file->generateLLVM(context);
+    auto scope = new Scope();
+    file->generateLLVM(context, scope);
     std::cout << "Generation done\n";
     context->llvmCurrentModule.print(llvm::errs(), NULL);
 

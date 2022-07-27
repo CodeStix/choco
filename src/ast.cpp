@@ -133,6 +133,9 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
             case TokenType::LET_KEYWORD:
                 statement = parseDeclaration(tokens);
                 break;
+            case TokenType::RETURN_KEYWORD:
+                statement = parseReturn(tokens);
+                break;
             case TokenType::SYMBOL:
                 statement = parseSymbolOperation(tokens);
                 break;
@@ -352,6 +355,31 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
     }
 }
 
+ASTReturn *parseReturn(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::RETURN_KEYWORD)
+    {
+        std::cout << "ERROR: Expected 'return'\n";
+        return NULL;
+    }
+    tokens.pop_front();
+
+    ASTNode *value = parseValueOrOperator(tokens);
+    if (value == NULL)
+    {
+        std::cout << "ERROR: Invalid return value\n";
+        return NULL;
+    }
+
+    return new ASTReturn(value);
+}
+
 ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
@@ -454,9 +482,9 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
     return new ASTFile(rootNodes);
 }
 
-llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context)
+llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    auto value = context->staticNamedValues[this->nameToken->value];
+    auto value = scope->getValue(this->nameToken->value);
     if (!value)
     {
         std::cout << "BUILD ERROR: Could not find variable '" << this->nameToken->value << "'\n";
@@ -464,16 +492,16 @@ llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context)
     return value;
 }
 
-llvm::Value *ASTLiteralNumber::generateLLVM(GenerationContext *context)
+llvm::Value *ASTLiteralNumber::generateLLVM(GenerationContext *context, Scope *scope)
 {
     double parsed = strtod(this->valueToken->value.c_str(), NULL);
     return llvm::ConstantFP::get(context->llvmContext, llvm::APFloat(parsed));
 }
 
-llvm::Value *ASTOperator::generateLLVM(GenerationContext *context)
+llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    llvm::Value *left = this->left->generateLLVM(context);
-    llvm::Value *right = this->right->generateLLVM(context);
+    llvm::Value *left = this->left->generateLLVM(context, scope);
+    llvm::Value *right = this->right->generateLLVM(context, scope);
     if (!left || !right)
     {
         return NULL;
@@ -517,55 +545,65 @@ llvm::Value *ASTOperator::generateLLVM(GenerationContext *context)
     }
 }
 
-llvm::Value *ASTLiteralString::generateLLVM(GenerationContext *context)
+llvm::Value *ASTLiteralString::generateLLVM(GenerationContext *context, Scope *scope)
 {
     return NULL;
 }
 
-llvm::Value *ASTDeclaration::generateLLVM(GenerationContext *context)
+llvm::Value *ASTDeclaration::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    if (context->staticNamedValues[this->nameToken->value])
+    llvm::Value *value;
+    if (this->value != NULL)
     {
-        // This name is already declared
-        std::cout << "BUILD ERROR: Variable '" << this->nameToken->value << "' has already been declared\n";
+        // There is an assignment after the declaration
+        value = this->value->generateLLVM(context, scope);
+    }
+    else
+    {
+        // Uninitialized value
+        value = llvm::ConstantTokenNone::get(context->llvmContext);
+    }
+
+    if (!scope->setLocalValue(this->nameToken->value, value))
+    {
+        std::cout << "BUILD ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
+        return NULL;
+    }
+    return value;
+}
+
+llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context, Scope *scope)
+{
+    if (!scope->hasValue(this->nameToken->value))
+    {
+        std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
         return NULL;
     }
     else
     {
-        llvm::Value *value;
-        if (this->value != NULL)
+        llvm::Value *value = this->value->generateLLVM(context, scope);
+        if (!scope->updateValue(this->nameToken->value, value))
         {
-            // There is an assignment after the declaration
-            value = this->value->generateLLVM(context);
+            std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
+            return NULL;
         }
-        else
-        {
-            // Uninitialized value
-            value = llvm::ConstantTokenNone::get(context->llvmContext);
-        }
-
-        context->staticNamedValues[this->nameToken->value] = value;
         return value;
     }
 }
 
-llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context)
+llvm::Value *ASTReturn::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    if (!context->staticNamedValues[this->nameToken->value])
+    if (this->value != NULL)
     {
-        // This name is already declared
-        std::cout << "BUILD ERROR: Variable '" << this->nameToken->value << "' not found\n";
-        return NULL;
+        return context->llvmIRBuilder.CreateRet(this->value->generateLLVM(context, scope));
     }
     else
     {
-        llvm::Value *value = this->value->generateLLVM(context);
-        context->staticNamedValues[this->nameToken->value] = value;
-        return value;
+        return context->llvmIRBuilder.CreateRetVoid();
     }
 }
 
-llvm::Value *ASTFunction::generateLLVM(GenerationContext *context)
+llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
 {
     llvm::Function *function = context->llvmCurrentModule.getFunction(this->nameToken->value);
 
@@ -599,35 +637,34 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context)
 
         llvm::BasicBlock *block = llvm::BasicBlock::Create(context->llvmContext, "function-block", function);
         context->llvmIRBuilder.SetInsertPoint(block);
-        context->staticNamedValues.clear();
+
+        Scope *functionScope = new Scope(scope);
 
         for (auto &arg : function->args())
         {
-            context->staticNamedValues[arg.getName()] = &arg;
+            functionScope->setLocalValue(arg.getName(), &arg);
         }
 
-        llvm::Value *returnValue = NULL;
         for (ASTNode *statement : *this->statements)
         {
-            returnValue = statement->generateLLVM(context);
+            statement->generateLLVM(context, functionScope);
         }
 
-        if (returnValue != NULL)
-        {
-            context->llvmIRBuilder.CreateRet(returnValue);
-        }
-        else
-        {
-            context->llvmIRBuilder.CreateRetVoid();
-        }
+        // context->llvmIRBuilder.CreateRetVoid();
 
         llvm::verifyFunction(*function);
+    }
+
+    if (!scope->setLocalValue(this->nameToken->value, function))
+    {
+        std::cout << "BUILD ERROR: Cannot redeclare function '" << this->nameToken->value << "'\n";
+        return NULL;
     }
 
     return function;
 }
 
-llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context)
+llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, Scope *scope)
 {
     llvm::Function *functionToCall = context->llvmCurrentModule.getFunction(this->functionNameToken->value);
     if (functionToCall == NULL)
@@ -645,7 +682,7 @@ llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context)
     std::vector<llvm::Value *> functionArgs;
     for (ASTNode *node : *this->parameterValues)
     {
-        llvm::Value *value = node->generateLLVM(context);
+        llvm::Value *value = node->generateLLVM(context, scope);
         if (!value)
         {
             return NULL;
@@ -656,16 +693,17 @@ llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context)
     return context->llvmIRBuilder.CreateCall(functionToCall, functionArgs, "invocation");
 }
 
-llvm::Value *ASTBrackets::generateLLVM(GenerationContext *context)
+llvm::Value *ASTBrackets::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    return this->inner->generateLLVM(context);
+    return this->inner->generateLLVM(context, scope);
 }
 
-llvm::Value *ASTFile::generateLLVM(GenerationContext *context)
+llvm::Value *ASTFile::generateLLVM(GenerationContext *context, Scope *scope)
 {
+    Scope *fileScope = new Scope(scope);
     for (ASTNode *statement : *this->statements)
     {
-        statement->generateLLVM(context);
+        statement->generateLLVM(context, fileScope);
     }
     return NULL;
 }

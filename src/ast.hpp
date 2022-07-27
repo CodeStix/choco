@@ -23,7 +23,86 @@ public:
     llvm::LLVMContext llvmContext;
     llvm::IRBuilder<> llvmIRBuilder;
     llvm::Module llvmCurrentModule;
-    std::map<std::string, llvm::Value *> staticNamedValues;
+    // std::map<std::string, llvm::Value *> staticNamedValues;
+};
+
+class Scope
+{
+public:
+    Scope() : parentScope(NULL) {}
+    Scope(Scope *parentScope) : parentScope(parentScope) {}
+    Scope(Scope *parentScope, std::map<std::string, llvm::Value *> namedValues) : parentScope(parentScope), namedValues(namedValues) {}
+
+    // Returns false if the name already exists locally
+    bool setLocalValue(const std::string &name, llvm::Value *value)
+    {
+        if (this->namedValues[name])
+        {
+            return false;
+        }
+        else
+        {
+            this->namedValues[name] = value;
+            return true;
+        }
+    }
+
+    llvm::Value *getLocalValue(const std::string &name)
+    {
+        return this->namedValues[name];
+    }
+
+    bool hasValue(const std::string &name)
+    {
+        return this->getValue(name) != NULL;
+    }
+
+    llvm::Value *getValue(const std::string &name)
+    {
+        auto val = this->namedValues[name];
+        if (val != NULL)
+        {
+            return val;
+        }
+
+        if (this->parentScope != NULL)
+        {
+            return this->parentScope->getValue(name);
+        }
+        else
+        {
+            return NULL;
+        }
+    }
+
+    bool updateValue(const std::string &name, llvm::Value *value)
+    {
+        if (this->namedValues[name] != NULL)
+        {
+            this->namedValues[name] = value;
+            return true;
+        }
+        else
+        {
+            if (this->parentScope != NULL)
+            {
+                return this->parentScope->updateValue(name, value);
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    Scope *getParentScope()
+    {
+        return this->parentScope;
+    }
+
+private:
+    Scope *parentScope;
+    std::map<std::string, llvm::Value *> namedValues;
 };
 
 enum class ASTNodeType
@@ -37,7 +116,8 @@ enum class ASTNodeType
     INVOCATION,
     READ_VARIABLE,
     BRACKETS,
-    FILE
+    FILE,
+    RETURN
 };
 
 class ASTNode
@@ -47,7 +127,7 @@ public:
     ASTNodeType type;
 
     virtual std::string toString() = 0;
-    virtual llvm::Value *generateLLVM(GenerationContext *context) = 0;
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope) = 0;
 };
 
 class ASTOperator : public ASTNode
@@ -70,7 +150,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTBrackets : public ASTNode
@@ -87,7 +167,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTReadVariable : public ASTNode
@@ -102,7 +182,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTLiteralString : public ASTNode
@@ -119,7 +199,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTLiteralNumber : public ASTNode
@@ -134,7 +214,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTDeclaration : public ASTNode
@@ -156,7 +236,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTAssignment : public ASTNode
@@ -174,7 +254,23 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+};
+
+class ASTReturn : public ASTNode
+{
+public:
+    ASTReturn(ASTNode *value) : ASTNode(ASTNodeType::RETURN), value(value) {}
+    ASTNode *value;
+
+    virtual std::string toString()
+    {
+        std::string str = "return ";
+        str += this->value->toString();
+        return str;
+    }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTInvocation : public ASTNode
@@ -201,7 +297,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTFunction : public ASTNode
@@ -239,7 +335,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 class ASTFile : public ASTNode
@@ -259,7 +355,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
 };
 
 ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens);
@@ -268,3 +364,4 @@ ASTNode *parseValue(std::list<const Token *> &tokens);
 ASTFunction *parseFunction(std::list<const Token *> &tokens);
 ASTNode *parseSymbolOperation(std::list<const Token *> &tokens);
 ASTFile *parseFile(std::list<const Token *> &tokens);
+ASTReturn *parseReturn(std::list<const Token *> &tokens);
