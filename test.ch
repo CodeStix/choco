@@ -1,4 +1,8 @@
 
-func moveFiles() {
-    let b = (200) * 2
+func testFunction(a) {
+    let r = a * 100
+}
+
+func main() {
+    let b = testFunction(200)
 }

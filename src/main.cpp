@@ -5,50 +5,6 @@
 #include "token.hpp"
 #include "ast.hpp"
 
-void parseFile(std::list<const Token *> &tokens)
-{
-    std::list<ASTNode *> rootNodes;
-
-    while (!tokens.empty())
-    {
-        const Token *tok = tokens.front();
-
-        ASTNode *statement = NULL;
-        switch (tok->type)
-        {
-        case TokenType::FUNC_KEYWORD:
-            statement = parseFunction(tokens);
-            break;
-        case TokenType::CONST_KEYWORD:
-        case TokenType::LET_KEYWORD:
-            statement = parseDeclaration(tokens);
-            break;
-        case TokenType::SYMBOL:
-            statement = parseSymbolOperation(tokens);
-            break;
-        }
-
-        if (statement == NULL)
-        {
-            tokens.pop_front();
-            std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << " at " << tok->position << "\n";
-        }
-        else if (statement->type == ASTNodeType::READ_VARIABLE)
-        {
-            std::cout << "ERROR: Variable read is not a valid statement\n";
-        }
-        else
-        {
-            rootNodes.push_back(statement);
-        }
-    }
-
-    for (ASTNode *node : rootNodes)
-    {
-        std::cout << node->toString() << "\n";
-    }
-}
-
 int main()
 {
     std::string fileContent;
@@ -59,14 +15,23 @@ int main()
     std::list<const Token *> tokens;
     parseString(fileContent, tokens);
 
+    std::cout << "Tokenizing done\n";
     for (const auto &token : tokens)
     {
         std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
     }
 
     std::cout << "Parsing...\n";
-    parseFile(tokens);
+    ASTFile *file = parseFile(tokens);
+    std::cout << "Parsing done\n";
+    std::cout << file->toString() << "\n";
 
-    std::cout << "Done\n";
+    std::cout << "Generating code...\n";
+    auto context = new GenerationContext();
+    file->generateLLVM(context);
+    std::cout << "Generation done\n";
+    context->llvmCurrentModule.print(llvm::errs(), NULL);
+
+    std::cout << "Everything is done\n";
     return 0;
 }

@@ -9,6 +9,7 @@ enum class TokenType
     SYMBOL,
     FUNC_KEYWORD,
     RETURN_KEYWORD,
+    EXTERN_KEYWORD,
     LET_KEYWORD,
     CONST_KEYWORD,
     LITERAL_STRING,

@@ -3,6 +3,28 @@
 #include <iostream>
 #include <list>
 #include "token.hpp"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
+
+class GenerationContext
+{
+public:
+    GenerationContext() : llvmIRBuilder(llvmContext), llvmCurrentModule("default-choco-module", llvmContext){};
+
+    llvm::LLVMContext llvmContext;
+    llvm::IRBuilder<> llvmIRBuilder;
+    llvm::Module llvmCurrentModule;
+    std::map<std::string, llvm::Value *> staticNamedValues;
+};
 
 enum class ASTNodeType
 {
@@ -14,7 +36,8 @@ enum class ASTNodeType
     ASSIGNMENT,
     INVOCATION,
     READ_VARIABLE,
-    BRACKETS
+    BRACKETS,
+    FILE
 };
 
 class ASTNode
@@ -24,6 +47,7 @@ public:
     ASTNodeType type;
 
     virtual std::string toString() = 0;
+    virtual llvm::Value *generateLLVM(GenerationContext *context) = 0;
 };
 
 class ASTOperator : public ASTNode
@@ -45,6 +69,8 @@ public:
         str += ")";
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTBrackets : public ASTNode
@@ -60,6 +86,8 @@ public:
         str += ")";
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTReadVariable : public ASTNode
@@ -73,6 +101,8 @@ public:
         std::string str = this->nameToken->value;
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTLiteralString : public ASTNode
@@ -88,6 +118,8 @@ public:
         str += "\"";
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTLiteralNumber : public ASTNode
@@ -101,6 +133,8 @@ public:
         std::string str = this->valueToken->value;
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTDeclaration : public ASTNode
@@ -121,6 +155,8 @@ public:
         }
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTAssignment : public ASTNode
@@ -137,6 +173,8 @@ public:
         str += this->value->toString();
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTInvocation : public ASTNode
@@ -162,29 +200,66 @@ public:
         str += ")";
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), statements(statements) {}
+    ASTFunction(const Token *nameToken, std::vector<const Token *> *arguments, std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), arguments(arguments), statements(statements) {}
     const Token *nameToken;
+    std::vector<const Token *> *arguments;
     std::list<ASTNode *> *statements;
 
     virtual std::string toString()
     {
         std::string str = "func ";
         str += this->nameToken->value;
-        str += " {\n";
-        for (ASTNode *statement : *this->statements)
+        str += "(";
+        bool isFirst = true;
+        for (const Token *arg : *this->arguments)
         {
-            str += "\t";
-            str += statement->toString();
-            str += "\n";
+            if (!isFirst)
+                str += ", ";
+            isFirst = false;
+            str += arg->value;
+        }
+        str += ") {\n";
+        if (this->statements != NULL)
+        {
+            for (ASTNode *statement : *this->statements)
+            {
+                str += "\t";
+                str += statement->toString();
+                str += "\n";
+            }
         }
         str += "} ";
         return str;
     }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
+};
+
+class ASTFile : public ASTNode
+{
+public:
+    ASTFile(std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::FILE), statements(statements) {}
+    std::list<ASTNode *> *statements;
+
+    virtual std::string toString()
+    {
+        std::string str = "";
+        for (ASTNode *statement : *this->statements)
+        {
+            str += statement->toString();
+            str += "\n";
+        }
+        return str;
+    }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context);
 };
 
 ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens);
@@ -192,3 +267,4 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens);
 ASTNode *parseValue(std::list<const Token *> &tokens);
 ASTFunction *parseFunction(std::list<const Token *> &tokens);
 ASTNode *parseSymbolOperation(std::list<const Token *> &tokens);
+ASTFile *parseFile(std::list<const Token *> &tokens);

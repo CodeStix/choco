@@ -82,6 +82,10 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 {
                     type = TokenType::CONST_KEYWORD;
                 }
+                else if (currentString == "extern")
+                {
+                    type = TokenType::EXTERN_KEYWORD;
+                }
                 else
                 {
                     type = TokenType::SYMBOL;
