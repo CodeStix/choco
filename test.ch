@@ -1,5 +1,5 @@
 
-func print() extern
+func print(str) extern
 
 func testFunction(a) {
     let r = a * 123

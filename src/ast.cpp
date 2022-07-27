@@ -510,32 +510,32 @@ llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, Scope *scope)
     switch (this->operatorToken->value[0])
     {
     case '+':
-        return context->llvmIRBuilder.CreateFAdd(left, right, "operator-add");
+        return context->llvmIRBuilder.CreateFAdd(left, right, "addtemp");
 
     case '-':
-        return context->llvmIRBuilder.CreateFSub(left, right, "operator-sub");
+        return context->llvmIRBuilder.CreateFSub(left, right, "subtemp");
 
     case '*':
-        return context->llvmIRBuilder.CreateFMul(left, right, "operator-mul");
+        return context->llvmIRBuilder.CreateFMul(left, right, "multemp");
 
     case '/':
-        return context->llvmIRBuilder.CreateFDiv(left, right, "operator-div");
+        return context->llvmIRBuilder.CreateFDiv(left, right, "divtemp");
 
     case '%':
-        return context->llvmIRBuilder.CreateSRem(left, right, "operator-mod");
+        return context->llvmIRBuilder.CreateSRem(left, right, "modtemp");
 
     case '<':
     {
-        auto tempValue = context->llvmIRBuilder.CreateFCmpULT(left, right, "operator-lt");
+        auto tempValue = context->llvmIRBuilder.CreateFCmpULT(left, right, "ltcmptemp");
         // Convert tempValue (which is an unsigned integer to a double)
-        return context->llvmIRBuilder.CreateUIToFP(tempValue, llvm::Type::getDoubleTy(context->llvmContext), "operator-lt-fp");
+        return context->llvmIRBuilder.CreateUIToFP(tempValue, llvm::Type::getDoubleTy(context->llvmContext), "ltcmpbooltemp");
     }
 
     case '>':
     {
-        auto tempValue = context->llvmIRBuilder.CreateFCmpUGT(left, right, "operator-gt");
+        auto tempValue = context->llvmIRBuilder.CreateFCmpUGT(left, right, "gtcmptemp");
         // Convert tempValue (which is an unsigned integer to a double)
-        return context->llvmIRBuilder.CreateUIToFP(tempValue, llvm::Type::getDoubleTy(context->llvmContext), "operator-gt-fp");
+        return context->llvmIRBuilder.CreateUIToFP(tempValue, llvm::Type::getDoubleTy(context->llvmContext), "gtcmpbooltemp");
     }
 
     default:
@@ -652,7 +652,11 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
 
         // context->llvmIRBuilder.CreateRetVoid();
 
+        // Check generated IR for issues
         llvm::verifyFunction(*function);
+
+        // Optimize the function code
+        context->llvmPassManager.run(*function);
     }
 
     if (!scope->setLocalValue(this->nameToken->value, function))
@@ -690,7 +694,7 @@ llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, Scope *scop
         functionArgs.push_back(value);
     }
 
-    return context->llvmIRBuilder.CreateCall(functionToCall, functionArgs, "invocation");
+    return context->llvmIRBuilder.CreateCall(functionToCall, functionArgs, "calltemp");
 }
 
 llvm::Value *ASTBrackets::generateLLVM(GenerationContext *context, Scope *scope)

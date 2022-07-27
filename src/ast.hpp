@@ -14,15 +14,29 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
 class GenerationContext
 {
 public:
-    GenerationContext() : llvmIRBuilder(llvmContext), llvmCurrentModule("default-choco-module", llvmContext){};
+    GenerationContext() : llvmIRBuilder(llvmContext), llvmCurrentModule("default-choco-module", llvmContext), llvmPassManager(&llvmCurrentModule)
+    {
+        llvmPassManager.add(llvm::createInstructionCombiningPass());
+        llvmPassManager.add(llvm::createReassociatePass());
+        llvmPassManager.add(llvm::createGVNPass());
+        llvmPassManager.add(llvm::createCFGSimplificationPass());
+        llvmPassManager.doInitialization();
+    };
 
     llvm::LLVMContext llvmContext;
     llvm::IRBuilder<> llvmIRBuilder;
     llvm::Module llvmCurrentModule;
+    llvm::legacy::FunctionPassManager llvmPassManager;
     // std::map<std::string, llvm::Value *> staticNamedValues;
 };
 
