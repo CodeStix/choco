@@ -52,7 +52,7 @@ void parseFile(std::list<const Token *> &tokens)
 int main()
 {
     std::string fileContent;
-    std::getline(std::ifstream("test.cho"), fileContent, '\0');
+    std::getline(std::ifstream("test.ch"), fileContent, '\0');
 
     std::cout << "Tokenizing...\n";
 
