@@ -14,6 +14,8 @@
 #include "llvm/IR/LLVMContext.h"
 #include <memory>
 
+extern "C" double printDouble(double v);
+
 namespace llvm
 {
     namespace orc
@@ -42,15 +44,18 @@ namespace llvm
                                std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
                   MainJD(this->ES->createBareJITDylib("<main>"))
             {
-                MainJD.addGenerator(
-                    cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
-                        DL.getGlobalPrefix())));
+                // MainJD.addGenerator(
+                //     cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
+                //         DL.getGlobalPrefix())));
 
                 if (JTMB.getTargetTriple().isOSBinFormatCOFF())
                 {
                     ObjectLayer.setOverrideObjectFlagsWithResponsibilityFlags(true);
                     ObjectLayer.setAutoClaimResponsibilityForObjectSymbols(true);
                 }
+
+                MainJD.define(
+                    llvm::orc::absoluteSymbols({{this->ES->intern("printDouble"), {llvm::pointerToJITTargetAddress(&printDouble), llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Absolute}}}));
             }
 
             ~KaleidoscopeJIT()

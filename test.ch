@@ -1,5 +1,5 @@
 
-func print(char) extern
+func printDouble(d) extern
 func sin(a) extern
 
 func pow(a) {
@@ -7,6 +7,7 @@ func pow(a) {
 }
 
 func testmain() {
-    print(1)
-    return pow(25) + pow(50)
+    let c = pow(25) + pow(50) 
+    printDouble(c + 1)
+    return c
 }

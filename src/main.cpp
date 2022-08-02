@@ -8,10 +8,10 @@
 
 llvm::ExitOnError exitOnError;
 
-extern "C" double print(double v)
+extern "C" double printDouble(double X)
 {
-    printf("%d\n", v);
-    return 0.0;
+    fprintf(stderr, "%f\n", X);
+    return 0;
 }
 
 int main()
@@ -51,7 +51,8 @@ int main()
     auto jit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
     context->module->setDataLayout(jit->getDataLayout());
 
-    jit->addModule(llvm::orc::ThreadSafeModule(std::move(context->module), std::move(context->context)));
+    auto resourceTracker = jit->getMainJITDylib().createResourceTracker();
+    exitOnError(jit->addModule(llvm::orc::ThreadSafeModule(std::move(context->module), std::move(context->context)), resourceTracker));
 
     auto entryPoint = exitOnError(jit->lookup("testmain"));
     double (*entryPointFunction)() = (double (*)())(void *)entryPoint.getAddress();
