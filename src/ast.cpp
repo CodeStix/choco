@@ -473,12 +473,7 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
             rootNodes->push_back(statement);
         }
     }
-
-    for (ASTNode *node : *rootNodes)
-    {
-        std::cout << node->toString() << "\n";
-    }
-
+    
     return new ASTFile(rootNodes);
 }
 

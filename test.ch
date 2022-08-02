@@ -1,11 +1,12 @@
 
-func print(str) extern
+func print(char) extern
+func sin(a) extern
 
-func testFunction(a) {
-    return a * 100 > 200
+func pow(a) {
+    return a * a
 }
 
-func main() {
-    let b = testFunction(50)
-    return b - 5
+func testmain() {
+    print(1)
+    return pow(25) + pow(50)
 }
