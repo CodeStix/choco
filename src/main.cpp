@@ -4,6 +4,7 @@
 #include <list>
 #include "token.hpp"
 #include "ast.hpp"
+// #include "jit.hpp"
 
 int main()
 {
@@ -31,7 +32,20 @@ int main()
     auto scope = new Scope();
     file->generateLLVM(context, scope);
     std::cout << "Generation done\n";
-    context->llvmCurrentModule.print(llvm::errs(), NULL);
+    context->module->print(llvm::errs(), NULL);
+
+    // std::cout << "Executing...\n";
+
+    // auto jitError = llvm::orc::KaleidoscopeJIT::Create();
+    // if (!jitError)
+    // {
+    //     std::cout << "Coult not create JIT\n";
+    //     return -1;
+    // }
+    // auto jit = jitError->get();
+    // context->module.setDataLayout(jit->getDataLayout());
+
+    // jit->addModule(llvm::orc::ThreadSafeModule(std::make_unique(context->module), std::make_unique(context->context)));
 
     std::cout << "Everything is done\n";
     return 0;

@@ -21,23 +21,27 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 
 class GenerationContext
 {
 public:
-    GenerationContext() : llvmIRBuilder(llvmContext), llvmCurrentModule("default-choco-module", llvmContext), llvmPassManager(&llvmCurrentModule)
+    GenerationContext() : context(std::make_unique<llvm::LLVMContext>()),
+                          irBuilder(std::make_unique<llvm::IRBuilder<>>(*context)),
+                          module(std::make_unique<llvm::Module>("default-choco-module", *context)),
+                          passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get()))
     {
-        llvmPassManager.add(llvm::createInstructionCombiningPass());
-        llvmPassManager.add(llvm::createReassociatePass());
-        llvmPassManager.add(llvm::createGVNPass());
-        llvmPassManager.add(llvm::createCFGSimplificationPass());
-        llvmPassManager.doInitialization();
+        passManager->add(llvm::createInstructionCombiningPass());
+        passManager->add(llvm::createReassociatePass());
+        passManager->add(llvm::createGVNPass());
+        passManager->add(llvm::createCFGSimplificationPass());
+        passManager->doInitialization();
     };
 
-    llvm::LLVMContext llvmContext;
-    llvm::IRBuilder<> llvmIRBuilder;
-    llvm::Module llvmCurrentModule;
-    llvm::legacy::FunctionPassManager llvmPassManager;
+    std::unique_ptr<llvm::LLVMContext> context;
+    std::unique_ptr<llvm::IRBuilder<>> irBuilder;
+    std::unique_ptr<llvm::Module> module;
+    std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
     // std::map<std::string, llvm::Value *> staticNamedValues;
 };
 

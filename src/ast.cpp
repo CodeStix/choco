@@ -495,7 +495,7 @@ llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context, Scope *sc
 llvm::Value *ASTLiteralNumber::generateLLVM(GenerationContext *context, Scope *scope)
 {
     double parsed = strtod(this->valueToken->value.c_str(), NULL);
-    return llvm::ConstantFP::get(context->llvmContext, llvm::APFloat(parsed));
+    return llvm::ConstantFP::get(*context->context, llvm::APFloat(parsed));
 }
 
 llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, Scope *scope)
@@ -510,32 +510,32 @@ llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, Scope *scope)
     switch (this->operatorToken->value[0])
     {
     case '+':
-        return context->llvmIRBuilder.CreateFAdd(left, right, "addtemp");
+        return context->irBuilder->CreateFAdd(left, right, "addtemp");
 
     case '-':
-        return context->llvmIRBuilder.CreateFSub(left, right, "subtemp");
+        return context->irBuilder->CreateFSub(left, right, "subtemp");
 
     case '*':
-        return context->llvmIRBuilder.CreateFMul(left, right, "multemp");
+        return context->irBuilder->CreateFMul(left, right, "multemp");
 
     case '/':
-        return context->llvmIRBuilder.CreateFDiv(left, right, "divtemp");
+        return context->irBuilder->CreateFDiv(left, right, "divtemp");
 
     case '%':
-        return context->llvmIRBuilder.CreateSRem(left, right, "modtemp");
+        return context->irBuilder->CreateSRem(left, right, "modtemp");
 
     case '<':
     {
-        auto tempValue = context->llvmIRBuilder.CreateFCmpULT(left, right, "ltcmptemp");
+        auto tempValue = context->irBuilder->CreateFCmpULT(left, right, "ltcmptemp");
         // Convert tempValue (which is an unsigned integer to a double)
-        return context->llvmIRBuilder.CreateUIToFP(tempValue, llvm::Type::getDoubleTy(context->llvmContext), "ltcmpbooltemp");
+        return context->irBuilder->CreateUIToFP(tempValue, llvm::Type::getDoubleTy(*context->context), "ltcmpbooltemp");
     }
 
     case '>':
     {
-        auto tempValue = context->llvmIRBuilder.CreateFCmpUGT(left, right, "gtcmptemp");
+        auto tempValue = context->irBuilder->CreateFCmpUGT(left, right, "gtcmptemp");
         // Convert tempValue (which is an unsigned integer to a double)
-        return context->llvmIRBuilder.CreateUIToFP(tempValue, llvm::Type::getDoubleTy(context->llvmContext), "gtcmpbooltemp");
+        return context->irBuilder->CreateUIToFP(tempValue, llvm::Type::getDoubleTy(*context->context), "gtcmpbooltemp");
     }
 
     default:
@@ -561,7 +561,7 @@ llvm::Value *ASTDeclaration::generateLLVM(GenerationContext *context, Scope *sco
     else
     {
         // Uninitialized value
-        value = llvm::ConstantTokenNone::get(context->llvmContext);
+        value = llvm::ConstantTokenNone::get(*context->context);
     }
 
     if (!scope->setLocalValue(this->nameToken->value, value))
@@ -595,25 +595,25 @@ llvm::Value *ASTReturn::generateLLVM(GenerationContext *context, Scope *scope)
 {
     if (this->value != NULL)
     {
-        return context->llvmIRBuilder.CreateRet(this->value->generateLLVM(context, scope));
+        return context->irBuilder->CreateRet(this->value->generateLLVM(context, scope));
     }
     else
     {
-        return context->llvmIRBuilder.CreateRetVoid();
+        return context->irBuilder->CreateRetVoid();
     }
 }
 
 llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    llvm::Function *function = context->llvmCurrentModule.getFunction(this->nameToken->value);
+    llvm::Function *function = context->module->getFunction(this->nameToken->value);
 
     if (function == NULL)
     {
         // Define it
-        std::vector<llvm::Type *> argumentTypes(this->arguments->size(), llvm::Type::getDoubleTy(context->llvmContext));
-        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getDoubleTy(context->llvmContext), argumentTypes, false);
+        std::vector<llvm::Type *> argumentTypes(this->arguments->size(), llvm::Type::getDoubleTy(*context->context));
+        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getDoubleTy(*context->context), argumentTypes, false);
 
-        function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, this->nameToken->value, context->llvmCurrentModule);
+        function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, this->nameToken->value, *context->module);
         if (function == NULL)
         {
             std::cout << "BUILD ERROR: Function::Create returned null\n";
@@ -635,8 +635,8 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
             return NULL;
         }
 
-        llvm::BasicBlock *block = llvm::BasicBlock::Create(context->llvmContext, "function-block", function);
-        context->llvmIRBuilder.SetInsertPoint(block);
+        llvm::BasicBlock *block = llvm::BasicBlock::Create(*context->context, "function-block", function);
+        context->irBuilder->SetInsertPoint(block);
 
         Scope *functionScope = new Scope(scope);
 
@@ -650,13 +650,14 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
             statement->generateLLVM(context, functionScope);
         }
 
-        // context->llvmIRBuilder.CreateRetVoid();
+        // context->irBuilder.CreateRetVoid();
 
         // Check generated IR for issues
         llvm::verifyFunction(*function);
 
         // Optimize the function code
-        context->llvmPassManager.run(*function);
+
+        context->passManager->run(*function);
     }
 
     if (!scope->setLocalValue(this->nameToken->value, function))
@@ -670,7 +671,7 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
 
 llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, Scope *scope)
 {
-    llvm::Function *functionToCall = context->llvmCurrentModule.getFunction(this->functionNameToken->value);
+    llvm::Function *functionToCall = context->module->getFunction(this->functionNameToken->value);
     if (functionToCall == NULL)
     {
         std::cout << "BUILD ERROR: Function '" << this->functionNameToken->value << "' not found\n";
@@ -694,7 +695,7 @@ llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, Scope *scop
         functionArgs.push_back(value);
     }
 
-    return context->llvmIRBuilder.CreateCall(functionToCall, functionArgs, "calltemp");
+    return context->irBuilder->CreateCall(functionToCall, functionArgs, "calltemp");
 }
 
 llvm::Value *ASTBrackets::generateLLVM(GenerationContext *context, Scope *scope)
