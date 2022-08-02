@@ -642,7 +642,7 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
 
         for (auto &arg : function->args())
         {
-            functionScope->setLocalValue(arg.getName(), &arg);
+            functionScope->setLocalValue(arg.getName().str(), &arg);
         }
 
         for (ASTNode *statement : *this->statements)

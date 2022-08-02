@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <list>
+#include <map>
 #include "token.hpp"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
