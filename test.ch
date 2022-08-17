@@ -1,12 +1,12 @@
 
 
-func printDouble(d) extern
+export extern func printDouble(d)
 
 func getValue() {
-    return 100000
+    return 20
 }
 
-func testmain() {
+export func testmain() {
 
     let value = getValue()
 

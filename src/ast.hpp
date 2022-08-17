@@ -300,14 +300,24 @@ public:
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::vector<const Token *> *arguments, ASTNode *body) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), arguments(arguments), body(body) {}
+    ASTFunction(const Token *nameToken, std::vector<const Token *> *arguments, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), arguments(arguments), body(body), exported(exported) {}
     const Token *nameToken;
     std::vector<const Token *> *arguments;
     ASTNode *body;
+    bool exported;
 
     virtual std::string toString()
     {
-        std::string str = "func ";
+        std::string str = "";
+        if (this->exported)
+        {
+            str += "export ";
+        }
+        if (this->body == NULL)
+        {
+            str += "extern ";
+        }
+        str += "func ";
         str += this->nameToken->value;
         str += "(";
         bool isFirst = true;

@@ -106,6 +106,10 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 {
                     type = TokenType::WHILE_KEYWORD;
                 }
+                else if (currentString == "export")
+                {
+                    type = TokenType::EXPORT_KEYWORD;
+                }
                 else
                 {
                     type = TokenType::SYMBOL;
@@ -232,6 +236,8 @@ const char *getTokenTypeName(TokenType type)
         return "FUNC_KEYWORD";
     case TokenType::RETURN_KEYWORD:
         return "RETURN_KEYWORD";
+    case TokenType::EXTERN_KEYWORD:
+        return "EXTERN_KEYWORD";
     case TokenType::CONST_KEYWORD:
         return "CONST_KEYWORD";
     case TokenType::ASSIGNMENT_OPERATOR:
@@ -260,6 +266,8 @@ const char *getTokenTypeName(TokenType type)
         return "GOTO_KEYWORD";
     case TokenType::WHILE_KEYWORD:
         return "WHILE_KEYWORD";
+    case TokenType::EXPORT_KEYWORD:
+        return "EXPORT_KEYWORD";
     default:
         return "Unknown";
     }

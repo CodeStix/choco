@@ -73,8 +73,30 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         std::cout << "ERROR: Unexpected end of file\n";
         return NULL;
     }
+    const Token *exportToken = NULL;
+    if (tok->type == TokenType::EXPORT_KEYWORD)
+    {
+        exportToken = tok;
+        tokens.pop_front();
+        tok = tokens.front();
+    }
+    const Token *externToken = NULL;
+    if (tok->type == TokenType::EXTERN_KEYWORD)
+    {
+        externToken = tok;
+        tokens.pop_front();
+        tok = tokens.front();
+    }
     if (tok->type != TokenType::FUNC_KEYWORD)
     {
+        if (externToken != NULL)
+        {
+            tokens.push_front(externToken);
+        }
+        if (exportToken != NULL)
+        {
+            tokens.push_front(exportToken);
+        }
         std::cout << "ERROR: Function must start with 'func'\n";
         return NULL;
     }
@@ -162,21 +184,23 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         return NULL;
     }
 
-    if (tok->type == TokenType::EXTERN_KEYWORD)
+    if (externToken == NULL)
     {
-        tokens.pop_front();
-
-        return new ASTFunction(nameToken, argumentNames, NULL);
-    }
-    else if (tok->type == TokenType::CURLY_BRACKET_OPEN)
-    {
-        ASTBlock *body = parseBlock(tokens);
-        return new ASTFunction(nameToken, argumentNames, body);
+        if (tok->type == TokenType::CURLY_BRACKET_OPEN)
+        {
+            ASTBlock *body = parseBlock(tokens);
+            return new ASTFunction(nameToken, argumentNames, body, exportToken != NULL);
+        }
+        else
+        {
+            std::cout << "ERROR: Function must have body are be marked as extern\n";
+            return NULL;
+        }
     }
     else
     {
-        std::cout << "ERROR: Function must have body are be marked as extern\n";
-        return NULL;
+        // This is an external function
+        return new ASTFunction(nameToken, argumentNames, NULL, exportToken != NULL);
     }
 }
 
@@ -554,6 +578,8 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
         switch (tok->type)
         {
         case TokenType::FUNC_KEYWORD:
+        case TokenType::EXPORT_KEYWORD:
+        case TokenType::EXTERN_KEYWORD:
             statement = parseFunction(tokens);
             break;
         case TokenType::CONST_KEYWORD:
@@ -568,7 +594,8 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
         if (statement == NULL)
         {
             tokens.pop_front();
-            std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << " at " << tok->position << "\n";
+            std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << "(" << (int)tok->type << ")"
+                      << " at " << tok->position << "\n";
         }
         else if (statement->type == ASTNodeType::READ_VARIABLE)
         {
@@ -683,7 +710,6 @@ llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context, FunctionSco
     }
     else
     {
-        std::cout << "DEBUG: Assign" << this->nameToken->value << "\n";
         llvm::Value *value = this->value->generateLLVM(context, scope);
         if (!scope->hasValue(this->nameToken->value))
         {
@@ -727,7 +753,7 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope
         std::vector<llvm::Type *> argumentTypes(this->arguments->size(), llvm::Type::getDoubleTy(*context->context));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getDoubleTy(*context->context), argumentTypes, false);
 
-        function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, this->nameToken->value, *context->module);
+        function = llvm::Function::Create(functionType, this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage, this->nameToken->value, *context->module);
         if (function == NULL)
         {
             std::cout << "BUILD ERROR: Function::Create returned null\n";
