@@ -33,6 +33,7 @@ enum class TokenType
     ELSE_KEYWORD,
     FOR_KEYWORD,
     GOTO_KEYWORD,
+    WHILE_KEYWORD
 };
 
 class Token

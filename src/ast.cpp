@@ -39,6 +39,9 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
         case TokenType::IF_KEYWORD:
             statement = parseIfStatement(tokens);
             break;
+        case TokenType::WHILE_KEYWORD:
+            statement = parseWhileStatement(tokens);
+            break;
         case TokenType::CONST_KEYWORD:
         case TokenType::LET_KEYWORD:
             statement = parseDeclaration(tokens);
@@ -218,6 +221,49 @@ ASTNode *parseIfStatement(std::list<const Token *> &tokens)
     }
 
     return new ASTIfStatement(condition, thenBody, elseBody);
+}
+
+ASTNode *parseWhileStatement(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::WHILE_KEYWORD)
+    {
+        return NULL;
+    }
+
+    tokens.pop_front();
+
+    ASTNode *condition = parseValueOrOperator(tokens);
+    if (condition == NULL)
+    {
+        return NULL;
+    }
+
+    ASTBlock *loopBody = parseBlock(tokens);
+    if (loopBody == NULL)
+    {
+        return NULL;
+    }
+
+    ASTNode *elseBody = NULL;
+    tok = tokens.front();
+    if (tok->type == TokenType::ELSE_KEYWORD)
+    {
+        tokens.pop_front();
+
+        elseBody = parseBlock(tokens);
+        if (elseBody == NULL)
+        {
+            return NULL;
+        }
+    }
+
+    return new ASTWhileStatement(condition, loopBody, elseBody);
 }
 
 // Parses invocation, assingment or a read of a symbol
@@ -637,6 +683,7 @@ llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context, FunctionSco
     }
     else
     {
+        std::cout << "DEBUG: Assign" << this->nameToken->value << "\n";
         llvm::Value *value = this->value->generateLLVM(context, scope);
         if (!scope->hasValue(this->nameToken->value))
         {
@@ -732,35 +779,82 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope
     return function;
 }
 
+llvm::Value *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    llvm::BasicBlock *originalBlock = context->irBuilder->GetInsertBlock();
+    llvm::Function *parentFunction = originalBlock->getParent();
+    llvm::BasicBlock *compareBlock = llvm::BasicBlock::Create(*context->context, "whilecomp");
+    llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*context->context, "whilebody");
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "whilecont");
+
+    context->irBuilder->CreateBr(compareBlock);
+
+    context->irBuilder->SetInsertPoint(compareBlock);
+    compareBlock->insertInto(parentFunction);
+
+    auto loopScope = new FunctionScope(*scope);
+    std::map<std::string, llvm::PHINode *> namedPhis;
+    for (auto const &loopPair : loopScope->namedValues)
+    {
+        auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "whiletmp");
+        phi->addIncoming(loopPair.second, originalBlock);
+        namedPhis[loopPair.first] = phi;
+        loopScope->setValue(loopPair.first, phi);
+    }
+
+    llvm::Value *conditionFloat = this->condition->generateLLVM(context, loopScope);
+    llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionFloat, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whilecond");
+    context->irBuilder->CreateCondBr(condition, loopBlock, continueBlock);
+
+    context->irBuilder->SetInsertPoint(loopBlock);
+    loopBlock->insertInto(parentFunction);
+    this->loopBody->generateLLVM(context, loopScope);
+    context->irBuilder->CreateBr(compareBlock);
+
+    for (auto const &loopPair : loopScope->namedValues)
+    {
+        llvm::PHINode *phi = namedPhis[loopPair.first];
+        if (phi != NULL)
+        {
+            phi->addIncoming(loopPair.second, loopBlock);
+        }
+    }
+
+    context->irBuilder->SetInsertPoint(continueBlock);
+    continueBlock->insertInto(parentFunction);
+
+    return continueBlock;
+}
+
 llvm::Value *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    llvm::Value *conditionValue = this->condition->generateLLVM(context, scope);
-    llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionValue, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "ifcond");
+    llvm::Value *conditionFloat = this->condition->generateLLVM(context, scope);
+    llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionFloat, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "ifcond");
 
     llvm::Function *parentFunction = context->irBuilder->GetInsertBlock()->getParent();
-    llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*context->context, "then");
-    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "else");
+    llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*context->context, "ifthen");
+    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "ifelse");
     llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "ifcont");
 
     context->irBuilder->CreateCondBr(condition, thenBlock, elseBlock);
 
     context->irBuilder->SetInsertPoint(thenBlock);
+    thenBlock->insertInto(parentFunction);
     auto thenScope = new FunctionScope(*scope);
     this->thenBody->generateLLVM(context, thenScope);
     context->irBuilder->CreateBr(continueBlock);
-    thenBlock->insertInto(parentFunction);
 
     context->irBuilder->SetInsertPoint(elseBlock);
-
+    elseBlock->insertInto(parentFunction);
     auto elseScope = new FunctionScope(*scope);
     if (this->elseBody != NULL)
     {
         this->elseBody->generateLLVM(context, elseScope);
     }
     context->irBuilder->CreateBr(continueBlock);
-    elseBlock->insertInto(parentFunction);
 
     context->irBuilder->SetInsertPoint(continueBlock);
+    continueBlock->insertInto(parentFunction);
 
     for (auto const &thenPair : thenScope->namedValues)
     {
@@ -778,8 +872,6 @@ llvm::Value *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSc
             }
         }
     }
-
-    continueBlock->insertInto(parentFunction);
 
     return continueBlock;
 }

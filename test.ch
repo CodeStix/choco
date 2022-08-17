@@ -2,26 +2,24 @@
 
 func printDouble(d) extern
 
-func pow(a) {
-    return a * a * a
-}
-
-func getA() {
-    return 400
-}
-
-func getB() {
-    return 300
+func getValue() {
+    return 100
 }
 
 func testmain() {
-    let a = getA()
-    let b = getB()
-    let r = 0
-    if a > b {
-        r = 1
-        printDouble(123)
+
+    let r = getValue()
+    if r > 50 {
+        printDouble(1)
+        while(r > 0) {
+            printDouble(r)
+            r = r - 1
+        }
     }
-    printDouble(r)
+    else {
+        printDouble(0)
+    }
+    
     return r
 }
+

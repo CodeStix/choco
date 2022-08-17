@@ -102,6 +102,10 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 {
                     type = TokenType::GOTO_KEYWORD;
                 }
+                else if (currentString == "while")
+                {
+                    type = TokenType::WHILE_KEYWORD;
+                }
                 else
                 {
                     type = TokenType::SYMBOL;
@@ -254,6 +258,8 @@ const char *getTokenTypeName(TokenType type)
         return "FOR_KEYWORD";
     case TokenType::GOTO_KEYWORD:
         return "GOTO_KEYWORD";
+    case TokenType::WHILE_KEYWORD:
+        return "WHILE_KEYWORD";
     default:
         return "Unknown";
     }

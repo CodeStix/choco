@@ -37,7 +37,7 @@ int main()
     std::cout << "Parsing...\n";
     ASTFile *file = parseFile(tokens);
     std::cout << "Parsing done\n";
-    // std::cout << file->toString() << "\n";
+    std::cout << file->toString() << "\n";
 
     std::cout << "Generating code...\n";
     auto context = new GenerationContext();

@@ -373,7 +373,32 @@ public:
     virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
+class ASTWhileStatement : public ASTNode
+{
+public:
+    ASTWhileStatement(ASTNode *condition, ASTNode *loopBody, ASTNode *elseBody) : ASTNode(ASTNodeType::IF), condition(condition), loopBody(loopBody), elseBody(elseBody) {}
+    ASTNode *condition;
+    ASTNode *loopBody;
+    ASTNode *elseBody;
+
+    virtual std::string toString()
+    {
+        std::string str = "while ";
+        str += this->condition->toString();
+        str += this->loopBody->toString();
+        if (this->elseBody != NULL)
+        {
+            str += "else ";
+            str += this->elseBody->toString();
+        }
+        return str;
+    }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+};
+
 ASTNode *parseIfStatement(std::list<const Token *> &tokens);
+ASTNode *parseWhileStatement(std::list<const Token *> &tokens);
 ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens);
 ASTNode *parseValueOrOperator(std::list<const Token *> &tokens);
 ASTNode *parseValue(std::list<const Token *> &tokens);
