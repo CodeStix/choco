@@ -86,6 +86,22 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 {
                     type = TokenType::EXTERN_KEYWORD;
                 }
+                else if (currentString == "if")
+                {
+                    type = TokenType::IF_KEYWORD;
+                }
+                else if (currentString == "else")
+                {
+                    type = TokenType::ELSE_KEYWORD;
+                }
+                else if (currentString == "for")
+                {
+                    type = TokenType::FOR_KEYWORD;
+                }
+                else if (currentString == "goto")
+                {
+                    type = TokenType::GOTO_KEYWORD;
+                }
                 else
                 {
                     type = TokenType::SYMBOL;
@@ -230,6 +246,14 @@ const char *getTokenTypeName(TokenType type)
         return "GT_OPERATOR";
     case TokenType::COMMA:
         return "COMMA";
+    case TokenType::IF_KEYWORD:
+        return "IF_KEYWORD";
+    case TokenType::ELSE_KEYWORD:
+        return "ELSE_KEYWORD";
+    case TokenType::FOR_KEYWORD:
+        return "FOR_KEYWORD";
+    case TokenType::GOTO_KEYWORD:
+        return "GOTO_KEYWORD";
     default:
         return "Unknown";
     }

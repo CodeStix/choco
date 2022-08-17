@@ -29,6 +29,10 @@ enum class TokenType
     LT_OPERATOR,
     GT_OPERATOR,
     COMMA,
+    IF_KEYWORD,
+    ELSE_KEYWORD,
+    FOR_KEYWORD,
+    GOTO_KEYWORD,
 };
 
 class Token

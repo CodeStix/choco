@@ -41,10 +41,10 @@ int main()
 
     std::cout << "Generating code...\n";
     auto context = new GenerationContext();
-    auto scope = new Scope();
+    auto scope = new FunctionScope();
     file->generateLLVM(context, scope);
     std::cout << "Generation done\n";
-    // context->module->print(llvm::errs(), NULL);
+    context->module->print(llvm::errs(), NULL);
 
     std::cout << "Executing...\n";
 

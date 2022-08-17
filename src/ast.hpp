@@ -45,30 +45,22 @@ public:
     // std::map<std::string, llvm::Value *> staticNamedValues;
 };
 
-class Scope
+class FunctionScope
 {
 public:
-    Scope() : parentScope(NULL) {}
-    Scope(Scope *parentScope) : parentScope(parentScope) {}
-    Scope(Scope *parentScope, std::map<std::string, llvm::Value *> namedValues) : parentScope(parentScope), namedValues(namedValues) {}
-
-    // Returns false if the name already exists locally
-    bool setLocalValue(const std::string &name, llvm::Value *value)
+    FunctionScope() {}
+    FunctionScope(const FunctionScope &copyFrom)
     {
-        if (this->namedValues[name])
+        for (auto const &p : copyFrom.namedValues)
         {
-            return false;
-        }
-        else
-        {
-            this->namedValues[name] = value;
-            return true;
+            this->namedValues[p.first] = p.second;
         }
     }
 
-    llvm::Value *getLocalValue(const std::string &name)
+    // Returns false if the name already exists locally
+    void setValue(const std::string &name, llvm::Value *value)
     {
-        return this->namedValues[name];
+        this->namedValues[name] = value;
     }
 
     bool hasValue(const std::string &name)
@@ -78,49 +70,10 @@ public:
 
     llvm::Value *getValue(const std::string &name)
     {
-        auto val = this->namedValues[name];
-        if (val != NULL)
-        {
-            return val;
-        }
-
-        if (this->parentScope != NULL)
-        {
-            return this->parentScope->getValue(name);
-        }
-        else
-        {
-            return NULL;
-        }
+        return this->namedValues[name];
     }
 
-    bool updateValue(const std::string &name, llvm::Value *value)
-    {
-        if (this->namedValues[name] != NULL)
-        {
-            this->namedValues[name] = value;
-            return true;
-        }
-        else
-        {
-            if (this->parentScope != NULL)
-            {
-                return this->parentScope->updateValue(name, value);
-            }
-            else
-            {
-                return false;
-            }
-        }
-    }
-
-    Scope *getParentScope()
-    {
-        return this->parentScope;
-    }
-
-private:
-    Scope *parentScope;
+    // private:
     std::map<std::string, llvm::Value *> namedValues;
 };
 
@@ -136,7 +89,10 @@ enum class ASTNodeType
     READ_VARIABLE,
     BRACKETS,
     FILE,
-    RETURN
+    RETURN,
+    IF,
+    BLOCK,
+    FOR,
 };
 
 class ASTNode
@@ -146,7 +102,7 @@ public:
     ASTNodeType type;
 
     virtual std::string toString() = 0;
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope) = 0;
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope) = 0;
 };
 
 class ASTOperator : public ASTNode
@@ -169,7 +125,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTBrackets : public ASTNode
@@ -186,7 +142,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTReadVariable : public ASTNode
@@ -201,7 +157,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTLiteralString : public ASTNode
@@ -218,7 +174,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTLiteralNumber : public ASTNode
@@ -233,7 +189,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTDeclaration : public ASTNode
@@ -255,7 +211,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTAssignment : public ASTNode
@@ -273,7 +229,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTReturn : public ASTNode
@@ -289,7 +245,29 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+};
+
+class ASTBlock : public ASTNode
+{
+public:
+    ASTBlock(std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::BLOCK), statements(statements) {}
+    std::list<ASTNode *> *statements;
+
+    virtual std::string toString()
+    {
+        std::string str = "{\n";
+        for (ASTNode *statement : *this->statements)
+        {
+            str += "\t";
+            str += statement->toString();
+            str += "\n";
+        }
+        str += "}";
+        return str;
+    }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTInvocation : public ASTNode
@@ -316,16 +294,16 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::vector<const Token *> *arguments, std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), arguments(arguments), statements(statements) {}
+    ASTFunction(const Token *nameToken, std::vector<const Token *> *arguments, ASTNode *body) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), arguments(arguments), body(body) {}
     const Token *nameToken;
     std::vector<const Token *> *arguments;
-    std::list<ASTNode *> *statements;
+    ASTNode *body;
 
     virtual std::string toString()
     {
@@ -340,21 +318,15 @@ public:
             isFirst = false;
             str += arg->value;
         }
-        str += ") {\n";
-        if (this->statements != NULL)
+        str += ") ";
+        if (this->body != NULL)
         {
-            for (ASTNode *statement : *this->statements)
-            {
-                str += "\t";
-                str += statement->toString();
-                str += "\n";
-            }
+            str += this->body->toString();
         }
-        str += "} ";
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTFile : public ASTNode
@@ -374,9 +346,34 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, Scope *scope);
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
+class ASTIfStatement : public ASTNode
+{
+public:
+    ASTIfStatement(ASTNode *condition, ASTNode *thenBody, ASTNode *elseBody) : ASTNode(ASTNodeType::IF), condition(condition), thenBody(thenBody), elseBody(elseBody) {}
+    ASTNode *condition;
+    ASTNode *thenBody;
+    ASTNode *elseBody;
+
+    virtual std::string toString()
+    {
+        std::string str = "if ";
+        str += this->condition->toString();
+        str += this->thenBody->toString();
+        if (this->elseBody != NULL)
+        {
+            str += "else ";
+            str += this->elseBody->toString();
+        }
+        return str;
+    }
+
+    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+};
+
+ASTNode *parseIfStatement(std::list<const Token *> &tokens);
 ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens);
 ASTNode *parseValueOrOperator(std::list<const Token *> &tokens);
 ASTNode *parseValue(std::list<const Token *> &tokens);

@@ -1,5 +1,67 @@
 #include "ast.hpp"
 
+ASTBlock *parseBlock(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::CURLY_BRACKET_OPEN)
+    {
+        std::cout << "ERROR: Expected { to open code block\n";
+        return NULL;
+    }
+    tokens.pop_front();
+
+    std::list<ASTNode *> *statements = new std::list<ASTNode *>();
+    while (1)
+    {
+        tok = tokens.front();
+        if (tok == NULL)
+        {
+            std::cout << "ERROR: Unexpected end of file\n";
+            return NULL;
+        }
+        if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
+        {
+            tokens.pop_front();
+            return new ASTBlock(statements);
+        }
+
+        ASTNode *statement = NULL;
+        switch (tok->type)
+        {
+        case TokenType::FUNC_KEYWORD:
+            statement = parseFunction(tokens);
+            break;
+        case TokenType::IF_KEYWORD:
+            statement = parseIfStatement(tokens);
+            break;
+        case TokenType::CONST_KEYWORD:
+        case TokenType::LET_KEYWORD:
+            statement = parseDeclaration(tokens);
+            break;
+        case TokenType::RETURN_KEYWORD:
+            statement = parseReturn(tokens);
+            break;
+        case TokenType::SYMBOL:
+            statement = parseSymbolOperation(tokens);
+            break;
+        }
+
+        if (statement == NULL)
+        {
+            std::cout << "ERROR: Invalid statement\n";
+        }
+        else
+        {
+            statements->push_back(statement);
+        }
+    }
+}
+
 ASTFunction *parseFunction(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
@@ -105,59 +167,57 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
     }
     else if (tok->type == TokenType::CURLY_BRACKET_OPEN)
     {
-        tokens.pop_front();
-
-        std::list<ASTNode *> *statements = new std::list<ASTNode *>();
-
-        while (1)
-        {
-            tok = tokens.front();
-            if (tok == NULL)
-            {
-                std::cout << "ERROR: Unexpected end of file\n";
-                return NULL;
-            }
-            if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
-            {
-                tokens.pop_front();
-                break;
-            }
-
-            ASTNode *statement = NULL;
-            switch (tok->type)
-            {
-            case TokenType::FUNC_KEYWORD:
-                statement = parseFunction(tokens);
-                break;
-            case TokenType::CONST_KEYWORD:
-            case TokenType::LET_KEYWORD:
-                statement = parseDeclaration(tokens);
-                break;
-            case TokenType::RETURN_KEYWORD:
-                statement = parseReturn(tokens);
-                break;
-            case TokenType::SYMBOL:
-                statement = parseSymbolOperation(tokens);
-                break;
-            }
-
-            if (statement == NULL)
-            {
-                std::cout << "ERROR: Invalid function statement\n";
-            }
-            else
-            {
-                statements->push_back(statement);
-            }
-        }
-
-        return new ASTFunction(nameToken, argumentNames, statements);
+        ASTBlock *body = parseBlock(tokens);
+        return new ASTFunction(nameToken, argumentNames, body);
     }
     else
     {
         std::cout << "ERROR: Function must have body are be marked as extern\n";
         return NULL;
     }
+}
+
+ASTNode *parseIfStatement(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::IF_KEYWORD)
+    {
+        return NULL;
+    }
+
+    tokens.pop_front();
+
+    ASTNode *condition = parseValueOrOperator(tokens);
+    if (condition == NULL)
+    {
+        return NULL;
+    }
+
+    ASTBlock *thenBody = parseBlock(tokens);
+    if (thenBody == NULL)
+    {
+        return NULL;
+    }
+
+    ASTNode *elseBody = NULL;
+    tok = tokens.front();
+    if (tok->type == TokenType::ELSE_KEYWORD)
+    {
+        tokens.pop_front();
+
+        elseBody = parseBlock(tokens);
+        if (elseBody == NULL)
+        {
+            return NULL;
+        }
+    }
+
+    return new ASTIfStatement(condition, thenBody, elseBody);
 }
 
 // Parses invocation, assingment or a read of a symbol
@@ -473,11 +533,11 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
             rootNodes->push_back(statement);
         }
     }
-    
+
     return new ASTFile(rootNodes);
 }
 
-llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     auto value = scope->getValue(this->nameToken->value);
     if (!value)
@@ -487,13 +547,13 @@ llvm::Value *ASTReadVariable::generateLLVM(GenerationContext *context, Scope *sc
     return value;
 }
 
-llvm::Value *ASTLiteralNumber::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     double parsed = strtod(this->valueToken->value.c_str(), NULL);
     return llvm::ConstantFP::get(*context->context, llvm::APFloat(parsed));
 }
 
-llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     llvm::Value *left = this->left->generateLLVM(context, scope);
     llvm::Value *right = this->right->generateLLVM(context, scope);
@@ -540,12 +600,12 @@ llvm::Value *ASTOperator::generateLLVM(GenerationContext *context, Scope *scope)
     }
 }
 
-llvm::Value *ASTLiteralString::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     return NULL;
 }
 
-llvm::Value *ASTDeclaration::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     llvm::Value *value;
     if (this->value != NULL)
@@ -559,15 +619,16 @@ llvm::Value *ASTDeclaration::generateLLVM(GenerationContext *context, Scope *sco
         value = llvm::ConstantTokenNone::get(*context->context);
     }
 
-    if (!scope->setLocalValue(this->nameToken->value, value))
+    if (scope->hasValue(this->nameToken->value))
     {
         std::cout << "BUILD ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
         return NULL;
     }
+    scope->setValue(this->nameToken->value, value);
     return value;
 }
 
-llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     if (!scope->hasValue(this->nameToken->value))
     {
@@ -577,16 +638,17 @@ llvm::Value *ASTAssignment::generateLLVM(GenerationContext *context, Scope *scop
     else
     {
         llvm::Value *value = this->value->generateLLVM(context, scope);
-        if (!scope->updateValue(this->nameToken->value, value))
+        if (!scope->hasValue(this->nameToken->value))
         {
             std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
             return NULL;
         }
+        scope->setValue(this->nameToken->value, value);
         return value;
     }
 }
 
-llvm::Value *ASTReturn::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     if (this->value != NULL)
     {
@@ -598,7 +660,17 @@ llvm::Value *ASTReturn::generateLLVM(GenerationContext *context, Scope *scope)
     }
 }
 
-llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    for (ASTNode *statement : *this->statements)
+    {
+        statement->generateLLVM(context, scope);
+    }
+
+    return context->irBuilder->GetInsertBlock();
+}
+
+llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     llvm::Function *function = context->module->getFunction(this->nameToken->value);
 
@@ -622,7 +694,7 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
         }
     }
 
-    if (this->statements != NULL)
+    if (this->body != NULL)
     {
         if (!function->empty())
         {
@@ -630,41 +702,89 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, Scope *scope)
             return NULL;
         }
 
-        llvm::BasicBlock *block = llvm::BasicBlock::Create(*context->context, "function-block", function);
-        context->irBuilder->SetInsertPoint(block);
-
-        Scope *functionScope = new Scope(scope);
+        FunctionScope *functionScope = new FunctionScope(*scope);
 
         for (auto &arg : function->args())
         {
-            functionScope->setLocalValue(arg.getName().str(), &arg);
+            functionScope->setValue(arg.getName().str(), &arg);
         }
 
-        for (ASTNode *statement : *this->statements)
-        {
-            statement->generateLLVM(context, functionScope);
-        }
+        llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*context->context, "block", function);
+        context->irBuilder->SetInsertPoint(functionBlock);
+        this->body->generateLLVM(context, functionScope);
 
-        // context->irBuilder.CreateRetVoid();
+        // TODO check if return was specified, else emit context->irBuilder.CreateRetVoid();
 
         // Check generated IR for issues
         llvm::verifyFunction(*function);
 
         // Optimize the function code
-
         context->passManager->run(*function);
     }
 
-    if (!scope->setLocalValue(this->nameToken->value, function))
-    {
-        std::cout << "BUILD ERROR: Cannot redeclare function '" << this->nameToken->value << "'\n";
-        return NULL;
-    }
+    // if (scope->hasValue(this->nameToken->value))
+    // {
+    //     std::cout << "BUILD ERROR: Cannot redeclare function '" << this->nameToken->value << "'\n";
+    //     return NULL;
+    // }
+    // scope->setValue(this->nameToken->value, function);
 
     return function;
 }
 
-llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    llvm::Value *conditionValue = this->condition->generateLLVM(context, scope);
+    llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionValue, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "ifcond");
+
+    llvm::Function *parentFunction = context->irBuilder->GetInsertBlock()->getParent();
+    llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*context->context, "then");
+    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "else");
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "ifcont");
+
+    context->irBuilder->CreateCondBr(condition, thenBlock, elseBlock);
+
+    context->irBuilder->SetInsertPoint(thenBlock);
+    auto thenScope = new FunctionScope(*scope);
+    this->thenBody->generateLLVM(context, thenScope);
+    context->irBuilder->CreateBr(continueBlock);
+    thenBlock->insertInto(parentFunction);
+
+    context->irBuilder->SetInsertPoint(elseBlock);
+
+    auto elseScope = new FunctionScope(*scope);
+    if (this->elseBody != NULL)
+    {
+        this->elseBody->generateLLVM(context, elseScope);
+    }
+    context->irBuilder->CreateBr(continueBlock);
+    elseBlock->insertInto(parentFunction);
+
+    context->irBuilder->SetInsertPoint(continueBlock);
+
+    for (auto const &thenPair : thenScope->namedValues)
+    {
+        for (auto const &elsePair : elseScope->namedValues)
+        {
+            if (thenPair.first == elsePair.first && thenPair.second != elsePair.second)
+            {
+                // Combine the values from the else and then blocks are store in current scope
+                auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "iftmp");
+                std::cout << "Combine " << thenPair.first << " (" << thenPair.second << ")"
+                          << " and " << elsePair.first << " (" << elsePair.second << ")\n";
+                phi->addIncoming(thenPair.second, thenBlock);
+                phi->addIncoming(elsePair.second, elseBlock);
+                scope->setValue(thenPair.first, phi);
+            }
+        }
+    }
+
+    continueBlock->insertInto(parentFunction);
+
+    return continueBlock;
+}
+
+llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     llvm::Function *functionToCall = context->module->getFunction(this->functionNameToken->value);
     if (functionToCall == NULL)
@@ -693,14 +813,14 @@ llvm::Value *ASTInvocation::generateLLVM(GenerationContext *context, Scope *scop
     return context->irBuilder->CreateCall(functionToCall, functionArgs, "calltemp");
 }
 
-llvm::Value *ASTBrackets::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     return this->inner->generateLLVM(context, scope);
 }
 
-llvm::Value *ASTFile::generateLLVM(GenerationContext *context, Scope *scope)
+llvm::Value *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    Scope *fileScope = new Scope(scope);
+    FunctionScope *fileScope = new FunctionScope(*scope);
     for (ASTNode *statement : *this->statements)
     {
         statement->generateLLVM(context, fileScope);
