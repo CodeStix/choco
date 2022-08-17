@@ -3,23 +3,20 @@
 func printDouble(d) extern
 
 func getValue() {
-    return 100
+    return 100000
 }
 
 func testmain() {
 
-    let r = getValue()
-    if r > 50 {
-        printDouble(1)
-        while(r > 0) {
-            printDouble(r)
-            r = r - 1
-        }
+    let value = getValue()
+
+    while(value > 0) {
+        printDouble(value)
+        value = value - 1
     }
     else {
         printDouble(0)
     }
-    
-    return r
-}
 
+    return value
+}

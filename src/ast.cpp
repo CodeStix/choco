@@ -763,7 +763,11 @@ llvm::Value *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope
         // TODO check if return was specified, else emit context->irBuilder.CreateRetVoid();
 
         // Check generated IR for issues
-        llvm::verifyFunction(*function);
+        if (llvm::verifyFunction(*function, &llvm::errs()))
+        {
+            std::cout << "BUILD ERROR: LLVM reported invalid function\n";
+            return NULL;
+        }
 
         // Optimize the function code
         context->passManager->run(*function);
@@ -783,15 +787,16 @@ llvm::Value *ASTWhileStatement::generateLLVM(GenerationContext *context, Functio
 {
     llvm::BasicBlock *originalBlock = context->irBuilder->GetInsertBlock();
     llvm::Function *parentFunction = originalBlock->getParent();
-    llvm::BasicBlock *compareBlock = llvm::BasicBlock::Create(*context->context, "whilecomp");
+    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "whileelse");
     llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*context->context, "whilebody");
     llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "whilecont");
 
-    context->irBuilder->CreateBr(compareBlock);
+    llvm::Value *preConditionValue = this->condition->generateLLVM(context, scope);
+    llvm::Value *preConditionResult = context->irBuilder->CreateFCmpONE(preConditionValue, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whileprecond");
+    context->irBuilder->CreateCondBr(preConditionResult, loopBlock, elseBlock);
 
-    context->irBuilder->SetInsertPoint(compareBlock);
-    compareBlock->insertInto(parentFunction);
-
+    context->irBuilder->SetInsertPoint(loopBlock);
+    loopBlock->insertInto(parentFunction);
     auto loopScope = new FunctionScope(*scope);
     std::map<std::string, llvm::PHINode *> namedPhis;
     for (auto const &loopPair : loopScope->namedValues)
@@ -802,14 +807,7 @@ llvm::Value *ASTWhileStatement::generateLLVM(GenerationContext *context, Functio
         loopScope->setValue(loopPair.first, phi);
     }
 
-    llvm::Value *conditionFloat = this->condition->generateLLVM(context, loopScope);
-    llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionFloat, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whilecond");
-    context->irBuilder->CreateCondBr(condition, loopBlock, continueBlock);
-
-    context->irBuilder->SetInsertPoint(loopBlock);
-    loopBlock->insertInto(parentFunction);
     this->loopBody->generateLLVM(context, loopScope);
-    context->irBuilder->CreateBr(compareBlock);
 
     for (auto const &loopPair : loopScope->namedValues)
     {
@@ -820,8 +818,38 @@ llvm::Value *ASTWhileStatement::generateLLVM(GenerationContext *context, Functio
         }
     }
 
+    llvm::Value *conditionValue = this->condition->generateLLVM(context, loopScope);
+    llvm::Value *conditionResult = context->irBuilder->CreateFCmpONE(conditionValue, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whilecond");
+    context->irBuilder->CreateCondBr(conditionResult, loopBlock, continueBlock);
+    loopBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+
+    context->irBuilder->SetInsertPoint(elseBlock);
+    elseBlock->insertInto(parentFunction);
+    auto elseScope = new FunctionScope(*scope);
+    if (this->elseBody != NULL)
+    {
+        this->elseBody->generateLLVM(context, elseScope);
+    }
+    context->irBuilder->CreateBr(continueBlock);
+    elseBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+
     context->irBuilder->SetInsertPoint(continueBlock);
     continueBlock->insertInto(parentFunction);
+
+    for (auto const &loopPair : loopScope->namedValues)
+    {
+        for (auto const &elsePair : elseScope->namedValues)
+        {
+            if (loopPair.first == elsePair.first && loopPair.second != elsePair.second)
+            {
+                // Combine the values from the else and then blocks are store in current scope
+                auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "whileconttmp");
+                phi->addIncoming(loopPair.second, loopBlock);
+                phi->addIncoming(elsePair.second, elseBlock);
+                scope->setValue(loopPair.first, phi);
+            }
+        }
+    }
 
     return continueBlock;
 }
@@ -843,6 +871,7 @@ llvm::Value *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSc
     auto thenScope = new FunctionScope(*scope);
     this->thenBody->generateLLVM(context, thenScope);
     context->irBuilder->CreateBr(continueBlock);
+    thenBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
 
     context->irBuilder->SetInsertPoint(elseBlock);
     elseBlock->insertInto(parentFunction);
@@ -852,6 +881,7 @@ llvm::Value *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSc
         this->elseBody->generateLLVM(context, elseScope);
     }
     context->irBuilder->CreateBr(continueBlock);
+    elseBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
 
     context->irBuilder->SetInsertPoint(continueBlock);
     continueBlock->insertInto(parentFunction);
