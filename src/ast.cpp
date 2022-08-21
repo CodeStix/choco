@@ -885,14 +885,20 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     }
     else
     {
-        TypedValue *value = this->value->generateLLVM(context, scope);
-        if (!scope->hasValue(this->nameToken->value))
+        TypedValue *newValue = this->value->generateLLVM(context, scope);
+        TypedValue *scopeValue = scope->getValue(this->nameToken->value);
+        if (scopeValue == NULL)
         {
             std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
             return NULL;
         }
-        scope->setValue(this->nameToken->value, value);
-        return value;
+        if (*newValue->getType() != *scopeValue->getType())
+        {
+            std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', assignment has different type\n";
+            return NULL;
+        }
+        scopeValue->setValue(newValue->getValue());
+        return scopeValue;
     }
 }
 
@@ -989,18 +995,18 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
 TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    llvm::BasicBlock *originalBlock = context->irBuilder->GetInsertBlock();
-    llvm::Function *parentFunction = originalBlock->getParent();
-    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "whileelse");
-    llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*context->context, "whilebody");
-    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "whilecont");
-
     TypedValue *preConditionValue = this->condition->generateLLVM(context, scope);
     if (*preConditionValue->getType() != BOOL_TYPE)
     {
         std::cout << "While condition must be a bool (UInt1) type!\n";
         return NULL;
     }
+
+    llvm::BasicBlock *originalBlock = context->irBuilder->GetInsertBlock();
+    llvm::Function *parentFunction = originalBlock->getParent();
+    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "whileelse");
+    llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*context->context, "whilebody");
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "whilecont");
 
     // llvm::Value *preConditionResult = context->irBuilder->CreateFCmpONE(preConditionValue, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whileprecond");
     context->irBuilder->CreateCondBr(preConditionValue->getValue(), loopBlock, elseBlock);
@@ -1056,9 +1062,10 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     {
         for (auto const &elsePair : elseScope->namedValues)
         {
-            if (loopPair.first == elsePair.first && loopPair.second->getValue() != elsePair.second->getValue())
+            if (loopPair.first == elsePair.first && scope->hasValue(loopPair.first) && loopPair.second->getValue() != elsePair.second->getValue())
             {
-                if (*loopPair.second->getType() != *elsePair.second->getType())
+                TypedValue *scopedValue = scope->getValue(loopPair.first);
+                if (*loopPair.second->getType() != *elsePair.second->getType() || *loopPair.second->getType() != *scopedValue->getType())
                 {
                     std::cout << "ERROR: While statement else and loop variables do not match in types\n";
                     return NULL;
@@ -1067,7 +1074,7 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
                 auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "whileconttmp");
                 phi->addIncoming(loopPair.second->getValue(), loopBlock);
                 phi->addIncoming(elsePair.second->getValue(), elseBlock);
-                scope->setValue(loopPair.first, new TypedValue(phi, loopPair.second->getType())); // or elsePair.second->getType()
+                scopedValue->setValue(phi);
             }
         }
     }
@@ -1116,9 +1123,10 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
     {
         for (auto const &elsePair : elseScope->namedValues)
         {
-            if (thenPair.first == elsePair.first && thenPair.second->getValue() != elsePair.second->getValue())
+            if (thenPair.first == elsePair.first && scope->hasValue(thenPair.first) && thenPair.second->getValue() != elsePair.second->getValue())
             {
-                if (*thenPair.second->getType() != *elsePair.second->getType())
+                TypedValue *scopedValue = scope->getValue(thenPair.first);
+                if (*thenPair.second->getType() != *elsePair.second->getType() || *thenPair.second->getType() != *scopedValue->getType())
                 {
                     std::cout << "ERROR: If statement then and else variables do not match in types\n";
                     return NULL;
@@ -1130,7 +1138,7 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
                 //           << " and " << elsePair.first << " (" << elsePair.second << ")\n";
                 phi->addIncoming(thenPair.second->getValue(), thenBlock);
                 phi->addIncoming(elsePair.second->getValue(), elseBlock);
-                scope->setValue(thenPair.first, new TypedValue(phi, thenPair.second->getType())); // or elsePair.second->getType()
+                scopedValue->setValue(phi);
             }
         }
     }

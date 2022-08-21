@@ -1,15 +1,25 @@
+export extern func printDouble(d)
 
-func getNumber() {
-    return 100
+export func getValue() {
+    return 10000000000000000
+}
+
+export func printFibbonaci(limit) {
+    let a = 0
+    let b = 1
+    let n = 0
+    while n < limit {
+        n = a + b
+        a = b
+        b = n
+        printDouble(n)
+    }
+    return 0
 }
 
 export func main() {
 
-    let i = getNumber()
-    if (i > 100) {
-        i = i * 1000
-    }
-    
-    return i
-
+    let value = getValue()
+    printFibbonaci(value)
+    return value
 }
