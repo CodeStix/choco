@@ -13,6 +13,8 @@ export func printFibbonaci(limit) {
         a = b
         b = n
         printDouble(n)
+
+
     }
     return 0
 }
