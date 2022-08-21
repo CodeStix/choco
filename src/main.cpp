@@ -24,9 +24,6 @@ extern "C" double printDouble(double X)
 
 int main()
 {
-    // llvm::InitializeNativeTarget();
-    // llvm::InitializeNativeTargetAsmPrinter();
-    // llvm::InitializeNativeTargetAsmParser();
     llvm::InitializeAllTargetInfos();
     llvm::InitializeAllTargets();
     llvm::InitializeAllTargetMCs();
@@ -94,19 +91,6 @@ int main()
     outputFile.close();
 
     std::cout << "Wrote to " << outputFilePath << "\n";
-
-    // auto jit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
-    // context->module->setDataLayout(jit->getDataLayout());
-
-    // auto resourceTracker = jit->getMainJITDylib().createResourceTracker();
-    // exitOnError(jit->addModule(llvm::orc::ThreadSafeModule(std::move(context->module), std::move(context->context)), resourceTracker));
-
-    // auto entryPoint = exitOnError(jit->lookup("testmain"));
-    // double (*entryPointFunction)() = (double (*)())(void *)entryPoint.getAddress();
-    // printf("entryPointFunction = %p\n", entryPointFunction);
-    // double result = entryPointFunction();
-    // printf("result = %f\n", result);
-
     std::cout << "Everything is done\n";
     return 0;
 }
