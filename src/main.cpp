@@ -5,6 +5,14 @@
 #include "token.hpp"
 #include "ast.hpp"
 #include "jit.hpp"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Linker/Linker.h"
 
 llvm::ExitOnError exitOnError;
 
@@ -16,9 +24,14 @@ extern "C" double printDouble(double X)
 
 int main()
 {
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
-    llvm::InitializeNativeTargetAsmParser();
+    // llvm::InitializeNativeTarget();
+    // llvm::InitializeNativeTargetAsmPrinter();
+    // llvm::InitializeNativeTargetAsmParser();
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
 
     std::string fileContent;
     std::getline(std::ifstream("test.ch"), fileContent, '\0');
@@ -44,21 +57,55 @@ int main()
     auto scope = new FunctionScope();
     file->generateLLVM(context, scope);
     std::cout << "Generation done\n";
-    context->module->print(llvm::errs(), NULL);
 
-    std::cout << "Executing...\n";
+    // context->module->print(llvm::errs(), NULL);
 
-    auto jit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
-    context->module->setDataLayout(jit->getDataLayout());
+    std::cout << "Creating executable...\n";
 
-    auto resourceTracker = jit->getMainJITDylib().createResourceTracker();
-    exitOnError(jit->addModule(llvm::orc::ThreadSafeModule(std::move(context->module), std::move(context->context)), resourceTracker));
+    auto targetCpu = "x86-64";
+    auto targetFeatures = "+avx,+avx2,+aes,+sse,+sse2,+sse3";
+    auto targetTriple = llvm::sys::getDefaultTargetTriple();
+    std::string targetTripleError;
+    auto target = llvm::TargetRegistry::lookupTarget(targetTriple, targetTripleError);
+    if (!target)
+    {
+        std::cout << "Could not lookup target: " << targetTripleError;
+        return 1;
+    }
 
-    auto entryPoint = exitOnError(jit->lookup("testmain"));
-    double (*entryPointFunction)() = (double (*)())(void *)entryPoint.getAddress();
-    printf("entryPointFunction = %p\n", entryPointFunction);
-    double result = entryPointFunction();
-    printf("result = %f\n", result);
+    llvm::TargetOptions targetOptions;
+    auto targetMachine = target->createTargetMachine(targetTriple, targetCpu, targetFeatures, targetOptions, llvm::Reloc::DynamicNoPIC);
+
+    context->module->setDataLayout(targetMachine->createDataLayout());
+    context->module->setTargetTriple(targetTriple);
+
+    llvm::legacy::PassManager passManager;
+    std::error_code outputFileErrorCode;
+    std::string outputFilePath = "output.o";
+    llvm::raw_fd_ostream outputFile(outputFilePath, outputFileErrorCode, llvm::sys::fs::OF_None);
+    if (outputFileErrorCode)
+    {
+        std::cout << "Could not open output file: " << outputFileErrorCode;
+        return 1;
+    }
+    targetMachine->addPassesToEmitFile(passManager, outputFile, NULL, llvm::CodeGenFileType::CGFT_ObjectFile);
+
+    passManager.run(*context->module);
+    outputFile.close();
+
+    std::cout << "Wrote to " << outputFilePath << "\n";
+
+    // auto jit = exitOnError(llvm::orc::KaleidoscopeJIT::Create());
+    // context->module->setDataLayout(jit->getDataLayout());
+
+    // auto resourceTracker = jit->getMainJITDylib().createResourceTracker();
+    // exitOnError(jit->addModule(llvm::orc::ThreadSafeModule(std::move(context->module), std::move(context->context)), resourceTracker));
+
+    // auto entryPoint = exitOnError(jit->lookup("testmain"));
+    // double (*entryPointFunction)() = (double (*)())(void *)entryPoint.getAddress();
+    // printf("entryPointFunction = %p\n", entryPointFunction);
+    // double result = entryPointFunction();
+    // printf("result = %f\n", result);
 
     std::cout << "Everything is done\n";
     return 0;

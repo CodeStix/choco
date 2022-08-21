@@ -3,20 +3,25 @@
 export extern func printDouble(d)
 
 func getValue() {
-    return 20
+    return 10000000000000000
 }
 
-export func testmain() {
+func printFibbonaci(limit) {
+    let a = 0
+    let b = 1
+    let n = 0
+    while n < limit {
+        n = a + b
+        a = b
+        b = n
+        printDouble(n)
+    }
+    return 0
+}
+
+export func main() {
 
     let value = getValue()
-
-    while(value > 0) {
-        printDouble(value)
-        value = value - 1
-    }
-    else {
-        printDouble(0)
-    }
-
+    printFibbonaci(value)
     return value
 }
