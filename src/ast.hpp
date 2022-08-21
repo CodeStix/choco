@@ -22,6 +22,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
+#include "typedValue.hpp"
 
 class GenerationContext
 {
@@ -58,7 +59,7 @@ public:
     }
 
     // Returns false if the name already exists locally
-    void setValue(const std::string &name, llvm::Value *value)
+    void setValue(const std::string &name, TypedValue *value)
     {
         this->namedValues[name] = value;
     }
@@ -68,13 +69,13 @@ public:
         return this->getValue(name) != NULL;
     }
 
-    llvm::Value *getValue(const std::string &name)
+    TypedValue *getValue(const std::string &name)
     {
         return this->namedValues[name];
     }
 
     // private:
-    std::map<std::string, llvm::Value *> namedValues;
+    std::map<std::string, TypedValue *> namedValues;
 };
 
 enum class ASTNodeType
@@ -102,7 +103,7 @@ public:
     ASTNodeType type;
 
     virtual std::string toString() = 0;
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope) = 0;
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) = 0;
 };
 
 class ASTOperator : public ASTNode
@@ -125,7 +126,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTBrackets : public ASTNode
@@ -142,7 +143,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTReadVariable : public ASTNode
@@ -157,7 +158,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTLiteralString : public ASTNode
@@ -174,7 +175,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTLiteralNumber : public ASTNode
@@ -189,7 +190,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTDeclaration : public ASTNode
@@ -211,7 +212,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTAssignment : public ASTNode
@@ -229,7 +230,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTReturn : public ASTNode
@@ -245,7 +246,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTBlock : public ASTNode
@@ -267,7 +268,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTInvocation : public ASTNode
@@ -294,7 +295,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTFunction : public ASTNode
@@ -336,7 +337,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTFile : public ASTNode
@@ -356,7 +357,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTIfStatement : public ASTNode
@@ -380,7 +381,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTWhileStatement : public ASTNode
@@ -404,7 +405,7 @@ public:
         return str;
     }
 
-    virtual llvm::Value *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 ASTNode *parseIfStatement(std::list<const Token *> &tokens);

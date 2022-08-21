@@ -55,12 +55,12 @@ int main()
     file->generateLLVM(context, scope);
     std::cout << "Generation done\n";
 
-    // context->module->print(llvm::errs(), NULL);
+    context->module->print(llvm::errs(), NULL);
 
     std::cout << "Creating executable...\n";
 
     auto targetCpu = "x86-64";
-    auto targetFeatures = "+avx,+avx2,+aes,+sse,+sse2,+sse3";
+    auto targetFeatures = ""; // "+avx,+avx2,+aes,+sse,+sse2,+sse3";
     auto targetTriple = llvm::sys::getDefaultTargetTriple();
     std::string targetTripleError;
     auto target = llvm::TargetRegistry::lookupTarget(targetTriple, targetTripleError);
