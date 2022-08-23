@@ -27,7 +27,8 @@ public:
         return this->typeCode;
     }
 
-    virtual bool operator==(const Type &b) = 0;
+    virtual llvm::Type *getLLVMType(llvm::LLVMContext &context) const = 0;
+    virtual bool operator==(const Type &b) const = 0;
 
     bool operator!=(const Type &b)
     {
@@ -43,7 +44,7 @@ class FloatType : public Type
 public:
     FloatType(int bitSize) : Type(TypeCode::FLOAT), bitSize(bitSize) {}
 
-    bool operator==(const Type &b) override
+    bool operator==(const Type &b) const override
     {
         if (b.getTypeCode() == TypeCode::FLOAT)
         {
@@ -61,13 +62,15 @@ public:
         return this->bitSize;
     }
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
         switch (this->bitSize)
         {
         case 32:
+            std::cout << "DEBUG: return float type\n";
             return llvm::Type::getFloatTy(context);
         case 64:
+            std::cout << "DEBUG: return double type\n";
             return llvm::Type::getDoubleTy(context);
         case 128:
             return llvm::Type::getFP128Ty(context);
@@ -87,7 +90,7 @@ class IntegerType : public Type
 public:
     IntegerType(int bitSize, bool isSigned) : Type(TypeCode::INTEGER), bitSize(bitSize), isSigned(isSigned) {}
 
-    bool operator==(const Type &b) override
+    bool operator==(const Type &b) const override
     {
         if (b.getTypeCode() == TypeCode::INTEGER)
         {
@@ -110,7 +113,7 @@ public:
         return this->isSigned;
     }
 
-    llvm::IntegerType *getLLVMType(llvm::LLVMContext &context) const
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
         return llvm::Type::getIntNTy(context, this->bitSize);
     }
@@ -125,7 +128,7 @@ class RangeType : public Type
 public:
     RangeType(int startInclusive, int endExclusive) : Type(TypeCode::RANGE), startInclusive(startInclusive), endExclusive(endExclusive) {}
 
-    bool operator==(const Type &b) override
+    bool operator==(const Type &b) const override
     {
         if (b.getTypeCode() == TypeCode::RANGE)
         {
@@ -136,6 +139,11 @@ public:
         {
             return false;
         }
+    }
+
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        return llvm::Type::getIntNTy(context, 32);
     }
 
 private:
@@ -149,23 +157,35 @@ class FunctionType : public Type
 public:
     FunctionType() : Type(TypeCode::FUNCTION) {}
 
-    bool operator==(const Type &b) override
+    bool operator==(const Type &b) const override
     {
         return false;
+    }
+
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        return llvm::FunctionType::get(llvm::Type::getVoidTy(context), false);
     }
 };
 
 class ArrayType : public Type
 {
 public:
-    ArrayType(Type *innerType) : Type(TypeCode::ARRAY), innerType(innerType) {}
+    ArrayType(Type *innerType, uint64_t count) : Type(TypeCode::ARRAY), innerType(innerType), count(count), knownCount(true) {}
 
-    bool operator==(const Type &b) override
+    bool operator==(const Type &b) const override
     {
         return false;
     }
 
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
+    }
+
 private:
+    bool knownCount;
+    uint64_t count;
     Type *innerType;
 };
 
@@ -177,11 +197,6 @@ public:
     inline llvm::Value *getValue()
     {
         return this->value;
-    }
-
-    inline void setValue(llvm::Value *newValue)
-    {
-        this->value = newValue;
     }
 
     inline Type *getType()

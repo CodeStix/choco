@@ -1,7 +1,7 @@
 export extern func printDouble(d)
 
 export func getValue() {
-    return 10000000000000000
+    return 100000
 }
 
 export func printFibbonaci(limit) {

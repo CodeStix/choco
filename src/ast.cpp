@@ -610,22 +610,32 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
     return new ASTFile(rootNodes);
 }
 
+llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm::Type *type, llvm::StringRef twine = "")
+{
+    llvm::Function *function = context->irBuilder->GetInsertBlock()->getParent();
+    llvm::IRBuilder<> insertBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+    return insertBuilder.CreateAlloca(type, NULL, twine);
+}
+
 TypedValue *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    auto value = scope->getValue(this->nameToken->value);
-    if (!value)
+    auto valuePointer = scope->getValue(this->nameToken->value);
+    if (!valuePointer)
     {
         std::cout << "BUILD ERROR: Could not find variable '" << this->nameToken->value << "'\n";
     }
-    value->setOriginVariable(this->nameToken->value);
-    return value;
+    valuePointer->setOriginVariable(this->nameToken->value);
+
+    auto value = context->irBuilder->CreateLoad(valuePointer->getType()->getLLVMType(*context->context), valuePointer->getValue(), "load");
+    return new TypedValue(value, valuePointer->getType());
 }
 
 TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     double parsed = strtod(this->valueToken->value.c_str(), NULL);
-    auto value = llvm::ConstantFP::get(*context->context, llvm::APFloat(parsed));
-    return new TypedValue(value, new FloatType(32));
+    Type *type = new FloatType(32);
+    auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), parsed);
+    return new TypedValue(value, type);
 }
 
 TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -849,31 +859,51 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     auto value = context->irBuilder->CreateGlobalString(this->valueToken->value, "str");
-    auto global = new llvm::GlobalVariable(llvm::PointerType::get(*context->context, 0), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, value);
-    return new TypedValue(global, new ArrayType(&CHAR_TYPE));
+    Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length());
+    auto global = new llvm::GlobalVariable(type->getLLVMType(*context->context), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, value);
+    return new TypedValue(global, type);
 }
 
 TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    TypedValue *value;
-    if (this->value != NULL)
-    {
-        // There is an assignment after the declaration
-        value = this->value->generateLLVM(context, scope); // TODO: get from type specifier
-    }
-    else
-    {
-        // Uninitialized value
-        value = new TypedValue(NULL, new FloatType(32)); // TODO: get from type specifier
-    }
-
     if (scope->hasValue(this->nameToken->value))
     {
         std::cout << "BUILD ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
         return NULL;
     }
-    scope->setValue(this->nameToken->value, value);
-    return value;
+
+    TypedValue *initialValue;
+    if (this->value != NULL)
+    {
+        initialValue = this->value->generateLLVM(context, scope);
+    }
+    else
+    {
+        initialValue = NULL;
+    }
+
+    Type *pointerType;
+    if (initialValue != NULL)
+    {
+        pointerType = initialValue->getType();
+    }
+    else
+    {
+        // TODO: type specifier
+        return NULL;
+    }
+
+    llvm::Value *pointerValue = createAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
+    TypedValue *pointer = new TypedValue(pointerValue, pointerType);
+    scope->addValue(this->nameToken->value, pointer);
+
+    if (initialValue != NULL)
+    {
+        bool isVolatile = false;
+        context->irBuilder->CreateStore(initialValue->getValue(), pointer->getValue(), isVolatile);
+    }
+
+    return initialValue;
 }
 
 TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -886,19 +916,21 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     else
     {
         TypedValue *newValue = this->value->generateLLVM(context, scope);
-        TypedValue *scopeValue = scope->getValue(this->nameToken->value);
-        if (scopeValue == NULL)
+        TypedValue *pointerValue = scope->getValue(this->nameToken->value);
+        if (pointerValue == NULL)
         {
             std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
             return NULL;
         }
-        if (*newValue->getType() != *scopeValue->getType())
+        if (*newValue->getType() != *pointerValue->getType())
         {
             std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', assignment has different type\n";
             return NULL;
         }
-        scopeValue->setValue(newValue->getValue());
-        return scopeValue;
+
+        bool isVolatile = false;
+        context->irBuilder->CreateStore(newValue->getValue(), pointerValue->getValue(), isVolatile);
+        return newValue;
     }
 }
 
@@ -934,8 +966,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     if (function == NULL)
     {
         // Define it
-        std::vector<llvm::Type *> argumentTypes(this->arguments->size(), llvm::Type::getDoubleTy(*context->context));
-        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getDoubleTy(*context->context), argumentTypes, false);
+        std::vector<llvm::Type *> argumentTypes(this->arguments->size(), llvm::Type::getFloatTy(*context->context)); // TODO get from type specifier
+        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getFloatTy(*context->context), argumentTypes, false);
 
         function = llvm::Function::Create(functionType, this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage, this->nameToken->value, *context->module);
         if (function == NULL)
@@ -960,14 +992,17 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         }
 
         FunctionScope *functionScope = new FunctionScope(*scope);
+        llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*context->context, "block", function);
+        context->irBuilder->SetInsertPoint(functionBlock);
 
         for (auto &arg : function->args())
         {
-            functionScope->setValue(arg.getName().str(), new TypedValue(&arg, new FloatType(32))); // TODO get from type specfier
+            auto argType = new FloatType(32); // TODO get from type specifier
+            auto argPointer = context->irBuilder->CreateAlloca(argType->getLLVMType(*context->context), NULL, "loadarg");
+            context->irBuilder->CreateStore(&arg, argPointer, false);
+            functionScope->addValue(arg.getName().str(), new TypedValue(argPointer, argType));
         }
 
-        llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*context->context, "block", function);
-        context->irBuilder->SetInsertPoint(functionBlock);
         this->body->generateLLVM(context, functionScope);
 
         // TODO check if return was specified, else emit context->irBuilder.CreateRetVoid();
@@ -1014,25 +1049,7 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     context->irBuilder->SetInsertPoint(loopBlock);
     loopBlock->insertInto(parentFunction);
     auto loopScope = new FunctionScope(*scope);
-    std::map<std::string, llvm::PHINode *> namedPhis;
-    for (auto const &loopPair : loopScope->namedValues)
-    {
-        auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "whiletmp");
-        phi->addIncoming(loopPair.second->getValue(), originalBlock);
-        namedPhis[loopPair.first] = phi;
-        loopPair.second->setValue(phi);
-    }
-
     this->loopBody->generateLLVM(context, loopScope);
-
-    for (auto const &loopPair : loopScope->namedValues)
-    {
-        llvm::PHINode *phi = namedPhis[loopPair.first];
-        if (phi != NULL)
-        {
-            phi->addIncoming(loopPair.second->getValue(), loopBlock);
-        }
-    }
 
     TypedValue *conditionValue = this->condition->generateLLVM(context, loopScope);
     if (*conditionValue->getType() != BOOL_TYPE)
@@ -1057,28 +1074,6 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
 
     context->irBuilder->SetInsertPoint(continueBlock);
     continueBlock->insertInto(parentFunction);
-
-    for (auto const &loopPair : loopScope->namedValues)
-    {
-        for (auto const &elsePair : elseScope->namedValues)
-        {
-            if (loopPair.first == elsePair.first && scope->hasValue(loopPair.first) && loopPair.second->getValue() != elsePair.second->getValue())
-            {
-                TypedValue *scopedValue = scope->getValue(loopPair.first);
-                if (*loopPair.second->getType() != *elsePair.second->getType() || *loopPair.second->getType() != *scopedValue->getType())
-                {
-                    std::cout << "ERROR: While statement else and loop variables do not match in types\n";
-                    return NULL;
-                }
-                // Combine the values from the else and then blocks are store in current scope
-                auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "whileconttmp");
-                phi->addIncoming(loopPair.second->getValue(), loopBlock);
-                phi->addIncoming(elsePair.second->getValue(), elseBlock);
-                scopedValue->setValue(phi);
-            }
-        }
-    }
-
     return NULL;
 }
 
@@ -1118,30 +1113,6 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 
     context->irBuilder->SetInsertPoint(continueBlock);
     continueBlock->insertInto(parentFunction);
-
-    for (auto const &thenPair : thenScope->namedValues)
-    {
-        for (auto const &elsePair : elseScope->namedValues)
-        {
-            if (thenPair.first == elsePair.first && scope->hasValue(thenPair.first) && thenPair.second->getValue() != elsePair.second->getValue())
-            {
-                TypedValue *scopedValue = scope->getValue(thenPair.first);
-                if (*thenPair.second->getType() != *elsePair.second->getType() || *thenPair.second->getType() != *scopedValue->getType())
-                {
-                    std::cout << "ERROR: If statement then and else variables do not match in types\n";
-                    return NULL;
-                }
-
-                // Combine the values from the else and then blocks are store in current scope
-                auto phi = context->irBuilder->CreatePHI(llvm::Type::getDoubleTy(*context->context), 2, "iftmp");
-                // std::cout << "Combine " << thenPair.first << " (" << thenPair.second << ")"
-                //           << " and " << elsePair.first << " (" << elsePair.second << ")\n";
-                phi->addIncoming(thenPair.second->getValue(), thenBlock);
-                phi->addIncoming(elsePair.second->getValue(), elseBlock);
-                scopedValue->setValue(phi);
-            }
-        }
-    }
 
     return NULL;
 }

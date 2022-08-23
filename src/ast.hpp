@@ -22,6 +22,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
+#include "llvm/Transforms/Utils.h"
 #include "typedValue.hpp"
 
 class GenerationContext
@@ -32,6 +33,7 @@ public:
                           module(std::make_unique<llvm::Module>("default-choco-module", *context)),
                           passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get()))
     {
+        passManager->add(llvm::createPromoteMemoryToRegisterPass());
         passManager->add(llvm::createInstructionCombiningPass());
         passManager->add(llvm::createReassociatePass());
         passManager->add(llvm::createGVNPass());
@@ -59,9 +61,17 @@ public:
     }
 
     // Returns false if the name already exists locally
-    void setValue(const std::string &name, TypedValue *value)
+    bool addValue(const std::string &name, TypedValue *value)
     {
-        this->namedValues[name] = value;
+        if (this->hasValue(name))
+        {
+            return false;
+        }
+        else
+        {
+            this->namedValues[name] = value;
+            return true;
+        }
     }
 
     bool hasValue(const std::string &name)
