@@ -859,9 +859,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     auto value = context->irBuilder->CreateGlobalString(this->valueToken->value, "str");
-    Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length());
-    auto global = new llvm::GlobalVariable(type->getLLVMType(*context->context), true, llvm::GlobalValue::LinkageTypes::PrivateLinkage, value);
-    return new TypedValue(global, type);
+    Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length() + 1);
+    return new TypedValue(value, type);
 }
 
 TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)

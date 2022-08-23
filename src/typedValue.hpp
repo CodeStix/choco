@@ -180,7 +180,7 @@ public:
 
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
-        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
+        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count)->getPointerTo();
     }
 
 private:
