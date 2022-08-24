@@ -191,6 +191,12 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 case ',':
                     tokenList.push_back(new Token(i, TokenType::COMMA, std::string(1, currentChar)));
                     break;
+                case ':':
+                    tokenList.push_back(new Token(i, TokenType::COLON, std::string(1, currentChar)));
+                    break;
+                case ';':
+                    tokenList.push_back(new Token(i, TokenType::SEMICOLON, std::string(1, currentChar)));
+                    break;
 
                 default:
                     std::cout << "WARNING: Unknown char " << currentChar << "\n";
@@ -268,6 +274,10 @@ const char *getTokenTypeName(TokenType type)
         return "WHILE_KEYWORD";
     case TokenType::EXPORT_KEYWORD:
         return "EXPORT_KEYWORD";
+    case TokenType::COLON:
+        return "COLON";
+    case TokenType::SEMICOLON:
+        return "SEMICOLON";
     default:
         return "Unknown";
     }
@@ -275,6 +285,7 @@ const char *getTokenTypeName(TokenType type)
 
 int getTokenOperatorImportance(TokenType type)
 {
+    // TODO add assignment as operator
     switch (type)
     {
     case TokenType::LT_OPERATOR:

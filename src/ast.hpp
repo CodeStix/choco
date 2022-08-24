@@ -104,6 +104,8 @@ enum class ASTNodeType
     IF,
     BLOCK,
     FOR,
+    TYPE,
+    PARAMETER
 };
 
 class ASTNode
@@ -252,7 +254,10 @@ public:
     virtual std::string toString()
     {
         std::string str = "return ";
-        str += this->value->toString();
+        if (this->value != NULL)
+        {
+            str += this->value->toString();
+        }
         return str;
     }
 
@@ -279,6 +284,101 @@ public:
     }
 
     virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+};
+
+class ASTType : public ASTNode
+{
+public:
+    ASTType(const Token *nameToken) : ASTNode(ASTNodeType::TYPE), nameToken(nameToken) {}
+
+    Type *getSpecifiedType()
+    {
+        std::string name = this->nameToken->value;
+        if (name == "int32")
+        {
+            return new IntegerType(32, true);
+        }
+        else if (name == "uint32")
+        {
+            return new IntegerType(32, false);
+        }
+        else if (name == "float32")
+        {
+            return new FloatType(32);
+        }
+        else if (name == "float64")
+        {
+            return new FloatType(64);
+        }
+        else if (name == "float128")
+        {
+            return new FloatType(128);
+        }
+        else
+        {
+            std::cout << "ERROR: type '" << name << "' not found";
+            return NULL;
+        }
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override
+    {
+        return NULL;
+    }
+
+    std::string toString() override
+    {
+        return this->nameToken->value;
+    }
+
+private:
+    const Token *nameToken;
+};
+
+class ASTParameter : public ASTNode
+{
+public:
+    ASTParameter(const Token *nameToken, ASTType *typeSpecifier = NULL) : ASTNode(ASTNodeType::PARAMETER), nameToken(nameToken), typeSpecifier(typeSpecifier)
+    {
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override
+    {
+        return NULL;
+    }
+
+    std::string toString() override
+    {
+        std::string str = this->nameToken->value;
+        if (this->typeSpecifier != NULL)
+        {
+            str += ": ";
+            str += this->typeSpecifier->toString();
+        }
+        return str;
+    }
+
+    Type *getSpecifiedType()
+    {
+        if (this->typeSpecifier != NULL)
+        {
+            return this->typeSpecifier->getSpecifiedType();
+        }
+        else
+        {
+            std::cout << "WARNING: ASTParameter::getSpecifiedType() was called without a type specifier";
+            return NULL;
+        }
+    }
+
+    const std::string getParameterName()
+    {
+        return this->nameToken->value;
+    }
+
+private:
+    const Token *nameToken;
+    ASTType *typeSpecifier;
 };
 
 class ASTInvocation : public ASTNode
@@ -311,9 +411,10 @@ public:
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::vector<const Token *> *arguments, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), arguments(arguments), body(body), exported(exported) {}
+    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTType *returnType, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
     const Token *nameToken;
-    std::vector<const Token *> *arguments;
+    std::vector<ASTParameter *> *parameters;
+    ASTType *returnType;
     ASTNode *body;
     bool exported;
 
@@ -332,14 +433,19 @@ public:
         str += this->nameToken->value;
         str += "(";
         bool isFirst = true;
-        for (const Token *arg : *this->arguments)
+        for (ASTParameter *arg : *this->parameters)
         {
             if (!isFirst)
                 str += ", ";
             isFirst = false;
-            str += arg->value;
+            str += arg->toString();
         }
         str += ") ";
+        if (this->returnType != NULL)
+        {
+            str += ": ";
+            str += this->returnType->toString();
+        }
         if (this->body != NULL)
         {
             str += this->body->toString();
@@ -427,3 +533,5 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens);
 ASTNode *parseSymbolOperation(std::list<const Token *> &tokens);
 ASTFile *parseFile(std::list<const Token *> &tokens);
 ASTReturn *parseReturn(std::list<const Token *> &tokens);
+ASTType *parseType(std::list<const Token *> &tokens);
+ASTParameter *parseParameter(std::list<const Token *> &tokens);

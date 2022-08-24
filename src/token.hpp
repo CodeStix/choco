@@ -35,6 +35,8 @@ enum class TokenType
     GOTO_KEYWORD,
     WHILE_KEYWORD,
     EXPORT_KEYWORD,
+    COLON,
+    SEMICOLON,
 };
 
 class Token

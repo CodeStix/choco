@@ -65,6 +65,73 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
     }
 }
 
+ASTParameter *parseParameter(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::SYMBOL)
+    {
+        std::cout << "ERROR: Type must be a name\n";
+        return NULL;
+    }
+    const Token *nameToken = tok;
+    tokens.pop_front();
+    tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+
+    ASTType *typeSpecifier;
+    if (tok->type == TokenType::COLON)
+    {
+        // Parse type specifier
+        tokens.pop_front();
+        typeSpecifier = parseType(tokens);
+        if (typeSpecifier == NULL)
+        {
+            std::cout << "ERROR: Could not parse type specifier\n";
+            return NULL;
+        }
+    }
+    else
+    {
+        typeSpecifier = NULL;
+    }
+
+    if (typeSpecifier == NULL)
+    {
+        // TODO this should be allowed when implementing an interface function
+        std::cout << "ERROR: function argument must specify a type (it does not implement a known signature)\n";
+        return NULL;
+    }
+
+    return new ASTParameter(nameToken, typeSpecifier);
+}
+
+ASTType *parseType(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+    if (tok->type != TokenType::SYMBOL)
+    {
+        std::cout << "ERROR: Type must be a name\n";
+        return NULL;
+    }
+    const Token *nameToken = tok;
+    tokens.pop_front();
+    return new ASTType(nameToken);
+}
+
 ASTFunction *parseFunction(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
@@ -133,7 +200,7 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         tokens.pop_front();
     }
 
-    std::vector<const Token *> *argumentNames = new std::vector<const Token *>();
+    std::vector<ASTParameter *> *parameters = new std::vector<ASTParameter *>();
     while (true)
     {
         tok = tokens.front();
@@ -148,15 +215,13 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
             break;
         }
 
-        if (tok->type != TokenType::SYMBOL)
+        ASTParameter *parameter = parseParameter(tokens);
+        if (parameter == NULL)
         {
-            std::cout << "ERROR: Invocation parameters must be a symbol\n";
+            std::cout << "ERROR: Could not parse function parameter\n";
+            return NULL;
         }
-        else
-        {
-            argumentNames->push_back(tok);
-            tokens.pop_front();
-        }
+        parameters->push_back(parameter);
 
         tok = tokens.front();
         if (tok == NULL)
@@ -184,23 +249,46 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         return NULL;
     }
 
+    ASTType *returnType;
+    if (tok->type == TokenType::COLON)
+    {
+        tokens.pop_front();
+        returnType = parseType(tokens);
+        if (returnType == NULL)
+        {
+            std::cout << "ERROR: Could not parse function return type\n";
+            return NULL;
+        }
+    }
+    else
+    {
+        returnType = NULL;
+    }
+
     if (externToken == NULL)
     {
+        tok = tokens.front();
+        if (tok == NULL)
+        {
+            std::cout << "ERROR: Unexpected end of file\n";
+            return NULL;
+        }
+
         if (tok->type == TokenType::CURLY_BRACKET_OPEN)
         {
             ASTBlock *body = parseBlock(tokens);
-            return new ASTFunction(nameToken, argumentNames, body, exportToken != NULL);
+            return new ASTFunction(nameToken, parameters, returnType, body, exportToken != NULL);
         }
         else
         {
-            std::cout << "ERROR: Function must have body are be marked as extern\n";
+            std::cout << "ERROR: Function must have body are be marked as extern " << (int)tok->type << "\n";
             return NULL;
         }
     }
     else
     {
         // This is an external function
-        return new ASTFunction(nameToken, argumentNames, NULL, exportToken != NULL);
+        return new ASTFunction(nameToken, parameters, returnType, NULL, exportToken != NULL);
     }
 }
 
@@ -424,7 +512,6 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
     }
 
     default:
-        std::cout << "ERROR: Not a value: " << getTokenTypeName(tok->type) << "\n";
         return NULL;
     }
 
@@ -501,12 +588,6 @@ ASTReturn *parseReturn(std::list<const Token *> &tokens)
     tokens.pop_front();
 
     ASTNode *value = parseValueOrOperator(tokens);
-    if (value == NULL)
-    {
-        std::cout << "ERROR: Invalid return value\n";
-        return NULL;
-    }
-
     return new ASTReturn(value);
 }
 
@@ -889,6 +970,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     else
     {
         // TODO: type specifier
+        std::cout << "ERROR: a declaration without type specifier is not supported\n";
         return NULL;
     }
 
@@ -964,10 +1046,24 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
     if (function == NULL)
     {
-        // Define it
-        std::vector<llvm::Type *> argumentTypes(this->arguments->size(), llvm::Type::getFloatTy(*context->context)); // TODO get from type specifier
-        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getFloatTy(*context->context), argumentTypes, false);
+        std::vector<llvm::Type *> parameterTypes; // TODO get from type specifier
+        for (ASTParameter *parameter : *this->parameters)
+        {
+            parameterTypes.push_back(parameter->getSpecifiedType()->getLLVMType(*context->context));
+        }
 
+        llvm::Type *returnType;
+        if (this->returnType != NULL)
+        {
+            returnType = this->returnType->getSpecifiedType()->getLLVMType(*context->context);
+        }
+        else
+        {
+            returnType = llvm::Type::getVoidTy(*context->context);
+        }
+
+        bool isVarArg = false;
+        llvm::FunctionType *functionType = llvm::FunctionType::get(returnType, parameterTypes, isVarArg);
         function = llvm::Function::Create(functionType, this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage, this->nameToken->value, *context->module);
         if (function == NULL)
         {
@@ -978,7 +1074,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         int i = 0;
         for (auto &arg : function->args())
         {
-            arg.setName((*this->arguments)[i++]->value);
+            ASTParameter *parameter = (*this->parameters)[i++];
+            arg.setName(parameter->getParameterName());
         }
     }
 
@@ -994,13 +1091,23 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*context->context, "block", function);
         context->irBuilder->SetInsertPoint(functionBlock);
 
-        for (auto &arg : function->args())
+        int i = 0;
+        for (auto &parameterValue : function->args())
         {
-            auto argType = new FloatType(32); // TODO get from type specifier
-            auto argPointer = context->irBuilder->CreateAlloca(argType->getLLVMType(*context->context), NULL, "loadarg");
-            context->irBuilder->CreateStore(&arg, argPointer, false);
-            functionScope->addValue(arg.getName().str(), new TypedValue(argPointer, argType));
+            ASTParameter *parameter = (*this->parameters)[i++];
+            Type *parameterType = parameter->getSpecifiedType();
+            auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
+            context->irBuilder->CreateStore(&parameterValue, parameterPointer, false);
+            functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType));
         }
+
+        // for (auto &arg : function->args())
+        // {
+        //     auto argType = new FloatType(32); // TODO get from type specifier
+        //     auto argPointer = context->irBuilder->CreateAlloca(argType->getLLVMType(*context->context), NULL, "loadarg");
+        //     context->irBuilder->CreateStore(&arg, argPointer, false);
+        //     functionScope->addValue(arg.getName().str(), new TypedValue(argPointer, argType));
+        // }
 
         this->body->generateLLVM(context, functionScope);
 

@@ -67,10 +67,8 @@ public:
         switch (this->bitSize)
         {
         case 32:
-            std::cout << "DEBUG: return float type\n";
             return llvm::Type::getFloatTy(context);
         case 64:
-            std::cout << "DEBUG: return double type\n";
             return llvm::Type::getDoubleTy(context);
         case 128:
             return llvm::Type::getFP128Ty(context);

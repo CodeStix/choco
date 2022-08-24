@@ -1,28 +1,14 @@
-export extern func printDouble(d)
-export extern func print(c)
 
-export func getValue() {
-    return 100000
-}
+export extern func printDouble(float: float32): float32
 
-export func printFibbonaci(limit) {
-    let a = 0
-    let b = 1
-    let n = 0
-    while n < limit {
-        n = a + b
-        a = b
-        b = n
-        printDouble(n)
-    }
-    return 0
+func test(v: float32): float32 {
+    return v + 1
 }
 
 export func main() {
-
-    let str = "nice!"
-
-    let value = getValue()
-    printFibbonaci(value)
-    return value
+    let value = test(100)
+    printDouble(value)
+    printDouble(value * 2)
+    printDouble(value * 4)
+    return
 }
