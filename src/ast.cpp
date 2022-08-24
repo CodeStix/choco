@@ -742,6 +742,235 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
     return new TypedValue(value, type);
 }
 
+// Converts the left or right value to match the other one's type without losing precision
+bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, TypedValue **rightInOut)
+{
+    auto leftType = (*leftInOut)->getType();
+    auto rightType = (*leftInOut)->getType();
+    if (*leftType == *rightType)
+    {
+        return true;
+    }
+
+    auto leftValue = (*leftInOut)->getValue();
+    auto rightValue = (*leftInOut)->getValue();
+
+    if (leftType->getTypeCode() == TypeCode::INTEGER && rightType->getTypeCode() == TypeCode::INTEGER)
+    {
+        auto leftIntType = static_cast<IntegerType *>(leftType);
+        auto rightIntType = static_cast<IntegerType *>(rightType);
+
+        if (leftIntType->getBitSize() > rightIntType->getBitSize())
+        {
+            // Right must be converted to match left int size
+            if (leftIntType->getSigned() && rightIntType->getSigned())
+            {
+                rightValue = context->irBuilder->CreateSExt(rightValue, leftIntType->getLLVMType(*context->context), "jugglesext");
+            }
+            else
+            {
+                rightValue = context->irBuilder->CreateZExt(rightValue, leftIntType->getLLVMType(*context->context), "jugglezext");
+            }
+            *rightInOut = new TypedValue(rightValue, leftIntType);
+        }
+        else if (leftIntType->getBitSize() < rightIntType->getBitSize())
+        {
+            // Left must be converted to match right int size
+            if (leftIntType->getSigned() && rightIntType->getSigned())
+            {
+                leftValue = context->irBuilder->CreateSExt(leftValue, rightIntType->getLLVMType(*context->context), "jugglesext");
+            }
+            else
+            {
+                leftValue = context->irBuilder->CreateZExt(leftValue, rightIntType->getLLVMType(*context->context), "jugglezext");
+            }
+            *leftInOut = new TypedValue(leftValue, rightIntType);
+        }
+
+        return true;
+    }
+    else if (leftType->getTypeCode() == TypeCode::INTEGER && rightType->getTypeCode() == TypeCode::FLOAT)
+    {
+        auto leftIntType = static_cast<IntegerType *>(leftType);
+        auto rightFloatType = static_cast<FloatType *>(rightType);
+
+        // TODO: check if float can fit integer precision
+
+        if (leftIntType->getSigned())
+        {
+            leftValue = context->irBuilder->CreateSIToFP(leftValue, rightFloatType->getLLVMType(*context->context), "jugglefp");
+        }
+        else
+        {
+            leftValue = context->irBuilder->CreateUIToFP(leftValue, rightFloatType->getLLVMType(*context->context), "jugglefp");
+        }
+
+        *leftInOut = new TypedValue(leftValue, rightFloatType);
+        return true;
+    }
+    else if (leftType->getTypeCode() == TypeCode::FLOAT && rightType->getTypeCode() == TypeCode::INTEGER)
+    {
+        auto leftFloatType = static_cast<FloatType *>(leftType);
+        auto rightIntType = static_cast<IntegerType *>(rightType);
+
+        // TODO: check if float can fit integer precision
+
+        if (rightIntType->getSigned())
+        {
+            rightValue = context->irBuilder->CreateSIToFP(rightValue, leftFloatType->getLLVMType(*context->context), "jugglefp");
+        }
+        else
+        {
+            rightValue = context->irBuilder->CreateUIToFP(rightValue, leftFloatType->getLLVMType(*context->context), "jugglefp");
+        }
+
+        *rightInOut = new TypedValue(rightValue, leftFloatType);
+        return true;
+    }
+    else if (leftType->getTypeCode() == TypeCode::FLOAT && rightType->getTypeCode() == TypeCode::FLOAT)
+    {
+        auto leftFloatType = static_cast<FloatType *>(leftType);
+        auto rightFloatType = static_cast<FloatType *>(rightType);
+
+        if (leftFloatType->getBitSize() > rightFloatType->getBitSize())
+        {
+            rightValue = context->irBuilder->CreateFPExt(rightValue, leftFloatType->getLLVMType(*context->context), "jugglefpext");
+            *rightInOut = new TypedValue(rightValue, leftFloatType);
+        }
+        else if (leftFloatType->getBitSize() < rightFloatType->getBitSize())
+        {
+            leftValue = context->irBuilder->CreateFPExt(leftValue, rightFloatType->getLLVMType(*context->context), "jugglefpext");
+            *leftInOut = new TypedValue(leftValue, rightFloatType);
+        }
+
+        return true;
+    }
+    else
+    {
+
+        return false;
+    }
+}
+
+// Try to cast a value to a specific type
+TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *valueToConvert, Type *targetType, bool allowLosePrecision)
+{
+    llvm::Value *currentValue = valueToConvert->getValue();
+    Type *currentType = valueToConvert->getType();
+    if (targetType->getTypeCode() == TypeCode::INTEGER && currentType->getTypeCode() == TypeCode::INTEGER)
+    {
+        IntegerType *currentIntType = static_cast<IntegerType *>(currentType);
+        IntegerType *targetIntType = static_cast<IntegerType *>(targetType);
+
+        if (targetIntType->getBitSize() > currentIntType->getBitSize())
+        {
+            // Target type has more bits, this cast may be implicit
+            if (targetIntType->getSigned() == currentIntType->getSigned())
+            {
+                // Target type has the same signedness, this cast may be implicit
+                if (targetIntType->getSigned())
+                {
+                    currentValue = context->irBuilder->CreateZExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                }
+                else
+                {
+                    currentValue = context->irBuilder->CreateSExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                }
+            }
+            else
+            {
+                if (!allowLosePrecision)
+                {
+                    return NULL;
+                }
+
+                // TODO: is this the right was to convert
+                if (targetIntType->getSigned())
+                {
+                    currentValue = context->irBuilder->CreateZExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                }
+                else
+                {
+                    currentValue = context->irBuilder->CreateSExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                }
+            }
+        }
+        else if (targetIntType->getBitSize() < currentIntType->getBitSize())
+        {
+            if (!allowLosePrecision)
+            {
+                return NULL;
+            }
+
+            currentValue = context->irBuilder->CreateTrunc(currentValue, targetIntType->getLLVMType(*context->context), "convtruncint");
+        }
+    }
+    else if (targetType->getTypeCode() == TypeCode::FLOAT && currentType->getTypeCode() == TypeCode::FLOAT)
+    {
+        FloatType *currentFloatType = static_cast<FloatType *>(currentType);
+        FloatType *targetFloatType = static_cast<FloatType *>(targetType);
+
+        if (targetFloatType->getBitSize() > currentFloatType->getBitSize())
+        {
+            currentValue = context->irBuilder->CreateFPExt(currentValue, targetFloatType->getLLVMType(*context->context), "convfpext");
+        }
+        else if (targetFloatType->getBitSize() < currentFloatType->getBitSize())
+        {
+            if (!allowLosePrecision)
+            {
+                return NULL;
+            }
+
+            currentValue = context->irBuilder->CreateFPTrunc(currentValue, targetFloatType->getLLVMType(*context->context), "convtruncfp");
+        }
+    }
+    else if (targetType->getTypeCode() == TypeCode::FLOAT && currentType->getTypeCode() == TypeCode::INTEGER)
+    {
+        // TODO: this operation can be done without losing precision in some cases
+        if (!allowLosePrecision)
+        {
+            return NULL;
+        }
+
+        IntegerType *currentIntType = static_cast<IntegerType *>(currentType);
+        FloatType *targetFloatType = static_cast<FloatType *>(targetType);
+        if (currentIntType->getSigned())
+        {
+            currentValue = context->irBuilder->CreateSIToFP(currentValue, targetFloatType->getLLVMType(*context->context), "convsitofp");
+        }
+        else
+        {
+            currentValue = context->irBuilder->CreateUIToFP(currentValue, targetFloatType->getLLVMType(*context->context), "convuitofp");
+        }
+    }
+    else if (targetType->getTypeCode() == TypeCode::INTEGER && currentType->getTypeCode() == TypeCode::FLOAT)
+    {
+        if (!allowLosePrecision)
+        {
+            return NULL;
+        }
+
+        FloatType *currentFloatType = static_cast<FloatType *>(currentType);
+        IntegerType *targetIntType = static_cast<IntegerType *>(targetType);
+
+        if (targetIntType->getSigned())
+        {
+            currentValue = context->irBuilder->CreateFPToSI(currentValue, targetIntType->getLLVMType(*context->context), "convfptosi");
+        }
+        else
+        {
+            currentValue = context->irBuilder->CreateFPToUI(currentValue, targetIntType->getLLVMType(*context->context), "convfptoui");
+        }
+    }
+    else
+    {
+        // Cannot convert type automatically
+        return NULL;
+    }
+
+    return new TypedValue(currentValue, targetType);
+}
+
 TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     auto *left = this->left->generateLLVM(context, scope);
@@ -751,169 +980,19 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         return NULL;
     }
 
+    if (!generateTypeJugging(context, &left, &right))
+    {
+        std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, their types cannot be matched\n";
+        return NULL;
+    }
+
+    auto sharedType = left->getType(); // or right->getType()
     auto leftValue = left->getValue();
     auto rightValue = right->getValue();
-    if (left->getTypeCode() == TypeCode::INTEGER && right->getTypeCode() == TypeCode::INTEGER)
+    if (sharedType->getTypeCode() == TypeCode::FLOAT)
     {
-        IntegerType *castedType = NULL;
-
-        auto leftIntType = static_cast<IntegerType *>(left->getType());
-        auto rightIntType = static_cast<IntegerType *>(right->getType());
-        if (leftIntType == rightIntType)
-        {
-            // OK!
-            castedType = leftIntType; // or rightIntType
-        }
-        else if (leftIntType->getSigned())
-        {
-            // Right is unsigned, left is signed but size is equal. Uints have higher priority
-            castedType = rightIntType;
-        }
-        else if (leftIntType->getBitSize() > rightIntType->getBitSize())
-        {
-            // Right must be expanded
-            if (rightIntType->getSigned())
-            {
-                rightValue = context->irBuilder->CreateSExt(rightValue, leftIntType->getLLVMType(*context->context), "opsextright");
-            }
-            else
-            {
-                rightValue = context->irBuilder->CreateZExt(rightValue, leftIntType->getLLVMType(*context->context), "opzextright");
-            }
-            castedType = leftIntType;
-        }
-        else if (leftIntType->getBitSize() < rightIntType->getBitSize())
-        {
-            // Left must be expanded
-            if (leftIntType->getSigned())
-            {
-                leftValue = context->irBuilder->CreateSExt(leftValue, rightIntType->getLLVMType(*context->context), "opsextleft");
-            }
-            else
-            {
-                leftValue = context->irBuilder->CreateZExt(leftValue, rightIntType->getLLVMType(*context->context), "opzextleft");
-            }
-            castedType = rightIntType;
-        }
-        else
-        {
-            std::cout << "ERROR: Could not create an add instruction for the given types\n";
-            return NULL;
-        }
-
-        Type *resultingType = castedType;
-        llvm::Value *result;
-        switch (this->operatorToken->value[0])
-        {
-        case '+':
-            result = context->irBuilder->CreateAdd(leftValue, rightValue, "addint");
-            break;
-
-        case '-':
-            result = context->irBuilder->CreateSub(leftValue, rightValue, "opsubint");
-            break;
-
-        case '*':
-            result = context->irBuilder->CreateMul(leftValue, rightValue, "opmulint");
-            break;
-
-        case '/':
-            if (castedType->getSigned())
-            {
-                result = context->irBuilder->CreateSDiv(leftValue, rightValue, "opdivint");
-            }
-            else
-            {
-                result = context->irBuilder->CreateUDiv(leftValue, rightValue, "opdivint");
-            }
-            break;
-
-        case '%':
-            if (castedType->getSigned())
-            {
-                result = context->irBuilder->CreateSRem(leftValue, rightValue, "opmodint");
-            }
-            else
-            {
-                result = context->irBuilder->CreateURem(leftValue, rightValue, "opmodint");
-            }
-            break;
-
-        case '<':
-        {
-            if (castedType->getSigned())
-            {
-                result = context->irBuilder->CreateICmpSLT(leftValue, rightValue, "opcmpltint");
-            }
-            else
-            {
-                result = context->irBuilder->CreateICmpULT(leftValue, rightValue, "opcmpltint");
-            }
-            resultingType = &BOOL_TYPE;
-            break;
-        }
-
-        case '>':
-        {
-            if (castedType->getSigned())
-            {
-                result = context->irBuilder->CreateICmpSGT(leftValue, rightValue, "opcmpgtint");
-            }
-            else
-            {
-                result = context->irBuilder->CreateICmpUGT(leftValue, rightValue, "opcmpgtint");
-            }
-            resultingType = &BOOL_TYPE;
-            break;
-        }
-
-        default:
-            std::cout << "ERROR: Invalid operator on integers\n";
-            return NULL;
-        }
-
-        return new TypedValue(result, resultingType);
-    }
-    else
-    {
-        FloatType *castedType = NULL;
-
-        // Left or/and right is a float, ints will be converted to float
-        if (left->getTypeCode() == TypeCode::INTEGER)
-        {
-            // Convert left to float
-            FloatType *rightFloatType = static_cast<FloatType *>(left->getType());
-            leftValue = context->irBuilder->CreateFPCast(leftValue, rightFloatType->getLLVMType(*context->context), "opfpcast");
-            castedType = rightFloatType;
-        }
-        else if (right->getTypeCode() == TypeCode::INTEGER)
-        {
-            // Convert right to float
-            FloatType *leftFloatType = static_cast<FloatType *>(left->getType());
-            rightValue = context->irBuilder->CreateFPCast(rightValue, leftFloatType->getLLVMType(*context->context), "opfpcast");
-            castedType = leftFloatType;
-        }
-        else
-        {
-            FloatType *leftFloatType = static_cast<FloatType *>(left->getType());
-            FloatType *rightFloatType = static_cast<FloatType *>(left->getType());
-            if (leftFloatType->getBitSize() > rightFloatType->getBitSize())
-            {
-                rightValue = context->irBuilder->CreateFPExt(rightValue, leftFloatType->getLLVMType(*context->context), "opfpext");
-                castedType = leftFloatType;
-            }
-            else if (leftFloatType->getBitSize() < rightFloatType->getBitSize())
-            {
-                leftValue = context->irBuilder->CreateFPExt(leftValue, rightFloatType->getLLVMType(*context->context), "opfpext");
-                castedType = rightFloatType;
-            }
-            else
-            {
-                castedType = leftFloatType; // or rightFloatType
-            }
-        }
-
-        Type *resultingType = castedType;
+        FloatType *sharedFloatType = static_cast<FloatType *>(sharedType);
+        Type *resultingType = sharedType;
         llvm::Value *result;
         switch (this->operatorToken->value[0])
         {
@@ -958,6 +1037,295 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
         return new TypedValue(result, resultingType);
     }
+    else if (sharedType->getTypeCode() == TypeCode::INTEGER)
+    {
+        IntegerType *sharedIntType = static_cast<IntegerType *>(sharedType);
+        Type *resultingType = sharedType;
+        llvm::Value *result;
+        switch (this->operatorToken->value[0])
+        {
+        case '+':
+            result = context->irBuilder->CreateAdd(leftValue, rightValue, "addint");
+            break;
+
+        case '-':
+            result = context->irBuilder->CreateSub(leftValue, rightValue, "opsubint");
+            break;
+
+        case '*':
+            result = context->irBuilder->CreateMul(leftValue, rightValue, "opmulint");
+            break;
+
+        case '/':
+            if (sharedIntType->getSigned())
+            {
+                result = context->irBuilder->CreateSDiv(leftValue, rightValue, "opdivint");
+            }
+            else
+            {
+                result = context->irBuilder->CreateUDiv(leftValue, rightValue, "opdivint");
+            }
+            break;
+
+        case '%':
+            if (sharedIntType->getSigned())
+            {
+                result = context->irBuilder->CreateSRem(leftValue, rightValue, "opmodint");
+            }
+            else
+            {
+                result = context->irBuilder->CreateURem(leftValue, rightValue, "opmodint");
+            }
+            break;
+
+        case '<':
+        {
+            if (sharedIntType->getSigned())
+            {
+                result = context->irBuilder->CreateICmpSLT(leftValue, rightValue, "opcmpltint");
+            }
+            else
+            {
+                result = context->irBuilder->CreateICmpULT(leftValue, rightValue, "opcmpltint");
+            }
+            resultingType = &BOOL_TYPE;
+            break;
+        }
+
+        case '>':
+        {
+            if (sharedIntType->getSigned())
+            {
+                result = context->irBuilder->CreateICmpSGT(leftValue, rightValue, "opcmpgtint");
+            }
+            else
+            {
+                result = context->irBuilder->CreateICmpUGT(leftValue, rightValue, "opcmpgtint");
+            }
+            resultingType = &BOOL_TYPE;
+            break;
+        }
+
+        default:
+            std::cout << "ERROR: Invalid operator on integers\n";
+            return NULL;
+        }
+
+        return new TypedValue(result, resultingType);
+    }
+    else
+    {
+        std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, the type does not support this operator\n";
+        return NULL;
+    }
+
+    // auto leftValue = left->getValue();
+    // auto rightValue = right->getValue();
+    // if (left->getTypeCode() == TypeCode::INTEGER && right->getTypeCode() == TypeCode::INTEGER)
+    // {
+    //     IntegerType *castedType = NULL;
+
+    //     auto leftIntType = static_cast<IntegerType *>(left->getType());
+    //     auto rightIntType = static_cast<IntegerType *>(right->getType());
+    //     if (leftIntType == rightIntType)
+    //     {
+    //         // OK!
+    //         castedType = leftIntType; // or rightIntType
+    //     }
+    //     else if (leftIntType->getSigned())
+    //     {
+    //         // Right is unsigned, left is signed but size is equal. Uints have higher priority
+    //         castedType = rightIntType;
+    //     }
+    //     else if (leftIntType->getBitSize() > rightIntType->getBitSize())
+    //     {
+    //         // Right must be expanded
+    //         if (rightIntType->getSigned())
+    //         {
+    //             rightValue = context->irBuilder->CreateSExt(rightValue, leftIntType->getLLVMType(*context->context), "opsextright");
+    //         }
+    //         else
+    //         {
+    //             rightValue = context->irBuilder->CreateZExt(rightValue, leftIntType->getLLVMType(*context->context), "opzextright");
+    //         }
+    //         castedType = leftIntType;
+    //     }
+    //     else if (leftIntType->getBitSize() < rightIntType->getBitSize())
+    //     {
+    //         // Left must be expanded
+    //         if (leftIntType->getSigned())
+    //         {
+    //             leftValue = context->irBuilder->CreateSExt(leftValue, rightIntType->getLLVMType(*context->context), "opsextleft");
+    //         }
+    //         else
+    //         {
+    //             leftValue = context->irBuilder->CreateZExt(leftValue, rightIntType->getLLVMType(*context->context), "opzextleft");
+    //         }
+    //         castedType = rightIntType;
+    //     }
+    //     else
+    //     {
+    //         std::cout << "ERROR: Could not create an add instruction for the given types\n";
+    //         return NULL;
+    //     }
+
+    //     Type *resultingType = castedType;
+    //     llvm::Value *result;
+    //     switch (this->operatorToken->value[0])
+    //     {
+    //     case '+':
+    //         result = context->irBuilder->CreateAdd(leftValue, rightValue, "addint");
+    //         break;
+
+    //     case '-':
+    //         result = context->irBuilder->CreateSub(leftValue, rightValue, "opsubint");
+    //         break;
+
+    //     case '*':
+    //         result = context->irBuilder->CreateMul(leftValue, rightValue, "opmulint");
+    //         break;
+
+    //     case '/':
+    //         if (castedType->getSigned())
+    //         {
+    //             result = context->irBuilder->CreateSDiv(leftValue, rightValue, "opdivint");
+    //         }
+    //         else
+    //         {
+    //             result = context->irBuilder->CreateUDiv(leftValue, rightValue, "opdivint");
+    //         }
+    //         break;
+
+    //     case '%':
+    //         if (castedType->getSigned())
+    //         {
+    //             result = context->irBuilder->CreateSRem(leftValue, rightValue, "opmodint");
+    //         }
+    //         else
+    //         {
+    //             result = context->irBuilder->CreateURem(leftValue, rightValue, "opmodint");
+    //         }
+    //         break;
+
+    //     case '<':
+    //     {
+    //         if (castedType->getSigned())
+    //         {
+    //             result = context->irBuilder->CreateICmpSLT(leftValue, rightValue, "opcmpltint");
+    //         }
+    //         else
+    //         {
+    //             result = context->irBuilder->CreateICmpULT(leftValue, rightValue, "opcmpltint");
+    //         }
+    //         resultingType = &BOOL_TYPE;
+    //         break;
+    //     }
+
+    //     case '>':
+    //     {
+    //         if (castedType->getSigned())
+    //         {
+    //             result = context->irBuilder->CreateICmpSGT(leftValue, rightValue, "opcmpgtint");
+    //         }
+    //         else
+    //         {
+    //             result = context->irBuilder->CreateICmpUGT(leftValue, rightValue, "opcmpgtint");
+    //         }
+    //         resultingType = &BOOL_TYPE;
+    //         break;
+    //     }
+
+    //     default:
+    //         std::cout << "ERROR: Invalid operator on integers\n";
+    //         return NULL;
+    //     }
+
+    //     return new TypedValue(result, resultingType);
+    // }
+    // else
+    // {
+    //     FloatType *castedType = NULL;
+
+    //     // Left or/and right is a float, ints will be converted to float
+    //     if (left->getTypeCode() == TypeCode::INTEGER)
+    //     {
+    //         // Convert left to float
+    //         FloatType *rightFloatType = static_cast<FloatType *>(left->getType());
+    //         leftValue = context->irBuilder->CreateFPCast(leftValue, rightFloatType->getLLVMType(*context->context), "opfpcast");
+    //         castedType = rightFloatType;
+    //     }
+    //     else if (right->getTypeCode() == TypeCode::INTEGER)
+    //     {
+    //         // Convert right to float
+    //         FloatType *leftFloatType = static_cast<FloatType *>(left->getType());
+    //         rightValue = context->irBuilder->CreateFPCast(rightValue, leftFloatType->getLLVMType(*context->context), "opfpcast");
+    //         castedType = leftFloatType;
+    //     }
+    //     else
+    //     {
+    //         FloatType *leftFloatType = static_cast<FloatType *>(left->getType());
+    //         FloatType *rightFloatType = static_cast<FloatType *>(left->getType());
+    //         if (leftFloatType->getBitSize() > rightFloatType->getBitSize())
+    //         {
+    //             rightValue = context->irBuilder->CreateFPExt(rightValue, leftFloatType->getLLVMType(*context->context), "opfpext");
+    //             castedType = leftFloatType;
+    //         }
+    //         else if (leftFloatType->getBitSize() < rightFloatType->getBitSize())
+    //         {
+    //             leftValue = context->irBuilder->CreateFPExt(leftValue, rightFloatType->getLLVMType(*context->context), "opfpext");
+    //             castedType = rightFloatType;
+    //         }
+    //         else
+    //         {
+    //             castedType = leftFloatType; // or rightFloatType
+    //         }
+    //     }
+
+    //     Type *resultingType = castedType;
+    //     llvm::Value *result;
+    //     switch (this->operatorToken->value[0])
+    //     {
+    //     case '+':
+    //         result = context->irBuilder->CreateFAdd(leftValue, rightValue, "opaddfp");
+    //         break;
+
+    //     case '-':
+    //         result = context->irBuilder->CreateFSub(leftValue, rightValue, "opsubfp");
+    //         break;
+
+    //     case '*':
+    //         result = context->irBuilder->CreateFMul(leftValue, rightValue, "opmulfp");
+    //         break;
+
+    //     case '/':
+    //         result = context->irBuilder->CreateFDiv(leftValue, rightValue, "opdivfp");
+    //         break;
+
+    //     case '%':
+    //         result = context->irBuilder->CreateFRem(leftValue, rightValue, "opmodfp");
+    //         break;
+
+    //     case '<':
+    //     {
+    //         result = context->irBuilder->CreateFCmpULT(leftValue, rightValue, "opcmpltfp");
+    //         resultingType = &BOOL_TYPE;
+    //         break;
+    //     }
+
+    //     case '>':
+    //     {
+    //         result = context->irBuilder->CreateFCmpUGT(leftValue, rightValue, "opcmpgtfp");
+    //         resultingType = &BOOL_TYPE;
+    //         break;
+    //     }
+
+    //     default:
+    //         std::cout << "ERROR: Invalid operator on floats\n";
+    //         return NULL;
+    //     }
+
+    //     return new TypedValue(result, resultingType);
+    // }
 }
 
 TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -998,15 +1366,6 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     Type *pointerType;
     if (specifiedType != NULL)
     {
-        if (initialValue != NULL)
-        {
-            Type *valueType = initialValue->getType();
-            if (*valueType != *specifiedType)
-            {
-                std::cout << "ERROR: declaration specified type and value type mismatch\n";
-                return NULL;
-            }
-        }
         pointerType = specifiedType;
     }
     else
@@ -1028,8 +1387,23 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
 
     if (initialValue != NULL)
     {
+        TypedValue *convertedValue;
+        if (specifiedType != NULL)
+        {
+            convertedValue = generateTypeConversion(context, initialValue, specifiedType, true);
+            if (convertedValue == NULL)
+            {
+                std::cout << "ERROR: Cannot declare variable '" << this->nameToken->value << "', right-hand side has invalid assignment type\n";
+                return NULL;
+            }
+        }
+        else
+        {
+            convertedValue = initialValue;
+        }
+
         bool isVolatile = false;
-        context->irBuilder->CreateStore(initialValue->getValue(), pointer->getValue(), isVolatile);
+        context->irBuilder->CreateStore(convertedValue->getValue(), pointer->getValue(), isVolatile);
     }
 
     return initialValue;
@@ -1039,26 +1413,36 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 {
     if (!scope->hasValue(this->nameToken->value))
     {
-        std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
+        std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
         return NULL;
     }
     else
     {
         TypedValue *newValue = this->value->generateLLVM(context, scope);
-        TypedValue *pointerValue = scope->getValue(this->nameToken->value);
-        if (pointerValue == NULL)
+        TypedValue *pointedValue = scope->getValue(this->nameToken->value);
+        if (pointedValue == NULL)
         {
-            std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
-            return NULL;
-        }
-        if (*newValue->getType() != *pointerValue->getType())
-        {
-            std::cout << "BUILD ERROR: Cannot set variable '" << this->nameToken->value << "', assignment has different type\n";
+            std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
             return NULL;
         }
 
+        TypedValue *convertedValue;
+        if (*pointedValue->getType() != *newValue->getType())
+        {
+            convertedValue = generateTypeConversion(context, newValue, pointedValue->getType(), true); // TODO: remove allowLosePrecision when casts are supported
+            if (convertedValue == NULL)
+            {
+                std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', right-hand side has invalid type\n";
+                return NULL;
+            }
+        }
+        else
+        {
+            convertedValue = newValue;
+        }
+
         bool isVolatile = false;
-        context->irBuilder->CreateStore(newValue->getValue(), pointerValue->getValue(), isVolatile);
+        context->irBuilder->CreateStore(convertedValue->getValue(), pointedValue->getValue(), isVolatile);
         return newValue;
     }
 }
