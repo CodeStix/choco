@@ -141,6 +141,55 @@ public:
     virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
+class ASTType : public ASTNode
+{
+public:
+    ASTType(const Token *nameToken) : ASTNode(ASTNodeType::TYPE), nameToken(nameToken) {}
+
+    Type *getSpecifiedType()
+    {
+        std::string name = this->nameToken->value;
+        if (name == "int32")
+        {
+            return new IntegerType(32, true);
+        }
+        else if (name == "uint32")
+        {
+            return new IntegerType(32, false);
+        }
+        else if (name == "float32")
+        {
+            return new FloatType(32);
+        }
+        else if (name == "float64")
+        {
+            return new FloatType(64);
+        }
+        else if (name == "float128")
+        {
+            return new FloatType(128);
+        }
+        else
+        {
+            std::cout << "ERROR: type '" << name << "' not found";
+            return NULL;
+        }
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override
+    {
+        return NULL;
+    }
+
+    std::string toString() override
+    {
+        return this->nameToken->value;
+    }
+
+private:
+    const Token *nameToken;
+};
+
 class ASTBrackets : public ASTNode
 {
 public:
@@ -208,14 +257,20 @@ public:
 class ASTDeclaration : public ASTNode
 {
 public:
-    ASTDeclaration(const Token *nameToken, ASTNode *value) : ASTNode(ASTNodeType::DECLARATION), nameToken(nameToken), value(value) {}
+    ASTDeclaration(const Token *nameToken, ASTNode *value, ASTType *typeSpecifier) : ASTNode(ASTNodeType::DECLARATION), nameToken(nameToken), value(value), typeSpecifier(typeSpecifier) {}
     const Token *nameToken;
     ASTNode *value;
+    ASTType *typeSpecifier;
 
     virtual std::string toString()
     {
-        std::string str = "const ";
+        std::string str = "let ";
         str += this->nameToken->value;
+        if (this->typeSpecifier != NULL)
+        {
+            str += ": ";
+            str += this->typeSpecifier->toString();
+        }
         if (this->value != NULL)
         {
             str += " = ";
@@ -284,55 +339,6 @@ public:
     }
 
     virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
-};
-
-class ASTType : public ASTNode
-{
-public:
-    ASTType(const Token *nameToken) : ASTNode(ASTNodeType::TYPE), nameToken(nameToken) {}
-
-    Type *getSpecifiedType()
-    {
-        std::string name = this->nameToken->value;
-        if (name == "int32")
-        {
-            return new IntegerType(32, true);
-        }
-        else if (name == "uint32")
-        {
-            return new IntegerType(32, false);
-        }
-        else if (name == "float32")
-        {
-            return new FloatType(32);
-        }
-        else if (name == "float64")
-        {
-            return new FloatType(64);
-        }
-        else if (name == "float128")
-        {
-            return new FloatType(128);
-        }
-        else
-        {
-            std::cout << "ERROR: type '" << name << "' not found";
-            return NULL;
-        }
-    }
-
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override
-    {
-        return NULL;
-    }
-
-    std::string toString() override
-    {
-        return this->nameToken->value;
-    }
-
-private:
-    const Token *nameToken;
 };
 
 class ASTParameter : public ASTNode

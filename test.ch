@@ -6,7 +6,7 @@ func test(v: float32): float32 {
 }
 
 export func main() {
-    let value = test(100)
+    let value: float32 = test(100) + 200
     printDouble(value)
     printDouble(value * 2)
     printDouble(value * 4)

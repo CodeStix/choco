@@ -500,6 +500,17 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
         break;
     }
 
+    case TokenType::LET_KEYWORD:
+    {
+        value = parseDeclaration(tokens);
+        if (value == NULL)
+        {
+            std::cout << "ERROR: Unexpected let \n";
+            return NULL;
+        }
+        break;
+    }
+
     case TokenType::SYMBOL:
     {
         value = parseSymbolOperation(tokens);
@@ -623,6 +634,18 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     }
 
     tok = tokens.front();
+    ASTType *typeSpecifier;
+    if (tok->type == TokenType::COLON)
+    {
+        tokens.pop_front();
+        typeSpecifier = parseType(tokens);
+    }
+    else
+    {
+        typeSpecifier = NULL;
+    }
+
+    tok = tokens.front();
     if (tok == NULL)
     {
         std::cout << "ERROR: Unexpected end of file\n";
@@ -639,11 +662,11 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
             return NULL;
         }
 
-        return new ASTDeclaration(nameToken, value);
+        return new ASTDeclaration(nameToken, value, typeSpecifier);
     }
     else
     {
-        return new ASTDeclaration(nameToken, NULL);
+        return new ASTDeclaration(nameToken, NULL, typeSpecifier);
     }
 }
 
@@ -962,16 +985,41 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         initialValue = NULL;
     }
 
-    Type *pointerType;
-    if (initialValue != NULL)
+    Type *specifiedType;
+    if (this->typeSpecifier != NULL)
     {
-        pointerType = initialValue->getType();
+        specifiedType = this->typeSpecifier->getSpecifiedType();
     }
     else
     {
-        // TODO: type specifier
-        std::cout << "ERROR: a declaration without type specifier is not supported\n";
-        return NULL;
+        specifiedType = NULL;
+    }
+
+    Type *pointerType;
+    if (specifiedType != NULL)
+    {
+        if (initialValue != NULL)
+        {
+            Type *valueType = initialValue->getType();
+            if (*valueType != *specifiedType)
+            {
+                std::cout << "ERROR: declaration specified type and value type mismatch\n";
+                return NULL;
+            }
+        }
+        pointerType = specifiedType;
+    }
+    else
+    {
+        if (initialValue != NULL)
+        {
+            pointerType = initialValue->getType();
+        }
+        else
+        {
+            std::cout << "ERROR: declaration type must be specifier when value is missing\n";
+            return NULL;
+        }
     }
 
     llvm::Value *pointerValue = createAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
