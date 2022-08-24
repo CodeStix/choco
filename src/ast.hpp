@@ -149,31 +149,40 @@ public:
     Type *getSpecifiedType()
     {
         std::string name = this->nameToken->value;
-        if (name == "int32")
+
+        if (name.rfind("Int", 0) == 0)
         {
-            return new IntegerType(32, true);
+            std::string bitsPart = name.substr(3);
+            int bits = std::stoi(bitsPart);
+            if (bits > 0)
+            {
+                return new IntegerType(bits, true);
+            }
         }
-        else if (name == "uint32")
+        if (name.rfind("UInt", 0) == 0)
         {
-            return new IntegerType(32, false);
+            std::string bitsPart = name.substr(4);
+            int bits = std::stoi(bitsPart);
+            if (bits > 0)
+            {
+                return new IntegerType(bits, false);
+            }
         }
-        else if (name == "float32")
+        if (name == "Float32")
         {
             return new FloatType(32);
         }
-        else if (name == "float64")
+        if (name == "Float64")
         {
             return new FloatType(64);
         }
-        else if (name == "float128")
+        if (name == "Float128")
         {
             return new FloatType(128);
         }
-        else
-        {
-            std::cout << "ERROR: type '" << name << "' not found";
-            return NULL;
-        }
+
+        std::cout << "ERROR: type '" << name << "' not found\n";
+        return NULL;
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override

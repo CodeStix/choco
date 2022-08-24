@@ -1,21 +1,21 @@
 
-export extern func printDouble(float: float32): float32
+export extern func printDouble(float: Float32): Float32
 
-func getValue(): float32 {
+func getValue(): Float32 {
     return 100
 }
 
-func test(v: float32): float32 {
+func test(v: Float32): Float32 {
     return v + 1
 }
 
 export func main() {
 
-    let integer: int32 = getValue()
-    let float: float32 = integer
+    let integer: Int64 = getValue()
+    let float: Float32 = integer
     printDouble(float)
 
-    let value: float32 = test(100) + 200
+    let value: Float32 = test(100) + 200
     printDouble(value)
     printDouble(value * 2)
     printDouble(value * 4)
