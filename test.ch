@@ -21,15 +21,23 @@ export func printFibbonaci(limit: Float64) {
     }
 }
 
-func getInteger(): Float64 {
-    return 100 / 33
+func printBits(integer: Int64) {
+    let i: Int32 = 31
+    while i >= 0 {
+        printDouble((integer & (1 << i)) != 0)
+        i = i -1
+    }
+}
+
+func getInteger(): Int64 {
+    return 0b11111111
 }
 
 export func main() {
     printFibbonaci(420)
-    printFibbonaci(69)
+    printFibbonaci(69) 
 
     // Nice
-    let integer = getInteger():Int64
-    printDouble(integer)
+    printBits(127)
+    printDouble(getInteger())
 }

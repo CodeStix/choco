@@ -774,10 +774,54 @@ TypedValue *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionSc
 
 TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    double parsed = strtod(this->valueToken->value.c_str(), NULL);
-    Type *type = new FloatType(32);
-    auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), parsed);
-    return new TypedValue(value, type);
+    int integerBase = 10;
+    std::string noPrefix = this->valueToken->value;
+    if (this->valueToken->value.find("0x") == 0)
+    {
+        integerBase = 16;
+        noPrefix = this->valueToken->value.substr(2);
+    }
+    else if (this->valueToken->value.find("0b") == 0)
+    {
+        integerBase = 2;
+        noPrefix = this->valueToken->value.substr(2);
+    }
+
+    std::string cleaned = "";
+    bool isFloating = false;
+    for (char c : noPrefix)
+    {
+        if (c == '.')
+        {
+            if (isFloating)
+            {
+                std::cout << "ERROR: a number literal cannot have multiple periods\n";
+                return NULL;
+            }
+            isFloating = true;
+        }
+        else if (c == '_')
+        {
+            continue;
+        }
+        cleaned += c;
+    }
+
+    if (isFloating)
+    {
+        double floatingValue = strtod(cleaned.c_str(), NULL);
+        Type *type = new FloatType(64);
+        auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), floatingValue);
+        return new TypedValue(value, type);
+    }
+    else
+    {
+        unsigned long long integerValue = strtoull(cleaned.c_str(), NULL, integerBase);
+        bool isSigned = integerValue <= INT64_MAX;
+        Type *type = new IntegerType(64, isSigned);
+        auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, isSigned);
+        return new TypedValue(value, type);
+    }
 }
 
 // Converts the left or right value to match the other one's type without losing precision
