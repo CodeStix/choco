@@ -233,6 +233,11 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 tokenList.push_back(new Token(i, TokenType::OPERATOR_XOR, currentString));
                 state = TokenizeState::NONE;
             }
+            else if (firstChar == '%')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_PERCENT, currentString));
+                state = TokenizeState::NONE;
+            }
             else
             {
                 state = TokenizeState::NONE;
@@ -311,6 +316,7 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 case '&':
                 case '^':
                 case '~':
+                case '%':
                     state = TokenizeState::PARSING_OPERATOR;
                     currentString = std::string(1, currentChar);
                     break;
@@ -422,6 +428,8 @@ const char *getTokenTypeName(TokenType type)
         return "OPERATOR_EQUALS";
     case TokenType::OPERATOR_NOT_EQUALS:
         return "OPERATOR_NOT_EQUALS";
+    case TokenType::OPERATOR_PERCENT:
+        return "OPERATOR_PERCENT";
     default:
         return "Unknown";
     }
@@ -432,15 +440,24 @@ int getTokenOperatorImportance(TokenType type)
     // TODO add assignment as operator
     switch (type)
     {
+    case TokenType::OPERATOR_AND:
+    case TokenType::OPERATOR_OR:
+    case TokenType::OPERATOR_XOR:
+    case TokenType::OPERATOR_NOT:
+        return 1;
+    case TokenType::OPERATOR_EQUALS:
+    case TokenType::OPERATOR_NOT_EQUALS:
+    case TokenType::OPERATOR_LTE:
+    case TokenType::OPERATOR_GTE:
     case TokenType::OPERATOR_LT:
     case TokenType::OPERATOR_GT:
-        return 1;
+        return 2;
     case TokenType::OPERATOR_ADDITION:
     case TokenType::OPERATOR_SUBSTRACTION:
-        return 2;
+        return 3;
     case TokenType::OPERATOR_MULTIPLICATION:
     case TokenType::OPERATOR_DIVISION:
-        return 3;
+        return 4;
 
     default:
         return -1;

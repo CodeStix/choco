@@ -5,15 +5,11 @@ func getValue(): Float32 {
     return 100
 }
 
-// this is very nice
->=
-<=
-==
-!=
-~
-^
-
 export func printFibbonaci(limit: Float64) {
+    if limit == 100 {
+        return
+    }
+
     let a = 0
     let b = 1
     let n = 0
@@ -26,5 +22,6 @@ export func printFibbonaci(limit: Float64) {
 }
 
 export func main() {
-    printFibbonaci(1000000)
+    printFibbonaci(1000)
+
 }

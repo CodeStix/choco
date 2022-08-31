@@ -39,12 +39,10 @@ int main()
     parseString(fileContent, tokens);
 
     std::cout << "Tokenizing done\n";
-    for (const auto &token : tokens)
-    {
-        std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
-    }
-
-    return 0;
+    // for (const auto &token : tokens)
+    // {
+    //     std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
+    // }
 
     std::cout << "Parsing...\n";
     ASTFile *file = parseFile(tokens);

@@ -46,6 +46,7 @@ enum class TokenType
     OPERATOR_NOT,
     OPERATOR_XOR,
     OPERATOR_TILDE,
+    OPERATOR_PERCENT,
 };
 
 class Token

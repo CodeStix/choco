@@ -993,43 +993,59 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         FloatType *sharedFloatType = static_cast<FloatType *>(sharedType);
         Type *resultingType = sharedType;
         llvm::Value *result;
-        switch (this->operatorToken->value[0])
+        const std::string &op = this->operatorToken->value;
+        if (op == "+")
         {
-        case '+':
             result = context->irBuilder->CreateFAdd(leftValue, rightValue, "opaddfp");
-            break;
-
-        case '-':
+        }
+        else if (op == "-")
+        {
             result = context->irBuilder->CreateFSub(leftValue, rightValue, "opsubfp");
-            break;
-
-        case '*':
+        }
+        else if (op == "*")
+        {
             result = context->irBuilder->CreateFMul(leftValue, rightValue, "opmulfp");
-            break;
-
-        case '/':
+        }
+        else if (op == "/")
+        {
             result = context->irBuilder->CreateFDiv(leftValue, rightValue, "opdivfp");
-            break;
-
-        case '%':
+        }
+        else if (op == "%")
+        {
             result = context->irBuilder->CreateFRem(leftValue, rightValue, "opmodfp");
-            break;
-
-        case '<':
+        }
+        else if (op == "<")
         {
             result = context->irBuilder->CreateFCmpULT(leftValue, rightValue, "opcmpltfp");
             resultingType = &BOOL_TYPE;
-            break;
         }
-
-        case '>':
+        else if (op == ">")
         {
             result = context->irBuilder->CreateFCmpUGT(leftValue, rightValue, "opcmpgtfp");
             resultingType = &BOOL_TYPE;
-            break;
         }
-
-        default:
+        else if (op == "<=")
+        {
+            result = context->irBuilder->CreateFCmpULE(leftValue, rightValue, "opcmplefp");
+            resultingType = &BOOL_TYPE;
+        }
+        else if (op == ">=")
+        {
+            result = context->irBuilder->CreateFCmpUGE(leftValue, rightValue, "opcmpgefp");
+            resultingType = &BOOL_TYPE;
+        }
+        else if (op == "==")
+        {
+            result = context->irBuilder->CreateFCmpUEQ(leftValue, rightValue, "opcmpeqfp");
+            resultingType = &BOOL_TYPE;
+        }
+        else if (op == "!=")
+        {
+            result = context->irBuilder->CreateFCmpUNE(leftValue, rightValue, "opcmpnefp");
+            resultingType = &BOOL_TYPE;
+        }
+        else
+        {
             std::cout << "ERROR: Invalid operator on floats\n";
             return NULL;
         }
@@ -1041,21 +1057,21 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         IntegerType *sharedIntType = static_cast<IntegerType *>(sharedType);
         Type *resultingType = sharedType;
         llvm::Value *result;
-        switch (this->operatorToken->value[0])
+        const std::string &op = this->operatorToken->value;
+        if (op == "+")
         {
-        case '+':
             result = context->irBuilder->CreateAdd(leftValue, rightValue, "addint");
-            break;
-
-        case '-':
+        }
+        else if (op == "-")
+        {
             result = context->irBuilder->CreateSub(leftValue, rightValue, "opsubint");
-            break;
-
-        case '*':
+        }
+        else if (op == "*")
+        {
             result = context->irBuilder->CreateMul(leftValue, rightValue, "opmulint");
-            break;
-
-        case '/':
+        }
+        else if (op == "/")
+        {
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateSDiv(leftValue, rightValue, "opdivint");
@@ -1064,9 +1080,9 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             {
                 result = context->irBuilder->CreateUDiv(leftValue, rightValue, "opdivint");
             }
-            break;
-
-        case '%':
+        }
+        else if (op == "%")
+        {
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateSRem(leftValue, rightValue, "opmodint");
@@ -1075,9 +1091,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             {
                 result = context->irBuilder->CreateURem(leftValue, rightValue, "opmodint");
             }
-            break;
-
-        case '<':
+        }
+        else if (op == "<")
         {
             if (sharedIntType->getSigned())
             {
@@ -1088,10 +1103,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 result = context->irBuilder->CreateICmpULT(leftValue, rightValue, "opcmpltint");
             }
             resultingType = &BOOL_TYPE;
-            break;
         }
-
-        case '>':
+        else if (op == ">")
         {
             if (sharedIntType->getSigned())
             {
@@ -1102,10 +1115,43 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 result = context->irBuilder->CreateICmpUGT(leftValue, rightValue, "opcmpgtint");
             }
             resultingType = &BOOL_TYPE;
-            break;
         }
-
-        default:
+        else if (op == "<=")
+        {
+            if (sharedIntType->getSigned())
+            {
+                result = context->irBuilder->CreateICmpSLE(leftValue, rightValue, "opcmpleint");
+            }
+            else
+            {
+                result = context->irBuilder->CreateICmpULE(leftValue, rightValue, "opcmpleint");
+            }
+            resultingType = &BOOL_TYPE;
+        }
+        else if (op == ">=")
+        {
+            if (sharedIntType->getSigned())
+            {
+                result = context->irBuilder->CreateICmpSGE(leftValue, rightValue, "opcmpgeint");
+            }
+            else
+            {
+                result = context->irBuilder->CreateICmpUGE(leftValue, rightValue, "opcmpgeint");
+            }
+            resultingType = &BOOL_TYPE;
+        }
+        else if (op == "==")
+        {
+            result = context->irBuilder->CreateICmpEQ(leftValue, rightValue, "opcmpeqint");
+            resultingType = &BOOL_TYPE;
+        }
+        else if (op == "!=")
+        {
+            result = context->irBuilder->CreateICmpNE(leftValue, rightValue, "opcmpneint");
+            resultingType = &BOOL_TYPE;
+        }
+        else
+        {
             std::cout << "ERROR: Invalid operator on integers\n";
             return NULL;
         }
