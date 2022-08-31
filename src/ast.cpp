@@ -746,14 +746,14 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, TypedValue **rightInOut)
 {
     auto leftType = (*leftInOut)->getType();
-    auto rightType = (*leftInOut)->getType();
+    auto rightType = (*rightInOut)->getType();
     if (*leftType == *rightType)
     {
         return true;
     }
 
     auto leftValue = (*leftInOut)->getValue();
-    auto rightValue = (*leftInOut)->getValue();
+    auto rightValue = (*rightInOut)->getValue();
 
     if (leftType->getTypeCode() == TypeCode::INTEGER && rightType->getTypeCode() == TypeCode::INTEGER)
     {
@@ -847,7 +847,6 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
     }
     else
     {
-
         return false;
     }
 }
