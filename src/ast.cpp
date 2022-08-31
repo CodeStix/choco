@@ -453,6 +453,38 @@ ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
     }
 }
 
+ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+
+    const Token *operandToken = tok;
+    switch (operandToken->type)
+    {
+    case TokenType::OPERATOR_ADDITION:
+    case TokenType::OPERATOR_SUBSTRACTION:
+    case TokenType::OPERATOR_NOT:
+        break;
+    default:
+        return NULL;
+    }
+
+    tokens.pop_front();
+
+    ASTNode *operand = parseValueOrOperator(tokens);
+    if (operand == NULL)
+    {
+        std::cout << "ERROR: Invalid unary operand\n";
+        return NULL;
+    }
+
+    return new ASTUnaryOperator(operandToken, operand);
+}
+
 ASTNode *parseValue(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
@@ -473,6 +505,12 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
     case TokenType::LITERAL_NUMBER:
         value = new ASTLiteralNumber(tok);
         tokens.pop_front();
+        break;
+
+    case TokenType::OPERATOR_ADDITION:
+    case TokenType::OPERATOR_SUBSTRACTION:
+    case TokenType::OPERATOR_NOT:
+        value = parseUnaryOperator(tokens);
         break;
 
     case TokenType::BRACKET_OPEN:
@@ -970,6 +1008,58 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
     return new TypedValue(currentValue, targetType);
 }
 
+TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    auto *operand = this->operand->generateLLVM(context, scope);
+
+    switch (this->operatorToken->type)
+    {
+    case TokenType::OPERATOR_ADDITION:
+        return operand;
+
+    case TokenType::OPERATOR_SUBSTRACTION:
+        // Negate
+        if (operand->getTypeCode() == TypeCode::FLOAT)
+        {
+            llvm::Value *newValue = context->irBuilder->CreateFNeg(operand->getValue(), "fneg");
+            return new TypedValue(newValue, operand->getType());
+        }
+        else if (operand->getTypeCode() == TypeCode::INTEGER)
+        {
+            IntegerType *intType = static_cast<IntegerType *>(operand->getType());
+            if (!intType->getSigned())
+            {
+                std::cout << "ERROR: integer must be signed to be able to negate\n";
+                return NULL;
+            }
+
+            llvm::Value *newValue = context->irBuilder->CreateNeg(operand->getValue(), "neg", false, false);
+            return new TypedValue(newValue, operand->getType());
+        }
+        else
+        {
+            std::cout << "ERROR: Cannot use operator " << this->operatorToken->value << " on value\n";
+            return NULL;
+        }
+
+    case TokenType::OPERATOR_NOT:
+        if (operand->getTypeCode() == TypeCode::INTEGER)
+        {
+            llvm::Value *newValue = context->irBuilder->CreateNot(operand->getValue(), "not");
+            return new TypedValue(newValue, operand->getType());
+        }
+        else
+        {
+            std::cout << "ERROR: Cannot use operator " << this->operatorToken->value << " on value\n";
+            return NULL;
+        }
+
+    default:
+        std::cout << "ERROR: Unimplemented unary operator " << this->operatorToken->value << "\n";
+        return NULL;
+    }
+}
+
 TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     auto *left = this->left->generateLLVM(context, scope);
@@ -1061,6 +1151,9 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             resultingType = &BOOL_TYPE;
             break;
 
+        case TokenType::OPERATOR_AND:
+        case TokenType::OPERATOR_OR:
+        case TokenType::OPERATOR_XOR:
         default:
             std::cout << "ERROR: Invalid operator '" << this->operatorToken->value << "' on floats\n";
             return NULL;
@@ -1156,6 +1249,15 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         case TokenType::OPERATOR_NOT_EQUALS:
             result = context->irBuilder->CreateICmpNE(leftValue, rightValue, "opcmpneint");
             resultingType = &BOOL_TYPE;
+            break;
+        case TokenType::OPERATOR_AND:
+            result = context->irBuilder->CreateAnd(leftValue, rightValue, "opandint");
+            break;
+        case TokenType::OPERATOR_OR:
+            result = context->irBuilder->CreateOr(leftValue, rightValue, "oporint");
+            break;
+        case TokenType::OPERATOR_XOR:
+            result = context->irBuilder->CreateXor(leftValue, rightValue, "opxorint");
             break;
 
         default:

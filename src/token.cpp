@@ -443,7 +443,6 @@ int getTokenOperatorImportance(TokenType type)
     case TokenType::OPERATOR_AND:
     case TokenType::OPERATOR_OR:
     case TokenType::OPERATOR_XOR:
-    case TokenType::OPERATOR_NOT:
         return 1;
     case TokenType::OPERATOR_EQUALS:
     case TokenType::OPERATOR_NOT_EQUALS:

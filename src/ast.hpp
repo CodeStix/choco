@@ -94,6 +94,7 @@ public:
 enum class ASTNodeType
 {
     OPERATOR,
+    UNARY_OPERATOR,
     LITERAL_NUMBER,
     LITERAL_STRING,
     FUNCTION,
@@ -119,6 +120,23 @@ public:
 
     virtual std::string toString() = 0;
     virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) = 0;
+};
+
+class ASTUnaryOperator : public ASTNode
+{
+public:
+    ASTUnaryOperator(const Token *operatorToken, ASTNode *operand) : ASTNode(ASTNodeType::UNARY_OPERATOR), operatorToken(operatorToken), operand(operand) {}
+    const Token *operatorToken;
+    ASTNode *operand;
+
+    virtual std::string toString()
+    {
+        std::string str = this->operatorToken->value;
+        str += this->operand->toString();
+        return str;
+    }
+
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
 class ASTOperator : public ASTNode

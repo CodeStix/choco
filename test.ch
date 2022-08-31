@@ -6,7 +6,7 @@ func getValue(): Float32 {
 }
 
 export func printFibbonaci(limit: Float64) {
-    if limit == 100 {
+    if limit == 69 | limit == 420 {
         return
     }
 
@@ -17,11 +17,11 @@ export func printFibbonaci(limit: Float64) {
         n = a + b
         a = b
         b = n
-        printDouble(n)
+        printDouble(-n)
     }
 }
 
 export func main() {
-    printFibbonaci(100)
-
+    printFibbonaci(420)
+    printFibbonaci(69)
 }
