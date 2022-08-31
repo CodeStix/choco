@@ -1151,6 +1151,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             resultingType = &BOOL_TYPE;
             break;
 
+        case TokenType::OPERATOR_DOUBLE_GT:
+        case TokenType::OPERATOR_DOUBLE_LT:
         case TokenType::OPERATOR_AND:
         case TokenType::OPERATOR_OR:
         case TokenType::OPERATOR_XOR:
@@ -1249,6 +1251,13 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         case TokenType::OPERATOR_NOT_EQUALS:
             result = context->irBuilder->CreateICmpNE(leftValue, rightValue, "opcmpneint");
             resultingType = &BOOL_TYPE;
+            break;
+        case TokenType::OPERATOR_DOUBLE_GT:
+            // TODO: ashr instruction
+            result = context->irBuilder->CreateLShr(leftValue, rightValue, "oplshrint");
+            break;
+        case TokenType::OPERATOR_DOUBLE_LT:
+            result = context->irBuilder->CreateShl(leftValue, rightValue, "opshlint");
             break;
         case TokenType::OPERATOR_AND:
             result = context->irBuilder->CreateAnd(leftValue, rightValue, "opandint");

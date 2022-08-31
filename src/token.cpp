@@ -192,6 +192,13 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                     state = TokenizeState::NONE;
                     continue;
                 }
+                else if (currentChar == '>')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_DOUBLE_GT, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
                 else
                 {
                     tokenList.push_back(new Token(i, TokenType::OPERATOR_GT, currentString));
@@ -204,6 +211,13 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 {
                     currentString += currentChar;
                     tokenList.push_back(new Token(i, TokenType::OPERATOR_LTE, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else if (currentChar == '<')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_DOUBLE_LT, currentString));
                     state = TokenizeState::NONE;
                     continue;
                 }
@@ -430,6 +444,10 @@ const char *getTokenTypeName(TokenType type)
         return "OPERATOR_NOT_EQUALS";
     case TokenType::OPERATOR_PERCENT:
         return "OPERATOR_PERCENT";
+    case TokenType::OPERATOR_DOUBLE_LT:
+        return "OPERATOR_DOUBLE_LT";
+    case TokenType::OPERATOR_DOUBLE_GT:
+        return "OPERATOR_DOUBLE_GT";
     default:
         return "Unknown";
     }
@@ -451,12 +469,15 @@ int getTokenOperatorImportance(TokenType type)
     case TokenType::OPERATOR_LT:
     case TokenType::OPERATOR_GT:
         return 2;
+    case TokenType::OPERATOR_DOUBLE_LT:
+    case TokenType::OPERATOR_DOUBLE_GT:
+        return 3;
     case TokenType::OPERATOR_ADDITION:
     case TokenType::OPERATOR_SUBSTRACTION:
-        return 3;
+        return 4;
     case TokenType::OPERATOR_MULTIPLICATION:
     case TokenType::OPERATOR_DIVISION:
-        return 4;
+        return 5;
 
     default:
         return -1;

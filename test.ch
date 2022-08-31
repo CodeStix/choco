@@ -24,4 +24,9 @@ export func printFibbonaci(limit: Float64) {
 export func main() {
     printFibbonaci(420)
     printFibbonaci(69)
+
+    // Nice
+    let i: Int32 = 64
+    let b: Int32 = 2
+    printDouble(i << b)    
 }
