@@ -21,12 +21,15 @@ export func printFibbonaci(limit: Float64) {
     }
 }
 
+func getInteger(): Float64 {
+    return 100 / 33
+}
+
 export func main() {
     printFibbonaci(420)
     printFibbonaci(69)
 
     // Nice
-    let i: Int32 = 64
-    let b: Int32 = 2
-    printDouble(i << b)    
+    let integer = getInteger():Int64
+    printDouble(integer)
 }

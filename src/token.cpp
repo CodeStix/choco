@@ -478,6 +478,8 @@ int getTokenOperatorImportance(TokenType type)
     case TokenType::OPERATOR_MULTIPLICATION:
     case TokenType::OPERATOR_DIVISION:
         return 5;
+    case TokenType::COLON:
+        return 6;
 
     default:
         return -1;

@@ -1062,14 +1062,28 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    TokenType operatorType = this->operatorToken->type;
+
     auto *left = this->left->generateLLVM(context, scope);
+
+    if (operatorType == TokenType::COLON)
+    {
+        // Cast operator does not have a right value (only type)
+        auto *rightType = static_cast<ASTType *>(this->right);
+        auto targetType = rightType->getSpecifiedType();
+        if (targetType == NULL)
+        {
+            return NULL;
+        }
+        return generateTypeConversion(context, left, targetType, true);
+    }
+
     auto *right = this->right->generateLLVM(context, scope);
     if (!left || !right)
     {
         return NULL;
     }
 
-    TokenType operatorType = this->operatorToken->type;
     bool allowTypeJuggling;
     switch (operatorType)
     {
