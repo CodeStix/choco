@@ -38,6 +38,7 @@ public:
         passManager->add(llvm::createReassociatePass());
         passManager->add(llvm::createGVNPass());
         passManager->add(llvm::createCFGSimplificationPass());
+        passManager->add(llvm::createDeadCodeEliminationPass());
         passManager->doInitialization();
     };
 

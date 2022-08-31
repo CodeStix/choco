@@ -1577,15 +1577,18 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
 
     llvm::BasicBlock *originalBlock = context->irBuilder->GetInsertBlock();
     llvm::Function *parentFunction = originalBlock->getParent();
-    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "whileelse");
-    llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*context->context, "whilebody");
+    llvm::BasicBlock *elseStartBlock = llvm::BasicBlock::Create(*context->context, "whileelse");
+    llvm::BasicBlock *loopStartBlock = llvm::BasicBlock::Create(*context->context, "whilebody");
     llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "whilecont");
 
     // llvm::Value *preConditionResult = context->irBuilder->CreateFCmpONE(preConditionValue, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whileprecond");
-    context->irBuilder->CreateCondBr(preConditionValue->getValue(), loopBlock, elseBlock);
+    if (originalBlock->getTerminator() == NULL)
+    {
+        context->irBuilder->CreateCondBr(preConditionValue->getValue(), loopStartBlock, elseStartBlock);
+    }
 
-    context->irBuilder->SetInsertPoint(loopBlock);
-    loopBlock->insertInto(parentFunction);
+    context->irBuilder->SetInsertPoint(loopStartBlock);
+    loopStartBlock->insertInto(parentFunction);
     auto loopScope = new FunctionScope(*scope);
     this->loopBody->generateLLVM(context, loopScope);
 
@@ -1597,18 +1600,24 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     }
 
     // llvm::Value *conditionResult = context->irBuilder->CreateFCmpONE(conditionValue->getValue(), llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "whilecond");
-    context->irBuilder->CreateCondBr(conditionValue->getValue(), loopBlock, continueBlock);
-    loopBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+    llvm::BasicBlock *loopEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+    if (loopEndBlock->getTerminator() == NULL)
+    {
+        context->irBuilder->CreateCondBr(conditionValue->getValue(), loopStartBlock, continueBlock);
+    }
 
-    context->irBuilder->SetInsertPoint(elseBlock);
-    elseBlock->insertInto(parentFunction);
+    context->irBuilder->SetInsertPoint(elseStartBlock);
+    elseStartBlock->insertInto(parentFunction);
     auto elseScope = new FunctionScope(*scope);
     if (this->elseBody != NULL)
     {
         this->elseBody->generateLLVM(context, elseScope);
     }
-    context->irBuilder->CreateBr(continueBlock);
-    elseBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+    llvm::BasicBlock *elseEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+    if (elseEndBlock->getTerminator() == NULL)
+    {
+        context->irBuilder->CreateBr(continueBlock);
+    }
 
     context->irBuilder->SetInsertPoint(continueBlock);
     continueBlock->insertInto(parentFunction);
@@ -1626,28 +1635,36 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
     }
 
     llvm::Function *parentFunction = context->irBuilder->GetInsertBlock()->getParent();
-    llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*context->context, "ifthen");
-    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context->context, "ifelse");
+    llvm::BasicBlock *thenStartBlock = llvm::BasicBlock::Create(*context->context, "ifthen");
+    llvm::BasicBlock *elseStartBlock = llvm::BasicBlock::Create(*context->context, "ifelse");
     llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "ifcont");
 
-    context->irBuilder->CreateCondBr(condition->getValue(), thenBlock, elseBlock);
+    context->irBuilder->CreateCondBr(condition->getValue(), thenStartBlock, elseStartBlock);
 
-    context->irBuilder->SetInsertPoint(thenBlock);
-    thenBlock->insertInto(parentFunction);
+    context->irBuilder->SetInsertPoint(thenStartBlock);
+    thenStartBlock->insertInto(parentFunction);
     auto thenScope = new FunctionScope(*scope);
     this->thenBody->generateLLVM(context, thenScope);
-    context->irBuilder->CreateBr(continueBlock);
-    thenBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
 
-    context->irBuilder->SetInsertPoint(elseBlock);
-    elseBlock->insertInto(parentFunction);
+    llvm::BasicBlock *thenEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+    if (thenEndBlock->getTerminator() == NULL)
+    {
+        context->irBuilder->CreateBr(continueBlock);
+    }
+
+    context->irBuilder->SetInsertPoint(elseStartBlock);
+    elseStartBlock->insertInto(parentFunction);
     auto elseScope = new FunctionScope(*scope);
     if (this->elseBody != NULL)
     {
         this->elseBody->generateLLVM(context, elseScope);
     }
-    context->irBuilder->CreateBr(continueBlock);
-    elseBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+
+    llvm::BasicBlock *elseEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
+    if (elseEndBlock->getTerminator() == NULL)
+    {
+        context->irBuilder->CreateBr(continueBlock);
+    }
 
     context->irBuilder->SetInsertPoint(continueBlock);
     continueBlock->insertInto(parentFunction);
