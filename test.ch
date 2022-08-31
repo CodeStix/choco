@@ -22,6 +22,6 @@ export func printFibbonaci(limit: Float64) {
 }
 
 export func main() {
-    printFibbonaci(1000)
+    printFibbonaci(100)
 
 }

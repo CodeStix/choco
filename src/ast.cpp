@@ -979,10 +979,35 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         return NULL;
     }
 
-    if (!generateTypeJugging(context, &left, &right))
+    TokenType operatorType = this->operatorToken->type;
+    bool allowTypeJuggling;
+    switch (operatorType)
     {
-        std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, their types cannot be matched\n";
-        return NULL;
+    case TokenType::OPERATOR_AND:
+    case TokenType::OPERATOR_OR:
+    case TokenType::OPERATOR_XOR:
+        allowTypeJuggling = false;
+        break;
+    default:
+        allowTypeJuggling = true;
+        break;
+    }
+
+    if (allowTypeJuggling)
+    {
+        if (!generateTypeJugging(context, &left, &right))
+        {
+            std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, their types cannot be matched\n";
+            return NULL;
+        }
+    }
+    else
+    {
+        if (*left->getType() != *right->getType())
+        {
+            std::cout << "ERROR: Left and right operands must be the same type to perform " << this->operatorToken->value << "\n";
+            return NULL;
+        }
     }
 
     auto sharedType = left->getType(); // or right->getType()
@@ -993,60 +1018,51 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         FloatType *sharedFloatType = static_cast<FloatType *>(sharedType);
         Type *resultingType = sharedType;
         llvm::Value *result;
-        const std::string &op = this->operatorToken->value;
-        if (op == "+")
+
+        switch (operatorType)
         {
+        case TokenType::OPERATOR_ADDITION:
             result = context->irBuilder->CreateFAdd(leftValue, rightValue, "opaddfp");
-        }
-        else if (op == "-")
-        {
+            break;
+        case TokenType::OPERATOR_SUBSTRACTION:
             result = context->irBuilder->CreateFSub(leftValue, rightValue, "opsubfp");
-        }
-        else if (op == "*")
-        {
+            break;
+        case TokenType::OPERATOR_MULTIPLICATION:
             result = context->irBuilder->CreateFMul(leftValue, rightValue, "opmulfp");
-        }
-        else if (op == "/")
-        {
+            break;
+        case TokenType::OPERATOR_DIVISION:
             result = context->irBuilder->CreateFDiv(leftValue, rightValue, "opdivfp");
-        }
-        else if (op == "%")
-        {
+            break;
+        case TokenType::OPERATOR_PERCENT:
             result = context->irBuilder->CreateFRem(leftValue, rightValue, "opmodfp");
-        }
-        else if (op == "<")
-        {
+            break;
+        case TokenType::OPERATOR_LT:
             result = context->irBuilder->CreateFCmpULT(leftValue, rightValue, "opcmpltfp");
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == ">")
-        {
+            break;
+        case TokenType::OPERATOR_GT:
             result = context->irBuilder->CreateFCmpUGT(leftValue, rightValue, "opcmpgtfp");
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == "<=")
-        {
+            break;
+        case TokenType::OPERATOR_LTE:
             result = context->irBuilder->CreateFCmpULE(leftValue, rightValue, "opcmplefp");
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == ">=")
-        {
+            break;
+        case TokenType::OPERATOR_GTE:
             result = context->irBuilder->CreateFCmpUGE(leftValue, rightValue, "opcmpgefp");
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == "==")
-        {
+            break;
+        case TokenType::OPERATOR_EQUALS:
             result = context->irBuilder->CreateFCmpUEQ(leftValue, rightValue, "opcmpeqfp");
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == "!=")
-        {
+            break;
+        case TokenType::OPERATOR_NOT_EQUALS:
             result = context->irBuilder->CreateFCmpUNE(leftValue, rightValue, "opcmpnefp");
             resultingType = &BOOL_TYPE;
-        }
-        else
-        {
-            std::cout << "ERROR: Invalid operator on floats\n";
+            break;
+
+        default:
+            std::cout << "ERROR: Invalid operator '" << this->operatorToken->value << "' on floats\n";
             return NULL;
         }
 
@@ -1057,21 +1073,19 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         IntegerType *sharedIntType = static_cast<IntegerType *>(sharedType);
         Type *resultingType = sharedType;
         llvm::Value *result;
-        const std::string &op = this->operatorToken->value;
-        if (op == "+")
+
+        switch (operatorType)
         {
+        case TokenType::OPERATOR_ADDITION:
             result = context->irBuilder->CreateAdd(leftValue, rightValue, "addint");
-        }
-        else if (op == "-")
-        {
+            break;
+        case TokenType::OPERATOR_SUBSTRACTION:
             result = context->irBuilder->CreateSub(leftValue, rightValue, "opsubint");
-        }
-        else if (op == "*")
-        {
+            break;
+        case TokenType::OPERATOR_MULTIPLICATION:
             result = context->irBuilder->CreateMul(leftValue, rightValue, "opmulint");
-        }
-        else if (op == "/")
-        {
+            break;
+        case TokenType::OPERATOR_DIVISION:
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateSDiv(leftValue, rightValue, "opdivint");
@@ -1080,9 +1094,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             {
                 result = context->irBuilder->CreateUDiv(leftValue, rightValue, "opdivint");
             }
-        }
-        else if (op == "%")
-        {
+            break;
+        case TokenType::OPERATOR_PERCENT:
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateSRem(leftValue, rightValue, "opmodint");
@@ -1091,9 +1104,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             {
                 result = context->irBuilder->CreateURem(leftValue, rightValue, "opmodint");
             }
-        }
-        else if (op == "<")
-        {
+            break;
+        case TokenType::OPERATOR_LT:
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateICmpSLT(leftValue, rightValue, "opcmpltint");
@@ -1103,9 +1115,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 result = context->irBuilder->CreateICmpULT(leftValue, rightValue, "opcmpltint");
             }
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == ">")
-        {
+            break;
+        case TokenType::OPERATOR_GT:
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateICmpSGT(leftValue, rightValue, "opcmpgtint");
@@ -1115,9 +1126,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 result = context->irBuilder->CreateICmpUGT(leftValue, rightValue, "opcmpgtint");
             }
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == "<=")
-        {
+            break;
+        case TokenType::OPERATOR_LTE:
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateICmpSLE(leftValue, rightValue, "opcmpleint");
@@ -1127,9 +1137,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 result = context->irBuilder->CreateICmpULE(leftValue, rightValue, "opcmpleint");
             }
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == ">=")
-        {
+            break;
+        case TokenType::OPERATOR_GTE:
             if (sharedIntType->getSigned())
             {
                 result = context->irBuilder->CreateICmpSGE(leftValue, rightValue, "opcmpgeint");
@@ -1139,20 +1148,18 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 result = context->irBuilder->CreateICmpUGE(leftValue, rightValue, "opcmpgeint");
             }
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == "==")
-        {
+            break;
+        case TokenType::OPERATOR_EQUALS:
             result = context->irBuilder->CreateICmpEQ(leftValue, rightValue, "opcmpeqint");
             resultingType = &BOOL_TYPE;
-        }
-        else if (op == "!=")
-        {
+            break;
+        case TokenType::OPERATOR_NOT_EQUALS:
             result = context->irBuilder->CreateICmpNE(leftValue, rightValue, "opcmpneint");
             resultingType = &BOOL_TYPE;
-        }
-        else
-        {
-            std::cout << "ERROR: Invalid operator on integers\n";
+            break;
+
+        default:
+            std::cout << "ERROR: Invalid operator '" << this->operatorToken->value << "' on integers\n";
             return NULL;
         }
 
@@ -1163,214 +1170,6 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, the type does not support this operator\n";
         return NULL;
     }
-
-    // auto leftValue = left->getValue();
-    // auto rightValue = right->getValue();
-    // if (left->getTypeCode() == TypeCode::INTEGER && right->getTypeCode() == TypeCode::INTEGER)
-    // {
-    //     IntegerType *castedType = NULL;
-
-    //     auto leftIntType = static_cast<IntegerType *>(left->getType());
-    //     auto rightIntType = static_cast<IntegerType *>(right->getType());
-    //     if (leftIntType == rightIntType)
-    //     {
-    //         // OK!
-    //         castedType = leftIntType; // or rightIntType
-    //     }
-    //     else if (leftIntType->getSigned())
-    //     {
-    //         // Right is unsigned, left is signed but size is equal. Uints have higher priority
-    //         castedType = rightIntType;
-    //     }
-    //     else if (leftIntType->getBitSize() > rightIntType->getBitSize())
-    //     {
-    //         // Right must be expanded
-    //         if (rightIntType->getSigned())
-    //         {
-    //             rightValue = context->irBuilder->CreateSExt(rightValue, leftIntType->getLLVMType(*context->context), "opsextright");
-    //         }
-    //         else
-    //         {
-    //             rightValue = context->irBuilder->CreateZExt(rightValue, leftIntType->getLLVMType(*context->context), "opzextright");
-    //         }
-    //         castedType = leftIntType;
-    //     }
-    //     else if (leftIntType->getBitSize() < rightIntType->getBitSize())
-    //     {
-    //         // Left must be expanded
-    //         if (leftIntType->getSigned())
-    //         {
-    //             leftValue = context->irBuilder->CreateSExt(leftValue, rightIntType->getLLVMType(*context->context), "opsextleft");
-    //         }
-    //         else
-    //         {
-    //             leftValue = context->irBuilder->CreateZExt(leftValue, rightIntType->getLLVMType(*context->context), "opzextleft");
-    //         }
-    //         castedType = rightIntType;
-    //     }
-    //     else
-    //     {
-    //         std::cout << "ERROR: Could not create an add instruction for the given types\n";
-    //         return NULL;
-    //     }
-
-    //     Type *resultingType = castedType;
-    //     llvm::Value *result;
-    //     switch (this->operatorToken->value[0])
-    //     {
-    //     case '+':
-    //         result = context->irBuilder->CreateAdd(leftValue, rightValue, "addint");
-    //         break;
-
-    //     case '-':
-    //         result = context->irBuilder->CreateSub(leftValue, rightValue, "opsubint");
-    //         break;
-
-    //     case '*':
-    //         result = context->irBuilder->CreateMul(leftValue, rightValue, "opmulint");
-    //         break;
-
-    //     case '/':
-    //         if (castedType->getSigned())
-    //         {
-    //             result = context->irBuilder->CreateSDiv(leftValue, rightValue, "opdivint");
-    //         }
-    //         else
-    //         {
-    //             result = context->irBuilder->CreateUDiv(leftValue, rightValue, "opdivint");
-    //         }
-    //         break;
-
-    //     case '%':
-    //         if (castedType->getSigned())
-    //         {
-    //             result = context->irBuilder->CreateSRem(leftValue, rightValue, "opmodint");
-    //         }
-    //         else
-    //         {
-    //             result = context->irBuilder->CreateURem(leftValue, rightValue, "opmodint");
-    //         }
-    //         break;
-
-    //     case '<':
-    //     {
-    //         if (castedType->getSigned())
-    //         {
-    //             result = context->irBuilder->CreateICmpSLT(leftValue, rightValue, "opcmpltint");
-    //         }
-    //         else
-    //         {
-    //             result = context->irBuilder->CreateICmpULT(leftValue, rightValue, "opcmpltint");
-    //         }
-    //         resultingType = &BOOL_TYPE;
-    //         break;
-    //     }
-
-    //     case '>':
-    //     {
-    //         if (castedType->getSigned())
-    //         {
-    //             result = context->irBuilder->CreateICmpSGT(leftValue, rightValue, "opcmpgtint");
-    //         }
-    //         else
-    //         {
-    //             result = context->irBuilder->CreateICmpUGT(leftValue, rightValue, "opcmpgtint");
-    //         }
-    //         resultingType = &BOOL_TYPE;
-    //         break;
-    //     }
-
-    //     default:
-    //         std::cout << "ERROR: Invalid operator on integers\n";
-    //         return NULL;
-    //     }
-
-    //     return new TypedValue(result, resultingType);
-    // }
-    // else
-    // {
-    //     FloatType *castedType = NULL;
-
-    //     // Left or/and right is a float, ints will be converted to float
-    //     if (left->getTypeCode() == TypeCode::INTEGER)
-    //     {
-    //         // Convert left to float
-    //         FloatType *rightFloatType = static_cast<FloatType *>(left->getType());
-    //         leftValue = context->irBuilder->CreateFPCast(leftValue, rightFloatType->getLLVMType(*context->context), "opfpcast");
-    //         castedType = rightFloatType;
-    //     }
-    //     else if (right->getTypeCode() == TypeCode::INTEGER)
-    //     {
-    //         // Convert right to float
-    //         FloatType *leftFloatType = static_cast<FloatType *>(left->getType());
-    //         rightValue = context->irBuilder->CreateFPCast(rightValue, leftFloatType->getLLVMType(*context->context), "opfpcast");
-    //         castedType = leftFloatType;
-    //     }
-    //     else
-    //     {
-    //         FloatType *leftFloatType = static_cast<FloatType *>(left->getType());
-    //         FloatType *rightFloatType = static_cast<FloatType *>(left->getType());
-    //         if (leftFloatType->getBitSize() > rightFloatType->getBitSize())
-    //         {
-    //             rightValue = context->irBuilder->CreateFPExt(rightValue, leftFloatType->getLLVMType(*context->context), "opfpext");
-    //             castedType = leftFloatType;
-    //         }
-    //         else if (leftFloatType->getBitSize() < rightFloatType->getBitSize())
-    //         {
-    //             leftValue = context->irBuilder->CreateFPExt(leftValue, rightFloatType->getLLVMType(*context->context), "opfpext");
-    //             castedType = rightFloatType;
-    //         }
-    //         else
-    //         {
-    //             castedType = leftFloatType; // or rightFloatType
-    //         }
-    //     }
-
-    //     Type *resultingType = castedType;
-    //     llvm::Value *result;
-    //     switch (this->operatorToken->value[0])
-    //     {
-    //     case '+':
-    //         result = context->irBuilder->CreateFAdd(leftValue, rightValue, "opaddfp");
-    //         break;
-
-    //     case '-':
-    //         result = context->irBuilder->CreateFSub(leftValue, rightValue, "opsubfp");
-    //         break;
-
-    //     case '*':
-    //         result = context->irBuilder->CreateFMul(leftValue, rightValue, "opmulfp");
-    //         break;
-
-    //     case '/':
-    //         result = context->irBuilder->CreateFDiv(leftValue, rightValue, "opdivfp");
-    //         break;
-
-    //     case '%':
-    //         result = context->irBuilder->CreateFRem(leftValue, rightValue, "opmodfp");
-    //         break;
-
-    //     case '<':
-    //     {
-    //         result = context->irBuilder->CreateFCmpULT(leftValue, rightValue, "opcmpltfp");
-    //         resultingType = &BOOL_TYPE;
-    //         break;
-    //     }
-
-    //     case '>':
-    //     {
-    //         result = context->irBuilder->CreateFCmpUGT(leftValue, rightValue, "opcmpgtfp");
-    //         resultingType = &BOOL_TYPE;
-    //         break;
-    //     }
-
-    //     default:
-    //         std::cout << "ERROR: Invalid operator on floats\n";
-    //         return NULL;
-    //     }
-
-    //     return new TypedValue(result, resultingType);
-    // }
 }
 
 TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
