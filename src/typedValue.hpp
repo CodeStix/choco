@@ -149,11 +149,22 @@ private:
     int endExclusive;
 };
 
+class FunctionParameter
+{
+public:
+    FunctionParameter(Type *type, std::string name = "") : type(type), name(name)
+    {
+    }
+
+    Type *type;
+    std::string name;
+};
+
 class FunctionType : public Type
 {
-
 public:
-    FunctionType() : Type(TypeCode::FUNCTION) {}
+    FunctionType(Type *returnType) : Type(TypeCode::FUNCTION), returnType(returnType) {}
+    FunctionType(Type *returnType, std::vector<FunctionParameter> parameters) : Type(TypeCode::FUNCTION), returnType(returnType), parameters(parameters), isVarArg(false) {}
 
     bool operator==(const Type &b) const override
     {
@@ -162,8 +173,44 @@ public:
 
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
-        return llvm::FunctionType::get(llvm::Type::getVoidTy(context), false);
+        std::vector<llvm::Type *> parameters;
+        for (auto &param : this->parameters)
+        {
+            parameters.push_back(param.type->getLLVMType(context));
+        }
+
+        llvm::Type *returnType;
+        if (this->returnType == NULL)
+        {
+            returnType = llvm::Type::getVoidTy(context);
+        }
+        else
+        {
+            returnType = this->returnType->getLLVMType(context);
+        }
+
+        return llvm::FunctionType::get(returnType, parameters, this->isVarArg);
     }
+
+    Type *getReturnType()
+    {
+        return this->returnType;
+    }
+
+    std::vector<FunctionParameter> &getParameters()
+    {
+        return this->parameters;
+    }
+
+    bool getIsVarArg()
+    {
+        return this->isVarArg;
+    }
+
+private:
+    bool isVarArg;
+    std::vector<FunctionParameter> parameters;
+    Type *returnType;
 };
 
 class ArrayType : public Type

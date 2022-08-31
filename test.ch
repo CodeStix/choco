@@ -5,6 +5,18 @@ func getValue(): Float32 {
     return 100
 }
 
+export func printFibbonaci(limit: Float32) {
+    let a = 0
+    let b = 1
+    let n = 0
+    while n < limit {
+        n = a + b
+        a = b
+        b = n
+        printDouble(n)
+    }
+}
+
 export func main() {
     let a = getValue()
     while(a > 1) {
@@ -14,5 +26,6 @@ export func main() {
             return
         }
     }
-    return
+
+    printFibbonaci(10000)
 }

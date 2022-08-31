@@ -25,30 +25,6 @@
 #include "llvm/Transforms/Utils.h"
 #include "typedValue.hpp"
 
-class GenerationContext
-{
-public:
-    GenerationContext() : context(std::make_unique<llvm::LLVMContext>()),
-                          irBuilder(std::make_unique<llvm::IRBuilder<>>(*context)),
-                          module(std::make_unique<llvm::Module>("default-choco-module", *context)),
-                          passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get()))
-    {
-        passManager->add(llvm::createPromoteMemoryToRegisterPass());
-        passManager->add(llvm::createInstructionCombiningPass());
-        passManager->add(llvm::createReassociatePass());
-        passManager->add(llvm::createGVNPass());
-        passManager->add(llvm::createCFGSimplificationPass());
-        passManager->add(llvm::createDeadCodeEliminationPass());
-        passManager->doInitialization();
-    };
-
-    std::unique_ptr<llvm::LLVMContext> context;
-    std::unique_ptr<llvm::IRBuilder<>> irBuilder;
-    std::unique_ptr<llvm::Module> module;
-    std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
-    // std::map<std::string, llvm::Value *> staticNamedValues;
-};
-
 class FunctionScope
 {
 public:
@@ -87,6 +63,32 @@ public:
 
     // private:
     std::map<std::string, TypedValue *> namedValues;
+};
+
+class GenerationContext
+{
+public:
+    GenerationContext() : context(std::make_unique<llvm::LLVMContext>()),
+                          irBuilder(std::make_unique<llvm::IRBuilder<>>(*context)),
+                          module(std::make_unique<llvm::Module>("default-choco-module", *context)),
+                          passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get())),
+                          staticNamedValues(FunctionScope())
+    {
+        passManager->add(llvm::createPromoteMemoryToRegisterPass());
+        passManager->add(llvm::createInstructionCombiningPass());
+        passManager->add(llvm::createReassociatePass());
+        passManager->add(llvm::createGVNPass());
+        passManager->add(llvm::createCFGSimplificationPass());
+        passManager->add(llvm::createDeadCodeEliminationPass());
+        passManager->doInitialization();
+    };
+
+    std::unique_ptr<llvm::LLVMContext> context;
+    std::unique_ptr<llvm::IRBuilder<>> irBuilder;
+    std::unique_ptr<llvm::Module> module;
+    std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
+    FunctionType *currentFunction;
+    FunctionScope staticNamedValues;
 };
 
 enum class ASTNodeType
@@ -400,9 +402,9 @@ private:
 class ASTInvocation : public ASTNode
 {
 public:
-    ASTInvocation(const Token *functionNameToken, std::list<ASTNode *> *parameterValues) : ASTNode(ASTNodeType::INVOCATION), functionNameToken(functionNameToken), parameterValues(parameterValues) {}
+    ASTInvocation(const Token *functionNameToken, std::vector<ASTNode *> *parameterValues) : ASTNode(ASTNodeType::INVOCATION), functionNameToken(functionNameToken), parameterValues(parameterValues) {}
     const Token *functionNameToken;
-    std::list<ASTNode *> *parameterValues;
+    std::vector<ASTNode *> *parameterValues;
 
     virtual std::string toString()
     {

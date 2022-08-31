@@ -403,7 +403,7 @@ ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
         // Parse invocation
         tokens.pop_front();
 
-        std::list<ASTNode *> *parameterValues = new std::list<ASTNode *>();
+        std::vector<ASTNode *> *parameterValues = new std::vector<ASTNode *>();
         while (true)
         {
             tok = tokens.front();
@@ -726,7 +726,7 @@ TypedValue *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionSc
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
-        std::cout << "BUILD ERROR: Could not find variable '" << this->nameToken->value << "'\n";
+        std::cout << "ERROR: Could not find variable '" << this->nameToken->value << "'\n";
     }
     valuePointer->setOriginVariable(this->nameToken->value);
 
@@ -1339,7 +1339,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
 {
     if (scope->hasValue(this->nameToken->value))
     {
-        std::cout << "BUILD ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
+        std::cout << "ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
         return NULL;
     }
 
@@ -1390,7 +1390,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         TypedValue *convertedValue;
         if (specifiedType != NULL)
         {
-            convertedValue = generateTypeConversion(context, initialValue, specifiedType, true);
+            convertedValue = generateTypeConversion(context, initialValue, specifiedType, true); // TODO: remove allowLosePrecision when casts are supported
             if (convertedValue == NULL)
             {
                 std::cout << "ERROR: Cannot declare variable '" << this->nameToken->value << "', right-hand side has invalid assignment type\n";
@@ -1452,7 +1452,22 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
     if (this->value != NULL)
     {
         auto value = this->value->generateLLVM(context, scope);
-        context->irBuilder->CreateRet(value->getValue());
+
+        Type *returnType = context->currentFunction->getReturnType();
+        if (returnType == NULL)
+        {
+            std::cout << "ERROR: function does not return value\n";
+            return NULL;
+        }
+
+        TypedValue *newValue = generateTypeConversion(context, value, returnType, true); // TODO: remove allowLosePrecision when casts are supported
+        if (newValue == NULL)
+        {
+            std::cout << "ERROR: cannot convert return value in function\n";
+            return NULL;
+        }
+
+        context->irBuilder->CreateRet(newValue->getValue());
         return value;
     }
     else
@@ -1474,32 +1489,35 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
 
 TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    llvm::Function *function = context->module->getFunction(this->nameToken->value);
+    TypedValue *existingFunctionValue = context->staticNamedValues.getValue(this->nameToken->value);
 
-    if (function == NULL)
+    if (existingFunctionValue == NULL)
     {
-        std::vector<llvm::Type *> parameterTypes; // TODO get from type specifier
+        std::vector<FunctionParameter> parameters;
         for (ASTParameter *parameter : *this->parameters)
         {
-            parameterTypes.push_back(parameter->getSpecifiedType()->getLLVMType(*context->context));
+            parameters.push_back(FunctionParameter(parameter->getSpecifiedType(), parameter->getParameterName()));
         }
 
-        llvm::Type *returnType;
+        Type *returnType;
         if (this->returnType != NULL)
         {
-            returnType = this->returnType->getSpecifiedType()->getLLVMType(*context->context);
+            returnType = this->returnType->getSpecifiedType();
         }
         else
         {
-            returnType = llvm::Type::getVoidTy(*context->context);
+            returnType = NULL;
         }
 
+        FunctionType *newFunctionType = new FunctionType(returnType, parameters);
+
         bool isVarArg = false;
-        llvm::FunctionType *functionType = llvm::FunctionType::get(returnType, parameterTypes, isVarArg);
-        function = llvm::Function::Create(functionType, this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage, this->nameToken->value, *context->module);
+        llvm::GlobalValue::LinkageTypes linkage = this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage;
+        llvm::FunctionType *functionType = static_cast<llvm::FunctionType *>(newFunctionType->getLLVMType(*context->context));
+        llvm::Function *function = llvm::Function::Create(functionType, linkage, this->nameToken->value, *context->module);
         if (function == NULL)
         {
-            std::cout << "BUILD ERROR: Function::Create returned null\n";
+            std::cout << "ERROR: Function::Create returned null\n";
             return NULL;
         }
 
@@ -1509,19 +1527,32 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             ASTParameter *parameter = (*this->parameters)[i++];
             arg.setName(parameter->getParameterName());
         }
+
+        existingFunctionValue = new TypedValue(function, newFunctionType);
+        if (!context->staticNamedValues.addValue(this->nameToken->value, existingFunctionValue))
+        {
+            std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
+            return NULL;
+        }
+    }
+    else
+    {
+        std::cout << "ERROR: Duplicate name '" << this->nameToken->value << "' cannot be used again for function.\n";
+        return NULL;
     }
 
     if (this->body != NULL)
     {
+        llvm::Function *function = static_cast<llvm::Function *>(existingFunctionValue->getValue());
         if (!function->empty())
         {
-            std::cout << "BUILD ERROR: Cannot implement the '" << this->nameToken->value << "' function a second time\n";
+            std::cout << "ERROR: Cannot implement the '" << this->nameToken->value << "' function a second time\n";
             return NULL;
         }
 
         FunctionScope *functionScope = new FunctionScope(*scope);
-        llvm::BasicBlock *functionBlock = llvm::BasicBlock::Create(*context->context, "block", function);
-        context->irBuilder->SetInsertPoint(functionBlock);
+        llvm::BasicBlock *functionStartBlock = llvm::BasicBlock::Create(*context->context, "block", function);
+        context->irBuilder->SetInsertPoint(functionStartBlock);
 
         int i = 0;
         for (auto &parameterValue : function->args())
@@ -1533,22 +1564,28 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType));
         }
 
-        // for (auto &arg : function->args())
-        // {
-        //     auto argType = new FloatType(32); // TODO get from type specifier
-        //     auto argPointer = context->irBuilder->CreateAlloca(argType->getLLVMType(*context->context), NULL, "loadarg");
-        //     context->irBuilder->CreateStore(&arg, argPointer, false);
-        //     functionScope->addValue(arg.getName().str(), new TypedValue(argPointer, argType));
-        // }
-
+        context->currentFunction = static_cast<FunctionType *>(existingFunctionValue->getType());
         this->body->generateLLVM(context, functionScope);
 
-        // TODO check if return was specified, else emit context->irBuilder.CreateRetVoid();
+        // Check if the function was propery terminated
+        llvm::BasicBlock *functionEndBlock = context->irBuilder->GetInsertBlock();
+        if (functionEndBlock->getTerminator() == NULL)
+        {
+            if (this->returnType == NULL)
+            {
+                context->irBuilder->CreateRetVoid();
+            }
+            else
+            {
+                std::cout << "ERROR: function '" << this->nameToken->value << "' must return a value";
+                return NULL;
+            }
+        }
 
         // Check generated IR for issues
         if (llvm::verifyFunction(*function, &llvm::errs()))
         {
-            std::cout << "BUILD ERROR: LLVM reported invalid function\n";
+            std::cout << "ERROR: LLVM reported invalid function\n";
             return NULL;
         }
 
@@ -1556,14 +1593,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         context->passManager->run(*function);
     }
 
-    // if (scope->hasValue(this->nameToken->value))
-    // {
-    //     std::cout << "BUILD ERROR: Cannot redeclare function '" << this->nameToken->value << "'\n";
-    //     return NULL;
-    // }
-    // scope->setValue(this->nameToken->value, function);
-
-    return new TypedValue(function, new FunctionType());
+    return existingFunctionValue;
 }
 
 TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -1674,32 +1704,52 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 
 TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    llvm::Function *functionToCall = context->module->getFunction(this->functionNameToken->value);
-    if (functionToCall == NULL)
+    TypedValue *functionValue = context->staticNamedValues.getValue(this->functionNameToken->value);
+    if (functionValue == NULL)
     {
-        std::cout << "BUILD ERROR: Function '" << this->functionNameToken->value << "' not found\n";
+        std::cout << "ERROR: Function '" << this->functionNameToken->value << "' not found\n";
+        return NULL;
+    }
+    if (functionValue->getTypeCode() != TypeCode::FUNCTION)
+    {
+        std::cout << "ERROR: Cannot call '" << this->functionNameToken->value << "', it isn't a function\n";
         return NULL;
     }
 
-    if (functionToCall->arg_size() != this->parameterValues->size())
+    llvm::Function *function = static_cast<llvm::Function *>(functionValue->getValue());
+    FunctionType *functionType = static_cast<FunctionType *>(functionValue->getType());
+
+    std::vector<FunctionParameter> &parameters = functionType->getParameters();
+    int parameterCount = this->parameterValues->size();
+    int actualParameterCount = parameters.size();
+    if (actualParameterCount != parameterCount)
     {
-        std::cout << "BUILD ERROR: Invalid amount of parameters for function '" << this->functionNameToken->value << "', expected " << functionToCall->arg_size() << ", got " << this->parameterValues->size() << "\n";
+        std::cout << "ERROR: Invalid amount of parameters for function '" << this->functionNameToken->value << "', expected " << actualParameterCount << ", got " << parameterCount << "\n";
         return NULL;
     }
 
-    std::vector<llvm::Value *> functionArgs;
-    for (ASTNode *node : *this->parameterValues)
+    std::vector<llvm::Value *> parameterValues;
+    for (int p = 0; p < actualParameterCount; p++)
     {
-        TypedValue *value = node->generateLLVM(context, scope);
-        if (!value || !value->getValue())
+        FunctionParameter &parameter = parameters[p];
+        ASTNode *parameterNode = (*this->parameterValues)[p];
+        TypedValue *parameterValue = parameterNode->generateLLVM(context, scope);
+        if (parameterValue == NULL || parameterValue->getValue() == NULL)
         {
             return NULL;
         }
-        functionArgs.push_back(value->getValue());
+
+        TypedValue *convertedValue = generateTypeConversion(context, parameterValue, parameter.type, true); // TODO: remove allowLosePrecision when casts are supported
+        if (convertedValue == NULL || convertedValue->getValue() == NULL)
+        {
+            std::cout << "ERROR: cannot convert value '" << parameter.name << "' for invoke '" << this->functionNameToken->value << "'\n";
+            return NULL;
+        }
+        parameterValues.push_back(convertedValue->getValue());
     }
 
-    llvm::Value *callResult = context->irBuilder->CreateCall(functionToCall, functionArgs, "call");
-    return new TypedValue(callResult, new FloatType(32)); // TODO get from type specifier
+    llvm::Value *callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : "call");
+    return new TypedValue(callResult, functionType->getReturnType());
 }
 
 TypedValue *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope)
