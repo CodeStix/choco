@@ -8,6 +8,7 @@ enum class TokenizeState
     PARSING_LITERAL_NUMBER,
     PARSING_OPERATOR,
     PARSING_SYMBOL,
+    PARSING_COMMENT,
 };
 
 void parseString(std::string &input, std::list<const Token *> &tokenList)
@@ -119,6 +120,137 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 state = TokenizeState::NONE;
             }
         }
+        else if (state == TokenizeState::PARSING_OPERATOR)
+        {
+            char firstChar = currentString[0];
+            if (firstChar == '=')
+            {
+                if (currentChar == '=')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_EQUALS, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_ASSIGNMENT, currentString));
+                    state = TokenizeState::NONE;
+                }
+            }
+            else if (firstChar == '/')
+            {
+                if (currentChar == '/')
+                {
+                    // Begin reading comment
+                    currentString = "";
+                    state = TokenizeState::PARSING_COMMENT;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_DIVISION, currentString));
+                    state = TokenizeState::NONE;
+                }
+            }
+            else if (firstChar == '!')
+            {
+                if (currentChar == '=')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_NOT_EQUALS, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_NOT, currentString));
+                    state = TokenizeState::NONE;
+                }
+            }
+            else if (firstChar == '*')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_MULTIPLICATION, currentString));
+                state = TokenizeState::NONE;
+            }
+            else if (firstChar == '+')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_ADDITION, currentString));
+                state = TokenizeState::NONE;
+            }
+            else if (firstChar == '-')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_SUBSTRACTION, currentString));
+                state = TokenizeState::NONE;
+            }
+            else if (firstChar == '>')
+            {
+                if (currentChar == '=')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_GTE, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_GT, currentString));
+                    state = TokenizeState::NONE;
+                }
+            }
+            else if (firstChar == '<')
+            {
+                if (currentChar == '=')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_LTE, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_LT, currentString));
+                    state = TokenizeState::NONE;
+                }
+            }
+            else if (firstChar == '|')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_OR, currentString));
+                state = TokenizeState::NONE;
+            }
+            else if (firstChar == '&')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_AND, currentString));
+                state = TokenizeState::NONE;
+            }
+            else if (firstChar == '~')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_TILDE, currentString));
+                state = TokenizeState::NONE;
+            }
+            else if (firstChar == '^')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_XOR, currentString));
+                state = TokenizeState::NONE;
+            }
+            else
+            {
+                state = TokenizeState::NONE;
+            }
+        }
+        else if (state == TokenizeState::PARSING_COMMENT)
+        {
+            if (currentChar == '\n')
+            {
+                std::cout << "DEBUG: parsed comment '" << currentString << "'\n";
+                state = TokenizeState::NONE;
+            }
+            else
+            {
+                currentString += currentChar;
+                continue;
+            }
+        }
 
         if (state == TokenizeState::NONE)
         {
@@ -168,25 +300,19 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                     tokenList.push_back(new Token(i, TokenType::CURLY_BRACKET_CLOSE, std::string(1, currentChar)));
                     break;
                 case '=':
-                    tokenList.push_back(new Token(i, TokenType::ASSIGNMENT_OPERATOR, std::string(1, currentChar)));
-                    break;
                 case '+':
-                    tokenList.push_back(new Token(i, TokenType::ADDITION_OPERATOR, std::string(1, currentChar)));
-                    break;
                 case '-':
-                    tokenList.push_back(new Token(i, TokenType::SUBSTRACTION_OPERATOR, std::string(1, currentChar)));
-                    break;
                 case '*':
-                    tokenList.push_back(new Token(i, TokenType::MULTIPLICATION_OPERATOR, std::string(1, currentChar)));
-                    break;
                 case '/':
-                    tokenList.push_back(new Token(i, TokenType::DIVISION_OPERATOR, std::string(1, currentChar)));
-                    break;
                 case '>':
-                    tokenList.push_back(new Token(i, TokenType::GT_OPERATOR, std::string(1, currentChar)));
-                    break;
                 case '<':
-                    tokenList.push_back(new Token(i, TokenType::LT_OPERATOR, std::string(1, currentChar)));
+                case '!':
+                case '|':
+                case '&':
+                case '^':
+                case '~':
+                    state = TokenizeState::PARSING_OPERATOR;
+                    currentString = std::string(1, currentChar);
                     break;
                 case ',':
                     tokenList.push_back(new Token(i, TokenType::COMMA, std::string(1, currentChar)));
@@ -246,20 +372,20 @@ const char *getTokenTypeName(TokenType type)
         return "EXTERN_KEYWORD";
     case TokenType::CONST_KEYWORD:
         return "CONST_KEYWORD";
-    case TokenType::ASSIGNMENT_OPERATOR:
-        return "ASSIGNMENT_OPERATOR";
-    case TokenType::ADDITION_OPERATOR:
-        return "ADDITION_OPERATOR";
-    case TokenType::SUBSTRACTION_OPERATOR:
-        return "SUBSTRACTION_OPERATOR";
-    case TokenType::DIVISION_OPERATOR:
-        return "DIVISION_OPERATOR";
-    case TokenType::MULTIPLICATION_OPERATOR:
-        return "MULTIPLICATION_OPERATOR";
-    case TokenType::LT_OPERATOR:
-        return "LT_OPERATOR";
-    case TokenType::GT_OPERATOR:
-        return "GT_OPERATOR";
+    case TokenType::OPERATOR_ASSIGNMENT:
+        return "OPERATOR_ASSIGNMENT";
+    case TokenType::OPERATOR_ADDITION:
+        return "OPERATOR_ADDITION";
+    case TokenType::OPERATOR_SUBSTRACTION:
+        return "OPERATOR_SUBSTRACTION";
+    case TokenType::OPERATOR_DIVISION:
+        return "OPERATOR_DIVISION";
+    case TokenType::OPERATOR_MULTIPLICATION:
+        return "OPERATOR_MULTIPLICATION";
+    case TokenType::OPERATOR_LT:
+        return "OPERATOR_LT";
+    case TokenType::OPERATOR_GT:
+        return "OPERATOR_GT";
     case TokenType::COMMA:
         return "COMMA";
     case TokenType::IF_KEYWORD:
@@ -278,6 +404,24 @@ const char *getTokenTypeName(TokenType type)
         return "COLON";
     case TokenType::SEMICOLON:
         return "SEMICOLON";
+    case TokenType::OPERATOR_NOT:
+        return "OPERATOR_NOT";
+    case TokenType::OPERATOR_AND:
+        return "OPERATOR_AND";
+    case TokenType::OPERATOR_OR:
+        return "OPERATOR_OR";
+    case TokenType::OPERATOR_XOR:
+        return "OPERATOR_XOR";
+    case TokenType::OPERATOR_TILDE:
+        return "OPERATOR_XOR";
+    case TokenType::OPERATOR_LTE:
+        return "OPERATOR_LTE";
+    case TokenType::OPERATOR_GTE:
+        return "OPERATOR_GTE";
+    case TokenType::OPERATOR_EQUALS:
+        return "OPERATOR_EQUALS";
+    case TokenType::OPERATOR_NOT_EQUALS:
+        return "OPERATOR_NOT_EQUALS";
     default:
         return "Unknown";
     }
@@ -288,14 +432,14 @@ int getTokenOperatorImportance(TokenType type)
     // TODO add assignment as operator
     switch (type)
     {
-    case TokenType::LT_OPERATOR:
-    case TokenType::GT_OPERATOR:
+    case TokenType::OPERATOR_LT:
+    case TokenType::OPERATOR_GT:
         return 1;
-    case TokenType::ADDITION_OPERATOR:
-    case TokenType::SUBSTRACTION_OPERATOR:
+    case TokenType::OPERATOR_ADDITION:
+    case TokenType::OPERATOR_SUBSTRACTION:
         return 2;
-    case TokenType::MULTIPLICATION_OPERATOR:
-    case TokenType::DIVISION_OPERATOR:
+    case TokenType::OPERATOR_MULTIPLICATION:
+    case TokenType::OPERATOR_DIVISION:
         return 3;
 
     default:

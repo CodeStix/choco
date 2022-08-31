@@ -432,7 +432,7 @@ ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
         return new ASTInvocation(nameToken, parameterValues);
     }
 
-    case TokenType::ASSIGNMENT_OPERATOR:
+    case TokenType::OPERATOR_ASSIGNMENT:
     {
         // Parse assigment
         tokens.pop_front();
@@ -651,7 +651,7 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
         std::cout << "ERROR: Unexpected end of file\n";
         return NULL;
     }
-    if (tok->type == TokenType::ASSIGNMENT_OPERATOR)
+    if (tok->type == TokenType::OPERATOR_ASSIGNMENT)
     {
         // Parse assignment
         tokens.pop_front();
