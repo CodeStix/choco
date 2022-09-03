@@ -29,6 +29,7 @@ func printBits(integer: Int64) {
     }
 }
 
+
 func getInteger(): Int64 {
     return 0b11111111
 }
@@ -38,6 +39,6 @@ export func main() {
     printFibbonaci(69) 
 
     // Nice
-    printBits(127)
+    printBits(127:UInt64)
     printDouble(getInteger())
 }

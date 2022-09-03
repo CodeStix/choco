@@ -109,8 +109,57 @@ enum class ASTNodeType
     BLOCK,
     FOR,
     TYPE,
-    PARAMETER
+    PARAMETER,
+    STRUCT_TYPE,
+    STRUCT_TYPE_FIELD,
 };
+
+char *astNodeTypeToString(ASTNodeType type)
+{
+    switch (type)
+    {
+    case ASTNodeType::OPERATOR:
+        return "OPERATOR";
+    case ASTNodeType::UNARY_OPERATOR:
+        return "UNARY_OPERATOR";
+    case ASTNodeType::LITERAL_NUMBER:
+        return "LITERAL_NUMBER";
+    case ASTNodeType::LITERAL_STRING:
+        return "LITERAL_STRING";
+    case ASTNodeType::FUNCTION:
+        return "FUNCTION";
+    case ASTNodeType::DECLARATION:
+        return "DECLARATION";
+    case ASTNodeType::ASSIGNMENT:
+        return "ASSIGNMENT";
+    case ASTNodeType::INVOCATION:
+        return "INVOCATION";
+    case ASTNodeType::READ_VARIABLE:
+        return "READ_VARIABLE";
+    case ASTNodeType::BRACKETS:
+        return "BRACKETS";
+    case ASTNodeType::FILE:
+        return "FILE";
+    case ASTNodeType::RETURN:
+        return "RETURN";
+    case ASTNodeType::IF:
+        return "IF";
+    case ASTNodeType::BLOCK:
+        return "BLOCK";
+    case ASTNodeType::FOR:
+        return "FOR";
+    case ASTNodeType::TYPE:
+        return "TYPE";
+    case ASTNodeType::PARAMETER:
+        return "PARAMETER";
+    case ASTNodeType::STRUCT_TYPE:
+        return "STRUCT_TYPE";
+    case ASTNodeType::STRUCT_TYPE_FIELD:
+        return "STRUCT_TYPE_FIELD";
+    default:
+        break;
+    }
+}
 
 class ASTNode
 {
@@ -118,8 +167,16 @@ public:
     ASTNode(ASTNodeType type) : type(type) {}
     ASTNodeType type;
 
-    virtual std::string toString() = 0;
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) = 0;
+    virtual std::string toString()
+    {
+        return astNodeTypeToString(this->type);
+    }
+
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope)
+    {
+        std::cout << "WARNING: ASTNode::generateLLVM was called without any implementation\n";
+        return NULL;
+    }
 };
 
 class ASTUnaryOperator : public ASTNode
@@ -162,12 +219,19 @@ public:
     virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
 };
 
-class ASTType : public ASTNode
+class ASTTypeNode : public ASTNode
 {
 public:
-    ASTType(const Token *nameToken) : ASTNode(ASTNodeType::TYPE), nameToken(nameToken) {}
+    ASTTypeNode(ASTNodeType type) : ASTNode(type) {}
+    virtual Type *getSpecifiedType() = 0;
+};
 
-    Type *getSpecifiedType()
+class ASTTypeName : public ASTTypeNode
+{
+public:
+    ASTTypeName(const Token *nameToken) : ASTTypeNode(ASTNodeType::TYPE), nameToken(nameToken) {}
+
+    Type *getSpecifiedType() override
     {
         std::string name = this->nameToken->value;
 
@@ -218,6 +282,89 @@ public:
 
 private:
     const Token *nameToken;
+};
+
+class ASTStructTypeField : public ASTTypeNode
+{
+public:
+    ASTStructTypeField(const Token *fieldNameToken, ASTTypeNode *type, bool hidden = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE_FIELD), fieldNameToken(fieldNameToken), type(type), hidden(hidden) {}
+
+    Type *getSpecifiedType() override
+    {
+        return this->type->getSpecifiedType();
+    }
+
+    std::string getName()
+    {
+        if (this->fieldNameToken != NULL)
+        {
+            return this->fieldNameToken->value;
+        }
+        else
+        {
+            return NULL;
+        }
+    }
+
+    virtual std::string toString()
+    {
+        std::string str = "";
+        if (this->fieldNameToken != NULL)
+        {
+            str += this->fieldNameToken->value;
+        }
+        str += ": ";
+        str += this->type->toString();
+        str += "\n";
+        return str;
+    }
+
+private:
+    const Token *fieldNameToken;
+    ASTTypeNode *type;
+    bool hidden;
+};
+
+class ASTStructType : public ASTTypeNode
+{
+public:
+    ASTStructType(const Token *nameToken, std::vector<ASTStructTypeField *> fields, bool managed = true, bool packed = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE), nameToken(nameToken), fields(fields), managed(managed), packed(packed) {}
+
+    Type *getSpecifiedType() override
+    {
+        std::vector<StructTypeField> fields;
+        for (auto &field : this->fields)
+        {
+            fields.push_back(StructTypeField(field->getSpecifiedType(), field->getName()));
+        }
+        return new StructType(fields, this->managed, this->packed);
+    }
+
+    virtual std::string toString()
+    {
+        std::string str = "";
+        if (!this->managed)
+        {
+            str += "unmanaged ";
+        }
+        if (this->packed)
+        {
+            str += "packed ";
+        }
+        str += "{";
+        for (auto &field : this->fields)
+        {
+            str += field->toString();
+        }
+        str += "}";
+        return str;
+    }
+
+private:
+    bool managed;
+    bool packed;
+    const Token *nameToken;
+    std::vector<ASTStructTypeField *> fields;
 };
 
 class ASTBrackets : public ASTNode
@@ -287,10 +434,10 @@ public:
 class ASTDeclaration : public ASTNode
 {
 public:
-    ASTDeclaration(const Token *nameToken, ASTNode *value, ASTType *typeSpecifier) : ASTNode(ASTNodeType::DECLARATION), nameToken(nameToken), value(value), typeSpecifier(typeSpecifier) {}
+    ASTDeclaration(const Token *nameToken, ASTNode *value, ASTTypeNode *typeSpecifier) : ASTNode(ASTNodeType::DECLARATION), nameToken(nameToken), value(value), typeSpecifier(typeSpecifier) {}
     const Token *nameToken;
     ASTNode *value;
-    ASTType *typeSpecifier;
+    ASTTypeNode *typeSpecifier;
 
     virtual std::string toString()
     {
@@ -374,7 +521,7 @@ public:
 class ASTParameter : public ASTNode
 {
 public:
-    ASTParameter(const Token *nameToken, ASTType *typeSpecifier = NULL) : ASTNode(ASTNodeType::PARAMETER), nameToken(nameToken), typeSpecifier(typeSpecifier)
+    ASTParameter(const Token *nameToken, ASTTypeNode *typeSpecifier = NULL) : ASTNode(ASTNodeType::PARAMETER), nameToken(nameToken), typeSpecifier(typeSpecifier)
     {
     }
 
@@ -414,7 +561,7 @@ public:
 
 private:
     const Token *nameToken;
-    ASTType *typeSpecifier;
+    ASTTypeNode *typeSpecifier;
 };
 
 class ASTInvocation : public ASTNode
@@ -447,10 +594,10 @@ public:
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTType *returnType, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
+    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTTypeNode *returnType, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
     const Token *nameToken;
     std::vector<ASTParameter *> *parameters;
-    ASTType *returnType;
+    ASTTypeNode *returnType;
     ASTNode *body;
     bool exported;
 
@@ -569,5 +716,5 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens);
 ASTNode *parseSymbolOperation(std::list<const Token *> &tokens);
 ASTFile *parseFile(std::list<const Token *> &tokens);
 ASTReturn *parseReturn(std::list<const Token *> &tokens);
-ASTType *parseType(std::list<const Token *> &tokens);
+ASTTypeNode *parseType(std::list<const Token *> &tokens);
 ASTParameter *parseParameter(std::list<const Token *> &tokens);

@@ -234,6 +234,43 @@ private:
     Type *innerType;
 };
 
+class StructTypeField
+{
+public:
+    StructTypeField(Type *type, std::string name = "") : type(type), name(name)
+    {
+    }
+
+    Type *type;
+    std::string name;
+};
+
+class StructType : public Type
+{
+public:
+    StructType(std::vector<StructTypeField> fields, bool managed = true, bool packed = false) : Type(TypeCode::STRUCT), fields(fields), managed(managed), packed(packed) {}
+
+    bool operator==(const Type &b) const override
+    {
+        return false;
+    }
+
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        std::vector<llvm::Type *> fieldTypes;
+        for (auto &field : this->fields)
+        {
+            fieldTypes.push_back(field.type->getLLVMType(context));
+        }
+        return llvm::StructType::get(context, fieldTypes, this->packed);
+    }
+
+private:
+    std::vector<StructTypeField> fields;
+    bool managed;
+    bool packed;
+};
+
 class TypedValue
 {
 public:

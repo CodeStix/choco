@@ -112,6 +112,22 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 {
                     type = TokenType::EXPORT_KEYWORD;
                 }
+                else if (currentString == "packed")
+                {
+                    type = TokenType::PACKED_KEYWORD;
+                }
+                else if (currentString == "unmanaged")
+                {
+                    type = TokenType::UNMANAGED_KEYWORD;
+                }
+                else if (currentString == "struct")
+                {
+                    type = TokenType::STRUCT_KEYWORD;
+                }
+                else if (currentString == "trait")
+                {
+                    type = TokenType::TRAIT_KEYWORD;
+                }
                 else
                 {
                     type = TokenType::SYMBOL;
@@ -449,6 +465,14 @@ const char *getTokenTypeName(TokenType type)
         return "OPERATOR_DOUBLE_LT";
     case TokenType::OPERATOR_DOUBLE_GT:
         return "OPERATOR_DOUBLE_GT";
+    case TokenType::TRAIT_KEYWORD:
+        return "TRAIT_KEYWORD";
+    case TokenType::STRUCT_KEYWORD:
+        return "STRUCT_KEYWORD";
+    case TokenType::UNMANAGED_KEYWORD:
+        return "UNMANAGED_KEYWORD";
+    case TokenType::PACKED_KEYWORD:
+        return "PACKED_KEYWORD";
     default:
         return "Unknown";
     }

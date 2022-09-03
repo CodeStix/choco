@@ -87,7 +87,7 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
         return NULL;
     }
 
-    ASTType *typeSpecifier;
+    ASTTypeNode *typeSpecifier;
     if (tok->type == TokenType::COLON)
     {
         // Parse type specifier
@@ -114,7 +114,7 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
     return new ASTParameter(nameToken, typeSpecifier);
 }
 
-ASTType *parseType(std::list<const Token *> &tokens)
+ASTTypeNode *parseStructType(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
     if (tok == NULL)
@@ -122,14 +122,104 @@ ASTType *parseType(std::list<const Token *> &tokens)
         std::cout << "ERROR: Unexpected end of file\n";
         return NULL;
     }
-    if (tok->type != TokenType::SYMBOL)
+    if (tok->type != TokenType::STRUCT_KEYWORD)
     {
-        std::cout << "ERROR: Type must be a name\n";
+        std::cout << "ERROR: Not a struct\n";
         return NULL;
     }
-    const Token *nameToken = tok;
     tokens.pop_front();
-    return new ASTType(nameToken);
+    tok = tokens.front();
+
+    const Token *nameToken;
+    if (tok->type == TokenType::SYMBOL)
+    {
+        nameToken = tok;
+        tokens.pop_front();
+        tok = tokens.front();
+    }
+    else
+    {
+        // Unnamed struct
+        nameToken = NULL;
+    }
+
+    if (tok->type != TokenType::CURLY_BRACKET_OPEN)
+    {
+        std::cout << "ERROR: Struct type must start with {\n";
+        return NULL;
+    }
+    tokens.pop_front();
+
+    std::vector<ASTStructTypeField *> fields;
+    while (1)
+    {
+        const Token *tok = tokens.front();
+        if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
+        {
+            tokens.pop_front();
+            break;
+        }
+
+        const Token *fieldNameToken = NULL;
+        if (tok->type == TokenType::SYMBOL)
+        {
+            // Parse field name
+            fieldNameToken = tok;
+            tokens.pop_front();
+            tok = tokens.front();
+        }
+
+        if (tok->type == TokenType::COLON)
+        {
+            // Parse field type
+            tokens.pop_front();
+
+            ASTTypeNode *fieldType = parseType(tokens);
+            bool hidden = false;
+            fields.push_back(new ASTStructTypeField(fieldNameToken, fieldType, hidden));
+
+            tok = tokens.front();
+        }
+        else
+        {
+            std::cout << "ERROR: Unexpected token while parsing struct\n";
+            tokens.pop_front();
+            continue;
+        }
+
+        if (tok->type == TokenType::COMMA)
+        {
+            tokens.pop_front();
+        }
+    }
+
+    bool managed = true, packed = true;
+    return new ASTStructType(nameToken, fields, managed, packed);
+}
+
+ASTTypeNode *parseType(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+
+    switch (tok->type)
+    {
+    case TokenType::STRUCT_KEYWORD:
+        return parseStructType(tokens);
+
+    case TokenType::SYMBOL:
+        const Token *nameToken = tok;
+        tokens.pop_front();
+        return new ASTTypeName(nameToken);
+
+    default:
+        std::cout << "ERROR: Type must be a named type, struct or interface\n";
+        return NULL;
+    }
 }
 
 ASTFunction *parseFunction(std::list<const Token *> &tokens)
@@ -249,7 +339,7 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         return NULL;
     }
 
-    ASTType *returnType;
+    ASTTypeNode *returnType;
     if (tok->type == TokenType::COLON)
     {
         tokens.pop_front();
@@ -672,7 +762,7 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     }
 
     tok = tokens.front();
-    ASTType *typeSpecifier;
+    ASTTypeNode *typeSpecifier;
     if (tok->type == TokenType::COLON)
     {
         tokens.pop_front();
@@ -1113,7 +1203,7 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
     if (operatorType == TokenType::COLON)
     {
         // Cast operator does not have a right value (only type)
-        auto *rightType = static_cast<ASTType *>(this->right);
+        auto *rightType = static_cast<ASTTypeNode *>(this->right);
         auto targetType = rightType->getSpecifiedType();
         if (targetType == NULL)
         {
