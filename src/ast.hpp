@@ -89,6 +89,7 @@ public:
     std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
     FunctionType *currentFunction;
     FunctionScope staticNamedValues;
+    std::map<std::string, Type *> staticNamedTypes;
 };
 
 enum class ASTNodeType
@@ -112,54 +113,11 @@ enum class ASTNodeType
     PARAMETER,
     STRUCT_TYPE,
     STRUCT_TYPE_FIELD,
+    STRUCT_VALUE,
+    STRUCT_VALUE_FIELD,
 };
 
-char *astNodeTypeToString(ASTNodeType type)
-{
-    switch (type)
-    {
-    case ASTNodeType::OPERATOR:
-        return "OPERATOR";
-    case ASTNodeType::UNARY_OPERATOR:
-        return "UNARY_OPERATOR";
-    case ASTNodeType::LITERAL_NUMBER:
-        return "LITERAL_NUMBER";
-    case ASTNodeType::LITERAL_STRING:
-        return "LITERAL_STRING";
-    case ASTNodeType::FUNCTION:
-        return "FUNCTION";
-    case ASTNodeType::DECLARATION:
-        return "DECLARATION";
-    case ASTNodeType::ASSIGNMENT:
-        return "ASSIGNMENT";
-    case ASTNodeType::INVOCATION:
-        return "INVOCATION";
-    case ASTNodeType::READ_VARIABLE:
-        return "READ_VARIABLE";
-    case ASTNodeType::BRACKETS:
-        return "BRACKETS";
-    case ASTNodeType::FILE:
-        return "FILE";
-    case ASTNodeType::RETURN:
-        return "RETURN";
-    case ASTNodeType::IF:
-        return "IF";
-    case ASTNodeType::BLOCK:
-        return "BLOCK";
-    case ASTNodeType::FOR:
-        return "FOR";
-    case ASTNodeType::TYPE:
-        return "TYPE";
-    case ASTNodeType::PARAMETER:
-        return "PARAMETER";
-    case ASTNodeType::STRUCT_TYPE:
-        return "STRUCT_TYPE";
-    case ASTNodeType::STRUCT_TYPE_FIELD:
-        return "STRUCT_TYPE_FIELD";
-    default:
-        break;
-    }
-}
+std::string astNodeTypeToString(ASTNodeType type);
 
 class ASTNode
 {
@@ -186,14 +144,14 @@ public:
     const Token *operatorToken;
     ASTNode *operand;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = this->operatorToken->value;
         str += this->operand->toString();
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTOperator : public ASTNode
@@ -204,7 +162,7 @@ public:
     ASTNode *left;
     ASTNode *right;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "(";
         str += this->left->toString();
@@ -216,7 +174,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTTypeNode : public ASTNode
@@ -306,7 +264,7 @@ public:
         }
     }
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "";
         if (this->fieldNameToken != NULL)
@@ -340,7 +298,7 @@ public:
         return new StructType(fields, this->managed, this->packed);
     }
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "";
         if (!this->managed)
@@ -367,13 +325,42 @@ private:
     std::vector<ASTStructTypeField *> fields;
 };
 
+class ASTStructValueField : public ASTNode
+{
+public:
+    ASTStructValueField(const Token *nameToken, ASTNode *value) : ASTNode(ASTNodeType::STRUCT_VALUE_FIELD), nameToken(nameToken), value(value) {}
+
+    std::string getName()
+    {
+        return this->nameToken->value;
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+private:
+    const Token *nameToken;
+    ASTNode *value;
+};
+
+class ASTStructValue : public ASTNode
+{
+public:
+    ASTStructValue(std::vector<ASTStructValueField *> fields, const Token *typeNameToken) : ASTNode(ASTNodeType::STRUCT_VALUE), fields(fields), typeNameToken(typeNameToken) {}
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+private:
+    std::vector<ASTStructValueField *> fields;
+    const Token *typeNameToken;
+};
+
 class ASTBrackets : public ASTNode
 {
 public:
     ASTBrackets(ASTNode *inner) : ASTNode(ASTNodeType::BRACKETS), inner(inner) {}
     ASTNode *inner;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "(";
         str += this->inner->toString();
@@ -381,7 +368,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTReadVariable : public ASTNode
@@ -390,13 +377,13 @@ public:
     ASTReadVariable(const Token *nameToken) : ASTNode(ASTNodeType::READ_VARIABLE), nameToken(nameToken) {}
     const Token *nameToken;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = this->nameToken->value;
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTLiteralString : public ASTNode
@@ -405,7 +392,7 @@ public:
     ASTLiteralString(const Token *value) : ASTNode(ASTNodeType::LITERAL_STRING), valueToken(value) {}
     const Token *valueToken;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "\"";
         str += this->valueToken->value;
@@ -413,7 +400,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTLiteralNumber : public ASTNode
@@ -422,13 +409,13 @@ public:
     ASTLiteralNumber(const Token *value) : ASTNode(ASTNodeType::LITERAL_NUMBER), valueToken(value) {}
     const Token *valueToken;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = this->valueToken->value;
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTDeclaration : public ASTNode
@@ -439,7 +426,7 @@ public:
     ASTNode *value;
     ASTTypeNode *typeSpecifier;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "let ";
         str += this->nameToken->value;
@@ -456,7 +443,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTAssignment : public ASTNode
@@ -466,7 +453,7 @@ public:
     const Token *nameToken;
     ASTNode *value;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = this->nameToken->value;
         str += " = ";
@@ -474,7 +461,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTReturn : public ASTNode
@@ -483,7 +470,7 @@ public:
     ASTReturn(ASTNode *value) : ASTNode(ASTNodeType::RETURN), value(value) {}
     ASTNode *value;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "return ";
         if (this->value != NULL)
@@ -493,7 +480,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTBlock : public ASTNode
@@ -502,7 +489,7 @@ public:
     ASTBlock(std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::BLOCK), statements(statements) {}
     std::list<ASTNode *> *statements;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "{\n";
         for (ASTNode *statement : *this->statements)
@@ -515,7 +502,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTParameter : public ASTNode
@@ -523,11 +510,6 @@ class ASTParameter : public ASTNode
 public:
     ASTParameter(const Token *nameToken, ASTTypeNode *typeSpecifier = NULL) : ASTNode(ASTNodeType::PARAMETER), nameToken(nameToken), typeSpecifier(typeSpecifier)
     {
-    }
-
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override
-    {
-        return NULL;
     }
 
     std::string toString() override
@@ -554,7 +536,7 @@ public:
         }
     }
 
-    const std::string getParameterName()
+    std::string getParameterName()
     {
         return this->nameToken->value;
     }
@@ -571,7 +553,7 @@ public:
     const Token *functionNameToken;
     std::vector<ASTNode *> *parameterValues;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = this->functionNameToken->value;
         str += "(";
@@ -588,7 +570,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTFunction : public ASTNode
@@ -601,7 +583,7 @@ public:
     ASTNode *body;
     bool exported;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "";
         if (this->exported)
@@ -636,7 +618,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTFile : public ASTNode
@@ -645,7 +627,7 @@ public:
     ASTFile(std::list<ASTNode *> *statements) : ASTNode(ASTNodeType::FILE), statements(statements) {}
     std::list<ASTNode *> *statements;
 
-    virtual std::string toString()
+    virtual std::string toString() override
     {
         std::string str = "";
         for (ASTNode *statement : *this->statements)
@@ -656,7 +638,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTIfStatement : public ASTNode
@@ -667,7 +649,7 @@ public:
     ASTNode *thenBody;
     ASTNode *elseBody;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "if ";
         str += this->condition->toString();
@@ -680,7 +662,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 class ASTWhileStatement : public ASTNode
@@ -691,7 +673,7 @@ public:
     ASTNode *loopBody;
     ASTNode *elseBody;
 
-    virtual std::string toString()
+    std::string toString() override
     {
         std::string str = "while ";
         str += this->condition->toString();
@@ -704,7 +686,7 @@ public:
         return str;
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope);
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
 ASTNode *parseIfStatement(std::list<const Token *> &tokens);
@@ -718,3 +700,4 @@ ASTFile *parseFile(std::list<const Token *> &tokens);
 ASTReturn *parseReturn(std::list<const Token *> &tokens);
 ASTTypeNode *parseType(std::list<const Token *> &tokens);
 ASTParameter *parseParameter(std::list<const Token *> &tokens);
+ASTTypeNode *parseStructType(std::list<const Token *> &tokens);

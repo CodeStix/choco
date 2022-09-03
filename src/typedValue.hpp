@@ -262,7 +262,7 @@ public:
         {
             fieldTypes.push_back(field.type->getLLVMType(context));
         }
-        return llvm::StructType::get(context, fieldTypes, this->packed);
+        return llvm::StructType::get(context, fieldTypes, this->packed)->getPointerTo();
     }
 
 private:

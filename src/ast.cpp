@@ -33,6 +33,9 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
         ASTNode *statement = NULL;
         switch (tok->type)
         {
+        case TokenType::STRUCT_KEYWORD:
+            statement = parseStructType(tokens);
+            break;
         case TokenType::FUNC_KEYWORD:
             statement = parseFunction(tokens);
             break;
@@ -212,9 +215,8 @@ ASTTypeNode *parseType(std::list<const Token *> &tokens)
         return parseStructType(tokens);
 
     case TokenType::SYMBOL:
-        const Token *nameToken = tok;
         tokens.pop_front();
-        return new ASTTypeName(nameToken);
+        return new ASTTypeName(tok);
 
     default:
         std::cout << "ERROR: Type must be a named type, struct or interface\n";
@@ -575,6 +577,73 @@ ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
     return new ASTUnaryOperator(operandToken, operand);
 }
 
+ASTNode *parseStructValue(std::list<const Token *> &tokens)
+{
+    const Token *tok = tokens.front();
+    if (tok == NULL)
+    {
+        std::cout << "ERROR: Unexpected end of file\n";
+        return NULL;
+    }
+
+    const Token *typeNameToken;
+    if (tok->type == TokenType::SYMBOL)
+    {
+        // Named struct value
+        typeNameToken = tok;
+    }
+    else if (tok->type == TokenType::CURLY_BRACKET_OPEN)
+    {
+        typeNameToken = NULL;
+    }
+    else
+    {
+        std::cout << "ERROR: Struct value must start with {\n";
+        return NULL;
+    }
+    tokens.pop_front();
+
+    std::vector<ASTStructValueField *> fields;
+    while (1)
+    {
+        tok = tokens.front();
+        if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
+        {
+            tokens.pop_front();
+            break;
+        }
+
+        if (tok->type != TokenType::SYMBOL)
+        {
+            tokens.pop_front();
+            std::cout << "ERROR: Struct value must contain fields\n";
+            return NULL;
+        }
+        const Token *fieldNameToken = tok;
+
+        tokens.pop_front();
+        tok = tokens.front();
+        if (tok->type != TokenType::COLON)
+        {
+            tokens.pop_front();
+            std::cout << "ERROR: Struct value must have colon\n";
+            return NULL;
+        }
+        tokens.pop_front();
+
+        ASTNode *fieldValue = parseValueOrOperator(tokens);
+        fields.push_back(new ASTStructValueField(fieldNameToken, fieldValue));
+
+        tok = tokens.front();
+        if (tok->type == TokenType::COMMA)
+        {
+            tokens.pop_front();
+        }
+    }
+
+    return new ASTStructValue(fields, typeNameToken);
+}
+
 ASTNode *parseValue(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
@@ -587,6 +656,10 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
     ASTNode *value;
     switch (tok->type)
     {
+    case TokenType::CURLY_BRACKET_OPEN:
+        value = parseStructValue(tokens);
+        break;
+
     case TokenType::LITERAL_STRING:
         value = new ASTLiteralString(tok);
         tokens.pop_front();
@@ -671,6 +744,19 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
         if (tok == NULL)
         {
             return top;
+        }
+
+        if (tok->type == TokenType::COLON)
+        {
+            // This is a special operator that casts and requires a type name as second operand
+            tokens.pop_front();
+            ASTNode *rightType = parseType(tokens);
+            if (rightType == NULL)
+            {
+                std::cout << "ERROR: could not parse type after cast operator\n";
+                return NULL;
+            }
+            return new ASTOperator(tok, top, rightType);
         }
 
         int operatorImportance = getTokenOperatorImportance(tok->type);
@@ -851,6 +937,7 @@ llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm
 
 TypedValue *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTReadVariable::generateLLVM\n";
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
@@ -864,6 +951,7 @@ TypedValue *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionSc
 
 TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTLiteralNumber::generateLLVM\n";
     int integerBase = 10;
     std::string noPrefix = this->valueToken->value;
     if (this->valueToken->value.find("0x") == 0)
@@ -899,17 +987,21 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 
     if (isFloating)
     {
+        std::cout << "DEBUG: ASTLiteralNumber::generateLLVM floating\n";
         double floatingValue = strtod(cleaned.c_str(), NULL);
         Type *type = new FloatType(64);
         auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), floatingValue);
+        std::cout << "DEBUG: ASTLiteralNumber::generateLLVM floating 2\n";
         return new TypedValue(value, type);
     }
     else
     {
+        std::cout << "DEBUG: ASTLiteralNumber::generateLLVM int\n";
         unsigned long long integerValue = strtoull(cleaned.c_str(), NULL, integerBase);
         bool isSigned = integerValue <= INT64_MAX;
         Type *type = new IntegerType(64, isSigned);
         auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, isSigned);
+        std::cout << "DEBUG: ASTLiteralNumber::generateLLVM int 2\n";
         return new TypedValue(value, type);
     }
 }
@@ -1142,8 +1234,53 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
     return new TypedValue(currentValue, targetType);
 }
 
+TypedValue *ASTStructValue::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    std::cout << "DEBUG: ASTStructValue::generateLLVM\n";
+    if (this->typeNameToken != NULL)
+    {
+        std::cout << "ERROR: Named struct value not implemented\n";
+        return NULL;
+    }
+    else
+    {
+        // Create a struct with inferred type
+        std::vector<TypedValue *> fieldValues;
+        std::vector<StructTypeField> fieldTypes;
+        for (auto &field : this->fields)
+        {
+            TypedValue *fieldValue = field->generateLLVM(context, scope);
+            fieldValues.push_back(fieldValue);
+            fieldTypes.push_back(StructTypeField(fieldValue->getType(), field->getName()));
+        }
+
+        bool managed = true, packed = false;
+        StructType *structType = new StructType(fieldTypes, managed, packed);
+        llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
+
+        auto structPointer = createAllocaInCurrentFunction(context, llvmStructType->getPointerElementType(), "allocstruct");
+
+        int fieldIndex = 0;
+        for (auto &field : fieldValues)
+        {
+            auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType->getPointerElementType(), structPointer, fieldIndex, "structgep");
+            context->irBuilder->CreateStore(field->getValue(), structFieldPointer, false);
+            fieldIndex++;
+        }
+
+        return new TypedValue(structPointer, structType);
+    }
+}
+
+TypedValue *ASTStructValueField::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    std::cout << "DEBUG: ASTStructValueField::generateLLVM\n";
+    return this->value->generateLLVM(context, scope);
+}
+
 TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTUnaryOperator::generateLLVM\n";
     auto *operand = this->operand->generateLLVM(context, scope);
 
     switch (this->operatorToken->type)
@@ -1196,12 +1333,15 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTOperator::generateLLVM left\n";
     TokenType operatorType = this->operatorToken->type;
 
     auto *left = this->left->generateLLVM(context, scope);
 
     if (operatorType == TokenType::COLON)
     {
+        std::cout << "DEBUG: ASTOperator::generateLLVM colon " << astNodeTypeToString(this->right->type) << "\n";
+
         // Cast operator does not have a right value (only type)
         auto *rightType = static_cast<ASTTypeNode *>(this->right);
         auto targetType = rightType->getSpecifiedType();
@@ -1212,6 +1352,7 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         return generateTypeConversion(context, left, targetType, true);
     }
 
+    std::cout << "DEBUG: ASTOperator::generateLLVM right\n";
     auto *right = this->right->generateLLVM(context, scope);
     if (!left || !right)
     {
@@ -1433,6 +1574,7 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
 TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTLiteralString::generateLLVM\n";
     auto value = context->irBuilder->CreateGlobalString(this->valueToken->value, "str");
     Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length() + 1);
     return new TypedValue(value, type);
@@ -1440,6 +1582,8 @@ TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTDeclaration::generateLLVM\n";
+
     if (scope->hasValue(this->nameToken->value))
     {
         std::cout << "ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
@@ -1514,6 +1658,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
 
 TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTAssignment::generateLLVM\n";
     if (!scope->hasValue(this->nameToken->value))
     {
         std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
@@ -1552,6 +1697,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 
 TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTReturn::generateLLVM\n";
     if (this->value != NULL)
     {
         auto value = this->value->generateLLVM(context, scope);
@@ -1582,9 +1728,11 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
 
 TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTBlock::generateLLVM\n";
     TypedValue *lastValue = NULL;
     for (ASTNode *statement : *this->statements)
     {
+        std::cout << "DEBUG: ASTBlock::generateLLVM generate " << astNodeTypeToString(statement->type) << "\n";
         lastValue = statement->generateLLVM(context, scope);
     }
     return lastValue;
@@ -1592,6 +1740,7 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
 
 TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTFunction::generateLLVM\n";
     TypedValue *existingFunctionValue = context->staticNamedValues.getValue(this->nameToken->value);
 
     if (existingFunctionValue == NULL)
@@ -1701,6 +1850,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
 TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTWhileStatement::generateLLVM\n";
     TypedValue *preConditionValue = this->condition->generateLLVM(context, scope);
     if (*preConditionValue->getType() != BOOL_TYPE)
     {
@@ -1759,6 +1909,8 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
 
 TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTIfStatement::generateLLVM\n";
+
     TypedValue *condition = this->condition->generateLLVM(context, scope);
     // llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionFloat, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "ifcond");
     if (*condition->getType() != BOOL_TYPE)
@@ -1807,6 +1959,7 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 
 TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTInvocation::generateLLVM\n";
     TypedValue *functionValue = context->staticNamedValues.getValue(this->functionNameToken->value);
     if (functionValue == NULL)
     {
@@ -1857,15 +2010,64 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
 
 TypedValue *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTBrackets::generateLLVM\n";
     return this->inner->generateLLVM(context, scope);
 }
 
 TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+    std::cout << "DEBUG: ASTFile::generateLLVM\n";
     FunctionScope *fileScope = new FunctionScope(*scope);
     for (ASTNode *statement : *this->statements)
     {
         statement->generateLLVM(context, fileScope);
     }
     return NULL;
+}
+
+std::string astNodeTypeToString(ASTNodeType type)
+{
+    switch (type)
+    {
+    case ASTNodeType::OPERATOR:
+        return "OPERATOR";
+    case ASTNodeType::UNARY_OPERATOR:
+        return "UNARY_OPERATOR";
+    case ASTNodeType::LITERAL_NUMBER:
+        return "LITERAL_NUMBER";
+    case ASTNodeType::LITERAL_STRING:
+        return "LITERAL_STRING";
+    case ASTNodeType::FUNCTION:
+        return "FUNCTION";
+    case ASTNodeType::DECLARATION:
+        return "DECLARATION";
+    case ASTNodeType::ASSIGNMENT:
+        return "ASSIGNMENT";
+    case ASTNodeType::INVOCATION:
+        return "INVOCATION";
+    case ASTNodeType::READ_VARIABLE:
+        return "READ_VARIABLE";
+    case ASTNodeType::BRACKETS:
+        return "BRACKETS";
+    case ASTNodeType::FILE:
+        return "FILE";
+    case ASTNodeType::RETURN:
+        return "RETURN";
+    case ASTNodeType::IF:
+        return "IF";
+    case ASTNodeType::BLOCK:
+        return "BLOCK";
+    case ASTNodeType::FOR:
+        return "FOR";
+    case ASTNodeType::TYPE:
+        return "TYPE";
+    case ASTNodeType::PARAMETER:
+        return "PARAMETER";
+    case ASTNodeType::STRUCT_TYPE:
+        return "STRUCT_TYPE";
+    case ASTNodeType::STRUCT_TYPE_FIELD:
+        return "STRUCT_TYPE_FIELD";
+    default:
+        return "Unknown";
+    }
 }
