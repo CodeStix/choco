@@ -265,6 +265,37 @@ public:
         return llvm::StructType::get(context, fieldTypes, this->packed)->getPointerTo();
     }
 
+    StructTypeField *getField(std::string name)
+    {
+        for (auto &field : this->fields)
+        {
+            if (field.name == name)
+            {
+                return &field;
+            }
+        }
+        return NULL;
+    }
+
+    int getFieldIndex(std::string name)
+    {
+        int index = 0;
+        for (auto &field : this->fields)
+        {
+            if (field.name == name)
+            {
+                return index;
+            }
+            index++;
+        }
+        return -1;
+    }
+
+    int getMaxIndex()
+    {
+        return this->fields.size();
+    }
+
 private:
     std::vector<StructTypeField> fields;
     bool managed;

@@ -102,7 +102,7 @@ enum class ASTNodeType
     DECLARATION,
     ASSIGNMENT,
     INVOCATION,
-    READ_VARIABLE,
+    SYMBOL,
     BRACKETS,
     FILE,
     RETURN,
@@ -115,6 +115,9 @@ enum class ASTNodeType
     STRUCT_TYPE_FIELD,
     STRUCT_VALUE,
     STRUCT_VALUE_FIELD,
+    DEREFERENCE,
+    DEREFERENCE_MEMBER,
+    DEREFERENCE_INDEX,
 };
 
 std::string astNodeTypeToString(ASTNodeType type);
@@ -371,19 +374,74 @@ public:
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
-class ASTReadVariable : public ASTNode
+class ASTSymbol : public ASTNode
 {
 public:
-    ASTReadVariable(const Token *nameToken) : ASTNode(ASTNodeType::READ_VARIABLE), nameToken(nameToken) {}
+    ASTSymbol(const Token *nameToken) : ASTNode(ASTNodeType::SYMBOL), nameToken(nameToken) {}
     const Token *nameToken;
 
     std::string toString() override
     {
-        std::string str = this->nameToken->value;
+        return this->nameToken->value;
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+};
+
+// class ASTDereference : public ASTNode
+// {
+// public:
+//     ASTDereference(const Token *nameToken, std::vector<ASTNode *> dereferences) : ASTNode(ASTNodeType::DEREFERENCE), nameToken(nameToken), dereferences(dereferences) {}
+
+//     std::string toString() override
+//     {
+//         return this->nameToken->value;
+//     }
+
+//     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+// private:
+//     const Token *nameToken;
+//     std::vector<ASTNode *> dereferences;
+// };
+
+class ASTIndexDereference : public ASTNode
+{
+public:
+    ASTIndexDereference(ASTNode *toIndex, ASTNode *index) : ASTNode(ASTNodeType::DEREFERENCE_INDEX), toIndex(toIndex), index(index) {}
+
+    std::string toString() override
+    {
+        std::string str = this->toIndex->toString();
+        str += "[" + this->index->toString();
+        str += "]";
         return str;
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+private:
+    ASTNode *toIndex;
+    ASTNode *index;
+};
+
+class ASTMemberDereference : public ASTNode
+{
+public:
+    ASTMemberDereference(ASTNode *toIndex, const Token *nameToken) : ASTNode(ASTNodeType::DEREFERENCE_MEMBER), nameToken(nameToken), toIndex(toIndex) {}
+
+    std::string toString() override
+    {
+        std::string str = this->toIndex->toString();
+        str += "." + this->nameToken->value;
+        return str;
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+private:
+    ASTNode *toIndex;
+    const Token *nameToken;
 };
 
 class ASTLiteralString : public ASTNode

@@ -53,6 +53,7 @@ enum class TokenType
     PACKED_KEYWORD,
     UNMANAGED_KEYWORD,
     STRUCT_KEYWORD,
+    PERIOD,
 };
 
 class Token

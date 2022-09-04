@@ -360,6 +360,9 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 case ';':
                     tokenList.push_back(new Token(i, TokenType::SEMICOLON, std::string(1, currentChar)));
                     break;
+                case '.':
+                    tokenList.push_back(new Token(i, TokenType::PERIOD, std::string(1, currentChar)));
+                    break;
 
                 default:
                     std::cout << "WARNING: Unknown char " << currentChar << "\n";
@@ -473,6 +476,8 @@ const char *getTokenTypeName(TokenType type)
         return "UNMANAGED_KEYWORD";
     case TokenType::PACKED_KEYWORD:
         return "PACKED_KEYWORD";
+    case TokenType::PERIOD:
+        return "PERIOD";
     default:
         return "Unknown";
     }

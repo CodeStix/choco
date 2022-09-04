@@ -540,8 +540,7 @@ ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
     }
 
     default:
-        // Parse read
-        return new ASTReadVariable(nameToken);
+        return new ASTSymbol(nameToken);
     }
 }
 
@@ -725,6 +724,112 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
 
     default:
         return NULL;
+    }
+
+    return value;
+}
+
+// ASTDereference *parseDereference(std::list<const Token *> &tokens)
+// {
+//     const Token *tok = tokens.front();
+//     if (tok == NULL)
+//     {
+//         std::cout << "ERROR: Unexpected end of file\n";
+//         return NULL;
+//     }
+//     if (tok->type != TokenType::SYMBOL)
+//     {
+//         std::cout << "ERROR: Dereference must be from named value\n";
+//         return NULL;
+//     }
+//     const Token *nameToken = tokens.front();
+//     tokens.pop_front();
+
+//     std::vector<ASTNode *> dereferences;
+//     while (1)
+//     {
+//         tok = tokens.front();
+//         if (tok->type == TokenType::PERIOD)
+//         {
+//             // Member access
+//             tokens.pop_front();
+//             tok = tokens.front();
+//             if (tok->type != TokenType::SYMBOL)
+//             {
+//                 std::cout << "ERROR: Expected a nam after period\n";
+//                 return NULL;
+//             }
+
+//             dereferences.push_back(new ASTMemberDereference(tok));
+//             tokens.pop_front();
+//         }
+//         else if (tok->type == TokenType::OPERATOR_NOT)
+//         {
+//             // 'Sure of range' operator
+//             std::cout << "ERROR: ! operator not implemented for dereference\n";
+//             return NULL;
+//         }
+//         else if (tok->type == TokenType::SQUARE_BRACKET_OPEN)
+//         {
+//         }
+//         else
+//         {
+//             break;
+//         }
+//     }
+
+//     return new ASTDereference(nameToken, dereferences);
+// }
+
+ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
+{
+    ASTNode *value = parseValue(tokens);
+
+    std::vector<ASTNode> *indices;
+    while (1)
+    {
+        const Token *tok = tokens.front();
+        if (tok->type == TokenType::PERIOD)
+        {
+            tokens.pop_front();
+
+            tok = tokens.front();
+            if (tok->type != TokenType::SYMBOL)
+            {
+                std::cout << "ERROR: only symbols can be used to dereference fields\n";
+                return NULL;
+            }
+
+            value = new ASTMemberDereference(value, tok);
+            tokens.pop_front();
+        }
+        else if (tok->type == TokenType::SQUARE_BRACKET_OPEN)
+        {
+            tokens.pop_front();
+            ASTNode *indexValue = parseValueOrOperator(tokens);
+            if (indexValue == NULL)
+            {
+                return NULL;
+            }
+
+            tok = tokens.front();
+            if (tok->type != TokenType::SQUARE_BRACKET_CLOSE)
+            {
+                std::cout << "ERROR: index dereference must end with ]\n";
+                return NULL;
+            }
+
+            value = new ASTIndexDereference(value, indexValue);
+        }
+        else if (tok->type == TokenType::OPERATOR_NOT)
+        {
+            std::cout << "ERROR: ! suffix not implemented\n";
+            return NULL;
+        }
+        else
+        {
+            break;
+        }
     }
 
     return value;
@@ -915,7 +1020,7 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
             std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << "(" << (int)tok->type << ")"
                       << " at " << tok->position << "\n";
         }
-        else if (statement->type == ASTNodeType::READ_VARIABLE)
+        else if (statement->type == ASTNodeType::SYMBOL)
         {
             std::cout << "ERROR: Variable read is not a valid statement\n";
         }
@@ -935,9 +1040,9 @@ llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm
     return insertBuilder.CreateAlloca(type, NULL, twine);
 }
 
-TypedValue *ASTReadVariable::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
-    std::cout << "DEBUG: ASTReadVariable::generateLLVM\n";
+    std::cout << "DEBUG: ASTSymbol::generateLLVM\n";
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
@@ -1907,6 +2012,57 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     return NULL;
 }
 
+TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    std::cout << "DEBUG: ASTIndexDereference::generateLLVM\n";
+
+    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
+    TypedValue *indexValue = this->index->generateLLVM(context, scope);
+
+    if (valueToIndex->getTypeCode() == TypeCode::STRUCT)
+    {
+        std::cout << "ERROR: struct indexing not implemented\n";
+        return NULL;
+    }
+    else if (valueToIndex->getTypeCode() == TypeCode::ARRAY)
+    {
+        std::cout << "ERROR: array indexing not implemented\n";
+        return NULL;
+    }
+    else
+    {
+        std::cout << "ERROR: cannot index type " << (int)valueToIndex->getTypeCode() << "\n";
+        return NULL;
+    }
+}
+
+TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
+{
+    std::cout << "DEBUG: ASTMemberDereference::generateLLVM\n";
+
+    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
+
+    if (valueToIndex->getTypeCode() == TypeCode::STRUCT)
+    {
+        StructType *structType = static_cast<StructType *>(valueToIndex->getType());
+        StructTypeField *structField = structType->getField(this->nameToken->value);
+        if (structField == NULL)
+        {
+            std::cout << "ERROR: field named " << this->nameToken->value << " not found in struct\n";
+            return NULL;
+        }
+        int structFieldIndex = structType->getFieldIndex(this->nameToken->value);
+
+        llvm::Value *fieldPointer = context->irBuilder->CreateStructGEP(structType->getLLVMType(*context->context), valueToIndex->getValue(), structFieldIndex, "structgep");
+        return new TypedValue(fieldPointer, structField->type);
+    }
+    else
+    {
+        std::cout << "ERROR: cannot access a member of type " << (int)valueToIndex->getTypeCode() << "\n";
+        return NULL;
+    }
+}
+
 TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     std::cout << "DEBUG: ASTIfStatement::generateLLVM\n";
@@ -2045,8 +2201,8 @@ std::string astNodeTypeToString(ASTNodeType type)
         return "ASSIGNMENT";
     case ASTNodeType::INVOCATION:
         return "INVOCATION";
-    case ASTNodeType::READ_VARIABLE:
-        return "READ_VARIABLE";
+    case ASTNodeType::SYMBOL:
+        return "SYMBOL";
     case ASTNodeType::BRACKETS:
         return "BRACKETS";
     case ASTNodeType::FILE:
