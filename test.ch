@@ -7,9 +7,15 @@ func getInteger(): Int64 {
 
 export func main() {
     let b = {
-        value: getInteger(),
-        moreValue: getInteger()
+        value: 100
     }
-    
-    printDouble(b.value + b.moreValue)
+
+    if ((b.value == 100) || (b.value == 200)) {
+        return
+    }
+
+    while b.value > 0 {
+        b.value = b.value + -1
+        printDouble(b.value)
+    }
 }

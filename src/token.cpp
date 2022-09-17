@@ -180,7 +180,7 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
                 }
                 else
                 {
-                    tokenList.push_back(new Token(i, TokenType::OPERATOR_NOT, currentString));
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_EXCLAMATION, currentString));
                     state = TokenizeState::NONE;
                 }
             }
@@ -245,13 +245,33 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
             }
             else if (firstChar == '|')
             {
-                tokenList.push_back(new Token(i, TokenType::OPERATOR_OR, currentString));
-                state = TokenizeState::NONE;
+                if (currentChar == '|')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_DOUBLE_OR, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_OR, currentString));
+                    state = TokenizeState::NONE;
+                }
             }
             else if (firstChar == '&')
             {
-                tokenList.push_back(new Token(i, TokenType::OPERATOR_AND, currentString));
-                state = TokenizeState::NONE;
+                if (currentChar == '&')
+                {
+                    currentString += currentChar;
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_DOUBLE_AND, currentString));
+                    state = TokenizeState::NONE;
+                    continue;
+                }
+                else
+                {
+                    tokenList.push_back(new Token(i, TokenType::OPERATOR_AND, currentString));
+                    state = TokenizeState::NONE;
+                }
             }
             else if (firstChar == '~')
             {
@@ -260,7 +280,7 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
             }
             else if (firstChar == '^')
             {
-                tokenList.push_back(new Token(i, TokenType::OPERATOR_XOR, currentString));
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_CARET, currentString));
                 state = TokenizeState::NONE;
             }
             else if (firstChar == '%')
@@ -443,16 +463,16 @@ const char *getTokenTypeName(TokenType type)
         return "COLON";
     case TokenType::SEMICOLON:
         return "SEMICOLON";
-    case TokenType::OPERATOR_NOT:
-        return "OPERATOR_NOT";
+    case TokenType::OPERATOR_EXCLAMATION:
+        return "OPERATOR_EXCLAMATION";
     case TokenType::OPERATOR_AND:
         return "OPERATOR_AND";
     case TokenType::OPERATOR_OR:
         return "OPERATOR_OR";
-    case TokenType::OPERATOR_XOR:
-        return "OPERATOR_XOR";
+    case TokenType::OPERATOR_CARET:
+        return "OPERATOR_CARET";
     case TokenType::OPERATOR_TILDE:
-        return "OPERATOR_XOR";
+        return "OPERATOR_CARET";
     case TokenType::OPERATOR_LTE:
         return "OPERATOR_LTE";
     case TokenType::OPERATOR_GTE:
@@ -477,6 +497,10 @@ const char *getTokenTypeName(TokenType type)
         return "PACKED_KEYWORD";
     case TokenType::PERIOD:
         return "PERIOD";
+    case TokenType::OPERATOR_DOUBLE_AND:
+        return "OPERATOR_DOUBLE_AND";
+    case TokenType::OPERATOR_DOUBLE_OR:
+        return "OPERATOR_DOUBLE_OR";
     default:
         return "Unknown";
     }
@@ -487,28 +511,31 @@ int getTokenOperatorImportance(TokenType type)
     // TODO add assignment as operator
     switch (type)
     {
+    case TokenType::OPERATOR_DOUBLE_AND:
+    case TokenType::OPERATOR_DOUBLE_OR:
+        return 1;
     case TokenType::OPERATOR_AND:
     case TokenType::OPERATOR_OR:
-    case TokenType::OPERATOR_XOR:
-        return 1;
+    case TokenType::OPERATOR_CARET:
+        return 2;
     case TokenType::OPERATOR_EQUALS:
     case TokenType::OPERATOR_NOT_EQUALS:
     case TokenType::OPERATOR_LTE:
     case TokenType::OPERATOR_GTE:
     case TokenType::OPERATOR_LT:
     case TokenType::OPERATOR_GT:
-        return 2;
+        return 3;
     case TokenType::OPERATOR_DOUBLE_LT:
     case TokenType::OPERATOR_DOUBLE_GT:
-        return 3;
+        return 4;
     case TokenType::OPERATOR_ADDITION:
     case TokenType::OPERATOR_SUBSTRACTION:
-        return 4;
+        return 5;
     case TokenType::OPERATOR_MULTIPLICATION:
     case TokenType::OPERATOR_DIVISION:
-        return 5;
-    case TokenType::COLON:
         return 6;
+    case TokenType::COLON:
+        return 7;
 
     default:
         return -1;

@@ -59,7 +59,8 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
 
         if (statement == NULL)
         {
-            std::cout << "ERROR: Invalid statement\n";
+            std::cout << "ERROR: Invalid statement at '" << getTokenTypeName(tok->type) << "'\n";
+            tokens.pop_front();
         }
         else
         {
@@ -484,7 +485,7 @@ ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
     {
     case TokenType::OPERATOR_ADDITION:
     case TokenType::OPERATOR_SUBSTRACTION:
-    case TokenType::OPERATOR_NOT:
+    case TokenType::OPERATOR_EXCLAMATION:
         break;
     default:
         return NULL;
@@ -597,7 +598,7 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
 
     case TokenType::OPERATOR_ADDITION:
     case TokenType::OPERATOR_SUBSTRACTION:
-    case TokenType::OPERATOR_NOT:
+    case TokenType::OPERATOR_EXCLAMATION:
         value = parseUnaryOperator(tokens);
         break;
 
@@ -730,7 +731,7 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
 
             value = new ASTIndexDereference(value, indexValue);
         }
-        else if (tok->type == TokenType::OPERATOR_NOT)
+        else if (tok->type == TokenType::OPERATOR_EXCLAMATION)
         {
             std::cout << "ERROR: ! suffix not implemented\n";
             return NULL;
@@ -1403,7 +1404,7 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
             return NULL;
         }
 
-    case TokenType::OPERATOR_NOT:
+    case TokenType::OPERATOR_EXCLAMATION:
         if (operand->getTypeCode() == TypeCode::INTEGER)
         {
             llvm::Value *newValue = context->irBuilder->CreateNot(operand->getValue(), "not");
@@ -1452,9 +1453,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
     bool allowTypeJuggling;
     switch (operatorType)
     {
-    case TokenType::OPERATOR_AND:
-    case TokenType::OPERATOR_OR:
-    case TokenType::OPERATOR_XOR:
+    case TokenType::OPERATOR_DOUBLE_AND:
+    case TokenType::OPERATOR_DOUBLE_OR:
         allowTypeJuggling = false;
         break;
     default:
@@ -1541,7 +1541,9 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         case TokenType::OPERATOR_DOUBLE_LT:
         case TokenType::OPERATOR_AND:
         case TokenType::OPERATOR_OR:
-        case TokenType::OPERATOR_XOR:
+        case TokenType::OPERATOR_DOUBLE_AND:
+        case TokenType::OPERATOR_DOUBLE_OR:
+        case TokenType::OPERATOR_CARET:
         default:
             std::cout << "ERROR: Invalid operator '" << this->operatorToken->value << "' on floats\n";
             return NULL;
@@ -1645,13 +1647,37 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         case TokenType::OPERATOR_DOUBLE_LT:
             result = context->irBuilder->CreateShl(leftValue, rightValue, "opshlint");
             break;
+        case TokenType::OPERATOR_DOUBLE_AND:
+        {
+            IntegerType *leftIntegerType = static_cast<IntegerType *>(left->getType());
+            IntegerType *rightIntegerType = static_cast<IntegerType *>(right->getType());
+            if (leftIntegerType->getBitSize() != 1 || rightIntegerType->getBitSize() != 1)
+            {
+                std::cout << "ERROR: Logical and operator can only be used on booleans\n";
+                return NULL;
+            }
+            result = context->irBuilder->CreateAnd(leftValue, rightValue, "opandint");
+            break;
+        }
+        case TokenType::OPERATOR_DOUBLE_OR:
+        {
+            IntegerType *leftIntegerType = static_cast<IntegerType *>(left->getType());
+            IntegerType *rightIntegerType = static_cast<IntegerType *>(right->getType());
+            if (leftIntegerType->getBitSize() != 1 || rightIntegerType->getBitSize() != 1)
+            {
+                std::cout << "ERROR: Logical or operator can only be used on booleans\n";
+                return NULL;
+            }
+            result = context->irBuilder->CreateOr(leftValue, rightValue, "oporint");
+            break;
+        }
         case TokenType::OPERATOR_AND:
             result = context->irBuilder->CreateAnd(leftValue, rightValue, "opandint");
             break;
         case TokenType::OPERATOR_OR:
             result = context->irBuilder->CreateOr(leftValue, rightValue, "oporint");
             break;
-        case TokenType::OPERATOR_XOR:
+        case TokenType::OPERATOR_CARET:
             result = context->irBuilder->CreateXor(leftValue, rightValue, "opxorint");
             break;
 
