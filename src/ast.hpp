@@ -74,12 +74,12 @@ public:
                           passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get())),
                           staticNamedValues(FunctionScope())
     {
-        passManager->add(llvm::createPromoteMemoryToRegisterPass());
-        passManager->add(llvm::createInstructionCombiningPass());
-        passManager->add(llvm::createReassociatePass());
-        passManager->add(llvm::createGVNPass());
-        passManager->add(llvm::createCFGSimplificationPass());
-        passManager->add(llvm::createDeadCodeEliminationPass());
+        // passManager->add(llvm::createPromoteMemoryToRegisterPass());
+        // passManager->add(llvm::createInstructionCombiningPass());
+        // passManager->add(llvm::createReassociatePass());
+        // passManager->add(llvm::createGVNPass());
+        // passManager->add(llvm::createCFGSimplificationPass());
+        // passManager->add(llvm::createDeadCodeEliminationPass());
         passManager->doInitialization();
     };
 
@@ -507,13 +507,13 @@ public:
 class ASTAssignment : public ASTNode
 {
 public:
-    ASTAssignment(const Token *nameToken, ASTNode *value) : ASTNode(ASTNodeType::ASSIGNMENT), nameToken(nameToken), value(value) {}
-    const Token *nameToken;
+    ASTAssignment(ASTNode *pointerValue, ASTNode *value) : ASTNode(ASTNodeType::ASSIGNMENT), pointerValue(pointerValue), value(value) {}
+    ASTNode *pointerValue;
     ASTNode *value;
 
     std::string toString() override
     {
-        std::string str = this->nameToken->value;
+        std::string str = this->pointerValue->toString();
         str += " = ";
         str += this->value->toString();
         return str;
@@ -607,13 +607,13 @@ private:
 class ASTInvocation : public ASTNode
 {
 public:
-    ASTInvocation(const Token *functionNameToken, std::vector<ASTNode *> *parameterValues) : ASTNode(ASTNodeType::INVOCATION), functionNameToken(functionNameToken), parameterValues(parameterValues) {}
-    const Token *functionNameToken;
+    ASTInvocation(ASTNode *functionPointerValue, std::vector<ASTNode *> *parameterValues) : ASTNode(ASTNodeType::INVOCATION), functionPointerValue(functionPointerValue), parameterValues(parameterValues) {}
+    ASTNode *functionPointerValue;
     std::vector<ASTNode *> *parameterValues;
 
     std::string toString() override
     {
-        std::string str = this->functionNameToken->value;
+        std::string str = this->functionPointerValue->toString();
         str += "(";
         bool isFirst = true;
         for (ASTNode *parameterValue : *this->parameterValues)
@@ -759,3 +759,4 @@ ASTReturn *parseReturn(std::list<const Token *> &tokens);
 ASTTypeNode *parseType(std::list<const Token *> &tokens);
 ASTParameter *parseParameter(std::list<const Token *> &tokens);
 ASTTypeNode *parseStructType(std::list<const Token *> &tokens);
+ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens);

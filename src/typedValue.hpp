@@ -14,7 +14,8 @@ enum class TypeCode
     UNION,
     RANGE,
     STRING,
-    FUNCTION
+    FUNCTION,
+    POINTER,
 };
 
 class Type
@@ -34,6 +35,21 @@ public:
     {
         return !(*this == b);
     }
+
+    // Type *getDeepPointedType()
+    // {
+    //     if (this->typeCode == TypeCode::POINTER)
+    //     {
+    //         PointerType *pointerType = static_cast<PointerType *>(this);
+    //         return pointerType->getDeepPointedType();
+    //     }
+    //     else
+    //     {
+    //         return this;
+    //     }
+    // }
+
+    Type *getPointerToType();
 
 private:
     TypeCode typeCode;
@@ -149,6 +165,40 @@ private:
     int endExclusive;
 };
 
+class PointerType : public Type
+{
+public:
+    PointerType(Type *pointedType) : Type(TypeCode::POINTER), pointedType(pointedType)
+    {
+    }
+
+    Type *getPointedType()
+    {
+        return this->pointedType;
+    }
+
+    bool operator==(const Type &b) const override
+    {
+        if (b.getTypeCode() == TypeCode::POINTER)
+        {
+            const PointerType &pointerType = static_cast<const PointerType &>(b);
+            return *pointerType.pointedType == *this->pointedType;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        return llvm::PointerType::get(this->pointedType->getLLVMType(context), 0);
+    }
+
+private:
+    Type *pointedType;
+};
+
 class FunctionParameter
 {
 public:
@@ -225,7 +275,7 @@ public:
 
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
-        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count)->getPointerTo();
+        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
     }
 
 private:
@@ -262,7 +312,7 @@ public:
         {
             fieldTypes.push_back(field.type->getLLVMType(context));
         }
-        return llvm::StructType::get(context, fieldTypes, this->packed)->getPointerTo();
+        return llvm::StructType::get(context, fieldTypes, this->packed);
     }
 
     StructTypeField *getField(std::string name)

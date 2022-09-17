@@ -53,7 +53,7 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
             statement = parseReturn(tokens);
             break;
         case TokenType::SYMBOL:
-            statement = parseSymbolOperation(tokens);
+            statement = parseValueOrOperator(tokens);
             break;
         }
 
@@ -470,80 +470,6 @@ ASTNode *parseWhileStatement(std::list<const Token *> &tokens)
     return new ASTWhileStatement(condition, loopBody, elseBody);
 }
 
-// Parses invocation, assingment or a read of a symbol
-ASTNode *parseSymbolOperation(std::list<const Token *> &tokens)
-{
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
-    if (tok->type != TokenType::SYMBOL)
-    {
-        return NULL;
-    }
-
-    const Token *nameToken = tok;
-
-    tokens.pop_front();
-    tok = tokens.front();
-    switch (tok->type)
-    {
-    case TokenType::BRACKET_OPEN:
-    {
-        // Parse invocation
-        tokens.pop_front();
-
-        std::vector<ASTNode *> *parameterValues = new std::vector<ASTNode *>();
-        while (true)
-        {
-            tok = tokens.front();
-            if (tok->type == TokenType::BRACKET_CLOSE)
-            {
-                tokens.pop_front();
-                break;
-            }
-
-            ASTNode *value = parseValueOrOperator(tokens);
-            parameterValues->push_back(value);
-
-            tok = tokens.front();
-            if (tok->type != TokenType::COMMA)
-            {
-                if (tok->type != TokenType::BRACKET_CLOSE)
-                {
-                    std::cout << "ERROR: Invocation parameters should be split using commas\n";
-                }
-            }
-            else
-            {
-                tokens.pop_front();
-            }
-        }
-        return new ASTInvocation(nameToken, parameterValues);
-    }
-
-    case TokenType::OPERATOR_ASSIGNMENT:
-    {
-        // Parse assigment
-        tokens.pop_front();
-
-        ASTNode *value = parseValueOrOperator(tokens);
-        if (!value)
-        {
-            std::cout << "ERROR: Assigment value is invalid\n";
-            return NULL;
-        }
-
-        return new ASTAssignment(nameToken, value);
-    }
-
-    default:
-        return new ASTSymbol(nameToken);
-    }
-}
-
 ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
@@ -713,13 +639,8 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
 
     case TokenType::SYMBOL:
     {
-        value = parseSymbolOperation(tokens);
-        if (value == NULL)
-        {
-            std::cout << "ERROR: Unexpected symbol \n";
-            return NULL;
-        }
-        break;
+        tokens.pop_front();
+        return new ASTSymbol(tok);
     }
 
     default:
@@ -729,68 +650,55 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
     return value;
 }
 
-// ASTDereference *parseDereference(std::list<const Token *> &tokens)
-// {
-//     const Token *tok = tokens.front();
-//     if (tok == NULL)
-//     {
-//         std::cout << "ERROR: Unexpected end of file\n";
-//         return NULL;
-//     }
-//     if (tok->type != TokenType::SYMBOL)
-//     {
-//         std::cout << "ERROR: Dereference must be from named value\n";
-//         return NULL;
-//     }
-//     const Token *nameToken = tokens.front();
-//     tokens.pop_front();
-
-//     std::vector<ASTNode *> dereferences;
-//     while (1)
-//     {
-//         tok = tokens.front();
-//         if (tok->type == TokenType::PERIOD)
-//         {
-//             // Member access
-//             tokens.pop_front();
-//             tok = tokens.front();
-//             if (tok->type != TokenType::SYMBOL)
-//             {
-//                 std::cout << "ERROR: Expected a nam after period\n";
-//                 return NULL;
-//             }
-
-//             dereferences.push_back(new ASTMemberDereference(tok));
-//             tokens.pop_front();
-//         }
-//         else if (tok->type == TokenType::OPERATOR_NOT)
-//         {
-//             // 'Sure of range' operator
-//             std::cout << "ERROR: ! operator not implemented for dereference\n";
-//             return NULL;
-//         }
-//         else if (tok->type == TokenType::SQUARE_BRACKET_OPEN)
-//         {
-//         }
-//         else
-//         {
-//             break;
-//         }
-//     }
-
-//     return new ASTDereference(nameToken, dereferences);
-// }
-
 ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
 {
     ASTNode *value = parseValue(tokens);
 
-    std::vector<ASTNode> *indices;
     while (1)
     {
         const Token *tok = tokens.front();
-        if (tok->type == TokenType::PERIOD)
+        if (tok->type == TokenType::BRACKET_OPEN)
         {
+            // Invocation
+            tokens.pop_front();
+
+            std::vector<ASTNode *> *parameterValues = new std::vector<ASTNode *>();
+            while (true)
+            {
+                tok = tokens.front();
+                if (tok == NULL)
+                {
+                    std::cout << "ERROR: Unexpected end of file\n";
+                    return NULL;
+                }
+                if (tok->type == TokenType::BRACKET_CLOSE)
+                {
+                    tokens.pop_front();
+                    break;
+                }
+
+                ASTNode *value = parseValueOrOperator(tokens);
+                parameterValues->push_back(value);
+
+                tok = tokens.front();
+                if (tok->type != TokenType::COMMA)
+                {
+                    if (tok->type != TokenType::BRACKET_CLOSE)
+                    {
+                        std::cout << "ERROR: Invocation parameters should be split using commas\n";
+                    }
+                }
+                else
+                {
+                    tokens.pop_front();
+                }
+            }
+
+            value = new ASTInvocation(value, parameterValues);
+        }
+        else if (tok->type == TokenType::PERIOD)
+        {
+            // Parse member dereference
             tokens.pop_front();
 
             tok = tokens.front();
@@ -805,6 +713,7 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
         }
         else if (tok->type == TokenType::SQUARE_BRACKET_OPEN)
         {
+            // Parsse index dereference
             tokens.pop_front();
             ASTNode *indexValue = parseValueOrOperator(tokens);
             if (indexValue == NULL)
@@ -837,7 +746,7 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
 
 ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
 {
-    ASTNode *top = parseValue(tokens);
+    ASTNode *top = parseValueAndSuffix(tokens);
     if (top == NULL)
     {
         return NULL;
@@ -863,6 +772,17 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
             }
             return new ASTOperator(tok, top, rightType);
         }
+        else if (tok->type == TokenType::OPERATOR_ASSIGNMENT)
+        {
+            tokens.pop_front();
+            ASTNode *right = parseValueOrOperator(tokens);
+            if (right == NULL)
+            {
+                std::cout << "ERROR: could not parse assignment value\n";
+                return NULL;
+            }
+            return new ASTAssignment(top, right);
+        }
 
         int operatorImportance = getTokenOperatorImportance(tok->type);
         if (operatorImportance < 0)
@@ -872,7 +792,7 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
         }
 
         tokens.pop_front();
-        ASTNode *right = parseValue(tokens);
+        ASTNode *right = parseValueAndSuffix(tokens);
         if (right == NULL)
         {
             std::cout << "ERROR: Right side of operator must be specified\n";
@@ -1010,7 +930,7 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
             statement = parseDeclaration(tokens);
             break;
         case TokenType::SYMBOL:
-            statement = parseSymbolOperation(tokens);
+            statement = parseValueOrOperator(tokens);
             break;
         }
 
@@ -1046,12 +966,15 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
-        std::cout << "ERROR: Could not find variable '" << this->nameToken->value << "'\n";
+        valuePointer = context->staticNamedValues.getValue(this->nameToken->value);
+        if (!valuePointer)
+        {
+            std::cout << "ERROR: Could not find variable '" << this->nameToken->value << "'\n";
+            return NULL;
+        }
     }
     valuePointer->setOriginVariable(this->nameToken->value);
-
-    auto value = context->irBuilder->CreateLoad(valuePointer->getType()->getLLVMType(*context->context), valuePointer->getValue(), "load");
-    return new TypedValue(value, valuePointer->getType());
+    return valuePointer;
 }
 
 TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -1111,17 +1034,66 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
     }
 }
 
+// Generates code that converts a deeply nested pointer to a single-deep pointer
+// T*** -> T*
+// T* -> T*
+// T -> (ERROR)
+// T***** -> T*
+TypedValue *generateDereferenceToPointer(GenerationContext *context, TypedValue *currentValue)
+{
+    if (currentValue->getType()->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "ERROR: cannot generateDereferenceToPointer(...) to pointer when its not a pointer\n";
+        return NULL;
+    }
+
+    while (1)
+    {
+        PointerType *currentPointerType = static_cast<PointerType *>(currentValue->getType());
+        if (currentPointerType->getPointedType()->getTypeCode() != TypeCode::POINTER)
+        {
+            // Stop when a value pointer has been reached
+            break;
+        }
+
+        llvm::Value *derefValue = context->irBuilder->CreateLoad(currentPointerType->getPointedType()->getLLVMType(*context->context), currentValue->getValue(), "deref");
+        currentValue = new TypedValue(derefValue, currentPointerType->getPointedType());
+    }
+
+    return currentValue;
+}
+
+// Generates code that converts a deeply nested pointer to a value
+// T*** -> T
+// T* -> T
+// T -> T
+// T***** -> T
+TypedValue *generateDereferenceToValue(GenerationContext *context, TypedValue *currentValue)
+{
+    while (currentValue->getTypeCode() == TypeCode::POINTER)
+    {
+        PointerType *currentPointerType = static_cast<PointerType *>(currentValue->getType());
+        llvm::Value *newValue = context->irBuilder->CreateLoad(currentPointerType->getPointedType()->getLLVMType(*context->context), currentValue->getValue(), "deref");
+        currentValue = new TypedValue(newValue, currentPointerType->getPointedType());
+    }
+
+    return currentValue;
+}
+
 // Converts the left or right value to match the other one's type without losing precision
 bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, TypedValue **rightInOut)
 {
-    auto leftType = (*leftInOut)->getType();
-    auto rightType = (*rightInOut)->getType();
-    if (*leftType == *rightType)
+    if (*(*leftInOut)->getType() == *(*rightInOut)->getType())
     {
         return true;
     }
 
+    *leftInOut = generateDereferenceToValue(context, *leftInOut);
+    *rightInOut = generateDereferenceToValue(context, *rightInOut);
+
+    auto leftType = (*leftInOut)->getType();
     auto leftValue = (*leftInOut)->getValue();
+    auto rightType = (*rightInOut)->getType();
     auto rightValue = (*rightInOut)->getValue();
 
     if (leftType->getTypeCode() == TypeCode::INTEGER && rightType->getTypeCode() == TypeCode::INTEGER)
@@ -1223,8 +1195,21 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
 // Try to cast a value to a specific type
 TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *valueToConvert, Type *targetType, bool allowLosePrecision)
 {
+    if (*valueToConvert->getType() == *targetType)
+    {
+        return valueToConvert;
+    }
+
+    if (targetType->getTypeCode() == TypeCode::POINTER)
+    {
+        std::cout << "ERROR: cannot generateTypeConversion(...) to pointer type\n";
+        return NULL;
+    }
+
+    valueToConvert = generateDereferenceToValue(context, valueToConvert);
     llvm::Value *currentValue = valueToConvert->getValue();
     Type *currentType = valueToConvert->getType();
+
     if (targetType->getTypeCode() == TypeCode::INTEGER && currentType->getTypeCode() == TypeCode::INTEGER)
     {
         IntegerType *currentIntType = static_cast<IntegerType *>(currentType);
@@ -1363,17 +1348,17 @@ TypedValue *ASTStructValue::generateLLVM(GenerationContext *context, FunctionSco
         StructType *structType = new StructType(fieldTypes, managed, packed);
         llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
-        auto structPointer = createAllocaInCurrentFunction(context, llvmStructType->getPointerElementType(), "allocstruct");
+        auto structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
 
         int fieldIndex = 0;
         for (auto &field : fieldValues)
         {
-            auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType->getPointerElementType(), structPointer, fieldIndex, "structgep");
+            auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
             context->irBuilder->CreateStore(field->getValue(), structFieldPointer, false);
             fieldIndex++;
         }
 
-        return new TypedValue(structPointer, structType);
+        return new TypedValue(structPointer, structType->getPointerToType());
     }
 }
 
@@ -1495,6 +1480,13 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
     }
 
     auto sharedType = left->getType(); // or right->getType()
+    if (sharedType->getTypeCode() == TypeCode::POINTER)
+    {
+        left = generateDereferenceToValue(context, left);
+        right = generateDereferenceToValue(context, right);
+        sharedType = left->getType(); // or right->getType()
+    }
+
     auto leftValue = left->getValue();
     auto rightValue = right->getValue();
     if (sharedType->getTypeCode() == TypeCode::FLOAT)
@@ -1734,7 +1726,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     }
 
     llvm::Value *pointerValue = createAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
-    TypedValue *pointer = new TypedValue(pointerValue, pointerType);
+    TypedValue *pointer = new TypedValue(pointerValue, pointerType->getPointerToType());
     scope->addValue(this->nameToken->value, pointer);
 
     if (initialValue != NULL)
@@ -1764,40 +1756,40 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
 TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     std::cout << "DEBUG: ASTAssignment::generateLLVM\n";
-    if (!scope->hasValue(this->nameToken->value))
+
+    TypedValue *valuePointer = this->pointerValue->generateLLVM(context, scope);
+    if (valuePointer == NULL)
     {
-        std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
+        std::cout << "ERROR: Cannot set variable '" << valuePointer->getOriginVariable() << "', it is not found\n";
         return NULL;
+    }
+    if (valuePointer->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "ERROR: assert failed: valuePointer->getTypeCode() != TypeCode::POINTER\n";
+        return NULL;
+    }
+    PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
+
+    TypedValue *newValue = this->value->generateLLVM(context, scope);
+
+    TypedValue *convertedValue;
+    if (*valuePointerType != *newValue->getType()->getPointerToType())
+    {
+        convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), true); // TODO: remove allowLosePrecision when casts are supported
+        if (convertedValue == NULL)
+        {
+            std::cout << "ERROR: Cannot set variable '" << valuePointer->getOriginVariable() << "', right-hand side has invalid type\n";
+            return NULL;
+        }
     }
     else
     {
-        TypedValue *newValue = this->value->generateLLVM(context, scope);
-        TypedValue *pointedValue = scope->getValue(this->nameToken->value);
-        if (pointedValue == NULL)
-        {
-            std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', it is not found\n";
-            return NULL;
-        }
-
-        TypedValue *convertedValue;
-        if (*pointedValue->getType() != *newValue->getType())
-        {
-            convertedValue = generateTypeConversion(context, newValue, pointedValue->getType(), true); // TODO: remove allowLosePrecision when casts are supported
-            if (convertedValue == NULL)
-            {
-                std::cout << "ERROR: Cannot set variable '" << this->nameToken->value << "', right-hand side has invalid type\n";
-                return NULL;
-            }
-        }
-        else
-        {
-            convertedValue = newValue;
-        }
-
-        bool isVolatile = false;
-        context->irBuilder->CreateStore(convertedValue->getValue(), pointedValue->getValue(), isVolatile);
-        return newValue;
+        convertedValue = newValue;
     }
+
+    bool isVolatile = false;
+    context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
+    return newValue;
 }
 
 TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -1885,7 +1877,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             arg.setName(parameter->getParameterName());
         }
 
-        existingFunctionValue = new TypedValue(function, newFunctionType);
+        existingFunctionValue = new TypedValue(function, newFunctionType->getPointerToType());
         if (!context->staticNamedValues.addValue(this->nameToken->value, existingFunctionValue))
         {
             std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
@@ -1918,10 +1910,11 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             Type *parameterType = parameter->getSpecifiedType();
             auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
             context->irBuilder->CreateStore(&parameterValue, parameterPointer, false);
-            functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType));
+            functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getPointerToType()));
         }
 
-        context->currentFunction = static_cast<FunctionType *>(existingFunctionValue->getType());
+        PointerType *functionPointerType = static_cast<PointerType *>(existingFunctionValue->getType());
+        context->currentFunction = static_cast<FunctionType *>(functionPointerType->getPointedType());
         this->body->generateLLVM(context, functionScope);
 
         // Check if the function was propery terminated
@@ -2017,23 +2010,17 @@ TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, Functi
     std::cout << "DEBUG: ASTIndexDereference::generateLLVM\n";
 
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
+    TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
+    if (pointerToIndex == NULL)
+    {
+        std::cout << "ERROR: index dereference only supports pointers\n";
+        return NULL;
+    }
+
     TypedValue *indexValue = this->index->generateLLVM(context, scope);
 
-    if (valueToIndex->getTypeCode() == TypeCode::STRUCT)
-    {
-        std::cout << "ERROR: struct indexing not implemented\n";
-        return NULL;
-    }
-    else if (valueToIndex->getTypeCode() == TypeCode::ARRAY)
-    {
-        std::cout << "ERROR: array indexing not implemented\n";
-        return NULL;
-    }
-    else
-    {
-        std::cout << "ERROR: cannot index type " << (int)valueToIndex->getTypeCode() << "\n";
-        return NULL;
-    }
+    std::cout << "ERROR: index dereference not implemented\n";
+    return NULL;
 }
 
 TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -2041,24 +2028,38 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     std::cout << "DEBUG: ASTMemberDereference::generateLLVM\n";
 
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
-
-    if (valueToIndex->getTypeCode() == TypeCode::STRUCT)
+    TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
+    if (pointerToIndex == NULL)
     {
-        StructType *structType = static_cast<StructType *>(valueToIndex->getType());
-        StructTypeField *structField = structType->getField(this->nameToken->value);
-        if (structField == NULL)
+        std::cout << "ERROR: member dereference only supports pointers\n";
+        return NULL;
+    }
+
+    PointerType *pointerTypeToIndex = static_cast<PointerType *>(pointerToIndex->getType());
+
+    if (pointerTypeToIndex->getPointedType()->getTypeCode() == TypeCode::STRUCT)
+    {
+        StructType *structType = static_cast<StructType *>(pointerTypeToIndex->getPointedType());
+        int fieldIndex = structType->getFieldIndex(this->nameToken->value);
+        if (fieldIndex < 0)
         {
-            std::cout << "ERROR: field named " << this->nameToken->value << " not found in struct\n";
+            std::cout << "ERROR: cannot access member '" << this->nameToken->value << "' of struct\n";
             return NULL;
         }
-        int structFieldIndex = structType->getFieldIndex(this->nameToken->value);
 
-        llvm::Value *fieldPointer = context->irBuilder->CreateStructGEP(structType->getLLVMType(*context->context), valueToIndex->getValue(), structFieldIndex, "structgep");
-        return new TypedValue(fieldPointer, structField->type);
+        StructTypeField *structField = structType->getField(this->nameToken->value);
+
+        // A struct is indexed
+        std::vector<llvm::Value *> indices;
+        indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+        indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, fieldIndex, false)));
+
+        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getPointedType()->getLLVMType(*context->context), pointerToIndex->getValue(), indices, "memberstruct");
+        return new TypedValue(fieldPointer, structField->type->getPointerToType());
     }
     else
     {
-        std::cout << "ERROR: cannot access a member of type " << (int)valueToIndex->getTypeCode() << "\n";
+        std::cout << "ERROR: member dereference only supports structs\n";
         return NULL;
     }
 }
@@ -2116,27 +2117,34 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     std::cout << "DEBUG: ASTInvocation::generateLLVM\n";
-    TypedValue *functionValue = context->staticNamedValues.getValue(this->functionNameToken->value);
+    TypedValue *functionValue = this->functionPointerValue->generateLLVM(context, scope);
     if (functionValue == NULL)
     {
-        std::cout << "ERROR: Function '" << this->functionNameToken->value << "' not found\n";
+        std::cout << "ERROR: Function to call not found\n";
         return NULL;
     }
-    if (functionValue->getTypeCode() != TypeCode::FUNCTION)
+
+    if (functionValue->getTypeCode() != TypeCode::POINTER)
     {
-        std::cout << "ERROR: Cannot call '" << this->functionNameToken->value << "', it isn't a function\n";
+        std::cout << "ERROR: Cannot invoke '" << functionValue->getOriginVariable() << "', it must be a pointer\n";
+        return NULL;
+    }
+    PointerType *functionPointerType = static_cast<PointerType *>(functionValue->getType());
+    if (functionPointerType->getPointedType()->getTypeCode() != TypeCode::FUNCTION)
+    {
+        std::cout << "ERROR: Cannot invoke '" << functionValue->getOriginVariable() << "', it must be a function pointer\n";
         return NULL;
     }
 
     llvm::Function *function = static_cast<llvm::Function *>(functionValue->getValue());
-    FunctionType *functionType = static_cast<FunctionType *>(functionValue->getType());
+    FunctionType *functionType = static_cast<FunctionType *>(functionPointerType->getPointedType());
 
     std::vector<FunctionParameter> &parameters = functionType->getParameters();
     int parameterCount = this->parameterValues->size();
     int actualParameterCount = parameters.size();
     if (actualParameterCount != parameterCount)
     {
-        std::cout << "ERROR: Invalid amount of parameters for function '" << this->functionNameToken->value << "', expected " << actualParameterCount << ", got " << parameterCount << "\n";
+        std::cout << "ERROR: Invalid amount of parameters for function '" << functionValue->getOriginVariable() << "' invocation, expected " << actualParameterCount << ", got " << parameterCount << "\n";
         return NULL;
     }
 
@@ -2154,7 +2162,7 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
         TypedValue *convertedValue = generateTypeConversion(context, parameterValue, parameter.type, true); // TODO: remove allowLosePrecision when casts are supported
         if (convertedValue == NULL || convertedValue->getValue() == NULL)
         {
-            std::cout << "ERROR: cannot convert value '" << parameter.name << "' for invoke '" << this->functionNameToken->value << "'\n";
+            std::cout << "ERROR: cannot convert value '" << parameter.name << "' for invoke '" << functionValue->getOriginVariable() << "'\n";
             return NULL;
         }
         parameterValues.push_back(convertedValue->getValue());

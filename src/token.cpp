@@ -48,7 +48,6 @@ void parseString(std::string &input, std::list<const Token *> &tokenList)
         }
         else if (state == TokenizeState::PARSING_LITERAL_NUMBER)
         {
-            std::cout << "DEBUG: parse " << currentChar << " " << currentString.size() << " " << currentString << "\n";
             if (isalnum(currentChar) || currentChar == '.' || currentChar == '_')
             {
                 currentString += currentChar;
