@@ -34,7 +34,7 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
         switch (tok->type)
         {
         case TokenType::STRUCT_KEYWORD:
-            statement = parseStructType(tokens);
+            statement = parseStructType(tokens, false);
             break;
         case TokenType::FUNC_KEYWORD:
             statement = parseFunction(tokens);
@@ -53,7 +53,7 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
             statement = parseReturn(tokens);
             break;
         case TokenType::SYMBOL:
-            statement = parseValueOrOperator(tokens);
+            statement = parseValueOrTypeCast(tokens);
             break;
         }
 
@@ -96,7 +96,7 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
     {
         // Parse type specifier
         tokens.pop_front();
-        typeSpecifier = parseType(tokens);
+        typeSpecifier = parseInlineType(tokens);
         if (typeSpecifier == NULL)
         {
             std::cout << "ERROR: Could not parse type specifier\n";
@@ -118,7 +118,7 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
     return new ASTParameter(nameToken, typeSpecifier);
 }
 
-ASTTypeNode *parseStructType(std::list<const Token *> &tokens)
+ASTTypeNode *parseStructType(std::list<const Token *> &tokens, bool isInline)
 {
     const Token *tok = tokens.front();
     if (tok == NULL)
@@ -126,13 +126,39 @@ ASTTypeNode *parseStructType(std::list<const Token *> &tokens)
         std::cout << "ERROR: Unexpected end of file\n";
         return NULL;
     }
-    if (tok->type != TokenType::STRUCT_KEYWORD)
+    if (!isInline)
     {
-        std::cout << "ERROR: Not a struct\n";
-        return NULL;
+        if (tok->type != TokenType::STRUCT_KEYWORD)
+        {
+            return NULL;
+        }
+        tokens.pop_front();
     }
-    tokens.pop_front();
-    tok = tokens.front();
+
+    bool managed = true, packed = false, value = false;
+    bool readingModifiers = true;
+    while (readingModifiers)
+    {
+        tok = tokens.front();
+        switch (tok->type)
+        {
+        case TokenType::VALUE_KEYWORD:
+            value = true;
+            tokens.pop_front();
+            break;
+        case TokenType::PACKED_KEYWORD:
+            packed = true;
+            tokens.pop_front();
+            break;
+        case TokenType::UNMANAGED_KEYWORD:
+            managed = false;
+            tokens.pop_front();
+            break;
+        default:
+            readingModifiers = false;
+            break;
+        }
+    }
 
     const Token *nameToken;
     if (tok->type == TokenType::SYMBOL)
@@ -145,6 +171,11 @@ ASTTypeNode *parseStructType(std::list<const Token *> &tokens)
     {
         // Unnamed struct
         nameToken = NULL;
+        if (!isInline)
+        {
+            std::cout << "ERROR: Global structs must have a name {\n";
+            return NULL;
+        }
     }
 
     if (tok->type != TokenType::CURLY_BRACKET_OPEN)
@@ -178,7 +209,7 @@ ASTTypeNode *parseStructType(std::list<const Token *> &tokens)
             // Parse field type
             tokens.pop_front();
 
-            ASTTypeNode *fieldType = parseType(tokens);
+            ASTTypeNode *fieldType = parseInlineType(tokens);
             bool hidden = false;
             fields.push_back(new ASTStructTypeField(fieldNameToken, fieldType, hidden));
 
@@ -197,11 +228,10 @@ ASTTypeNode *parseStructType(std::list<const Token *> &tokens)
         }
     }
 
-    bool managed = true, packed = true;
     return new ASTStructType(nameToken, fields, managed, packed);
 }
 
-ASTTypeNode *parseType(std::list<const Token *> &tokens)
+ASTTypeNode *parseInlineType(std::list<const Token *> &tokens)
 {
     const Token *tok = tokens.front();
     if (tok == NULL)
@@ -212,12 +242,15 @@ ASTTypeNode *parseType(std::list<const Token *> &tokens)
 
     switch (tok->type)
     {
-    case TokenType::STRUCT_KEYWORD:
-        return parseStructType(tokens);
+    case TokenType::PACKED_KEYWORD:
+    case TokenType::UNMANAGED_KEYWORD:
+    case TokenType::VALUE_KEYWORD:
+    case TokenType::CURLY_BRACKET_OPEN:
+        return parseStructType(tokens, true);
 
-    case TokenType::SYMBOL:
-        tokens.pop_front();
-        return new ASTTypeName(tok);
+        // case TokenType::SYMBOL:
+        //     tokens.pop_front();
+        //     return new ASTSymbol(tok);
 
     default:
         std::cout << "ERROR: Type must be a named type, struct or interface\n";
@@ -346,7 +379,7 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
     if (tok->type == TokenType::COLON)
     {
         tokens.pop_front();
-        returnType = parseType(tokens);
+        returnType = parseInlineType(tokens);
         if (returnType == NULL)
         {
             std::cout << "ERROR: Could not parse function return type\n";
@@ -400,7 +433,7 @@ ASTNode *parseIfStatement(std::list<const Token *> &tokens)
 
     tokens.pop_front();
 
-    ASTNode *condition = parseValueOrOperator(tokens);
+    ASTNode *condition = parseValueOrTypeCast(tokens);
     if (condition == NULL)
     {
         return NULL;
@@ -443,7 +476,7 @@ ASTNode *parseWhileStatement(std::list<const Token *> &tokens)
 
     tokens.pop_front();
 
-    ASTNode *condition = parseValueOrOperator(tokens);
+    ASTNode *condition = parseValueOrTypeCast(tokens);
     if (condition == NULL)
     {
         return NULL;
@@ -493,7 +526,7 @@ ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
 
     tokens.pop_front();
 
-    ASTNode *operand = parseValueOrOperator(tokens);
+    ASTNode *operand = parseValueAndSuffix(tokens);
     if (operand == NULL)
     {
         std::cout << "ERROR: Invalid unary operand\n";
@@ -557,7 +590,7 @@ ASTNode *parseStructValue(std::list<const Token *> &tokens)
         }
         tokens.pop_front();
 
-        ASTNode *fieldValue = parseValueOrOperator(tokens);
+        ASTNode *fieldValue = parseValueOrTypeCast(tokens);
         fields.push_back(new ASTStructValueField(fieldNameToken, fieldValue));
 
         tok = tokens.front();
@@ -606,7 +639,7 @@ ASTNode *parseValue(std::list<const Token *> &tokens)
     {
         tokens.pop_front();
 
-        ASTNode *innerValue = parseValueOrOperator(tokens);
+        ASTNode *innerValue = parseValueOrTypeCast(tokens);
         if (innerValue == NULL)
         {
             std::cout << "ERROR: Invalid brackets content \n";
@@ -678,7 +711,7 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
                     break;
                 }
 
-                ASTNode *value = parseValueOrOperator(tokens);
+                ASTNode *value = parseValueOrTypeCast(tokens);
                 parameterValues->push_back(value);
 
                 tok = tokens.front();
@@ -716,7 +749,7 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
         {
             // Parsse index dereference
             tokens.pop_front();
-            ASTNode *indexValue = parseValueOrOperator(tokens);
+            ASTNode *indexValue = parseValueOrTypeCast(tokens);
             if (indexValue == NULL)
             {
                 return NULL;
@@ -761,22 +794,10 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
             return top;
         }
 
-        if (tok->type == TokenType::COLON)
-        {
-            // This is a special operator that casts and requires a type name as second operand
-            tokens.pop_front();
-            ASTNode *rightType = parseType(tokens);
-            if (rightType == NULL)
-            {
-                std::cout << "ERROR: could not parse type after cast operator\n";
-                return NULL;
-            }
-            return new ASTOperator(tok, top, rightType);
-        }
-        else if (tok->type == TokenType::OPERATOR_ASSIGNMENT)
+        if (tok->type == TokenType::OPERATOR_ASSIGNMENT)
         {
             tokens.pop_front();
-            ASTNode *right = parseValueOrOperator(tokens);
+            ASTNode *right = parseValueOrTypeCast(tokens);
             if (right == NULL)
             {
                 std::cout << "ERROR: could not parse assignment value\n";
@@ -838,7 +859,7 @@ ASTReturn *parseReturn(std::list<const Token *> &tokens)
     }
     tokens.pop_front();
 
-    ASTNode *value = parseValueOrOperator(tokens);
+    ASTNode *value = parseValueOrTypeCast(tokens);
     return new ASTReturn(value);
 }
 
@@ -878,7 +899,7 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     if (tok->type == TokenType::COLON)
     {
         tokens.pop_front();
-        typeSpecifier = parseType(tokens);
+        typeSpecifier = parseInlineType(tokens);
     }
     else
     {
@@ -895,7 +916,7 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     {
         // Parse assignment
         tokens.pop_front();
-        ASTNode *value = parseValueOrOperator(tokens);
+        ASTNode *value = parseValueOrTypeCast(tokens);
         if (value == NULL)
         {
             std::cout << "ERROR: Invalid assignment value\n";
@@ -910,6 +931,40 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     }
 }
 
+ASTNode *parseValueOrTypeCast(std::list<const Token *> &tokens)
+{
+    ASTTypeNode *leftType = parseInlineType(tokens);
+    if (leftType == NULL)
+    {
+        // This can't be a type cast, return a value
+        return parseValueOrOperator(tokens);
+    }
+    else
+    {
+        const Token *tok = tokens.front();
+        switch (tok->type)
+        {
+        case TokenType::AS_KEYWORD:
+        {
+            // This is a cast
+            const Token *operatorToken = tok;
+            tokens.pop_front();
+            ASTNode *rightValue = parseValueOrTypeCast(tokens);
+            if (rightValue == NULL)
+            {
+                std::cout << "ERROR: could not parse type cast\n";
+                return NULL;
+            }
+            return new ASTCastOperator(operatorToken, leftType, rightValue);
+        }
+
+        default:
+            std::cout << "ERROR: found type definition at invalid location\n";
+            return NULL;
+        }
+    }
+}
+
 ASTFile *parseFile(std::list<const Token *> &tokens)
 {
     std::list<ASTNode *> *rootNodes = new std::list<ASTNode *>();
@@ -921,6 +976,9 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
         ASTNode *statement = NULL;
         switch (tok->type)
         {
+        case TokenType::STRUCT_KEYWORD:
+            statement = parseStructType(tokens, false);
+            break;
         case TokenType::FUNC_KEYWORD:
         case TokenType::EXPORT_KEYWORD:
         case TokenType::EXTERN_KEYWORD:
@@ -930,9 +988,9 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
         case TokenType::LET_KEYWORD:
             statement = parseDeclaration(tokens);
             break;
-        case TokenType::SYMBOL:
-            statement = parseValueOrOperator(tokens);
-            break;
+            // case TokenType::SYMBOL:
+            //     statement = parseValueOrOperator(tokens);
+            //     break;
         }
 
         if (statement == NULL)
@@ -1435,7 +1493,7 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
         // Cast operator does not have a right value (only type)
         auto *rightType = static_cast<ASTTypeNode *>(this->right);
-        auto targetType = rightType->getSpecifiedType();
+        auto targetType = rightType->getSpecifiedType(context, scope);
         if (targetType == NULL)
         {
             return NULL;
@@ -1726,7 +1784,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     Type *specifiedType;
     if (this->typeSpecifier != NULL)
     {
-        specifiedType = this->typeSpecifier->getSpecifiedType();
+        specifiedType = this->typeSpecifier->getSpecifiedType(context, scope);
     }
     else
     {
@@ -1871,13 +1929,13 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         std::vector<FunctionParameter> parameters;
         for (ASTParameter *parameter : *this->parameters)
         {
-            parameters.push_back(FunctionParameter(parameter->getSpecifiedType(), parameter->getParameterName()));
+            parameters.push_back(FunctionParameter(parameter->getSpecifiedType(context, scope), parameter->getParameterName()));
         }
 
         Type *returnType;
         if (this->returnType != NULL)
         {
-            returnType = this->returnType->getSpecifiedType();
+            returnType = this->returnType->getSpecifiedType(context, scope);
         }
         else
         {
@@ -1933,7 +1991,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         for (auto &parameterValue : function->args())
         {
             ASTParameter *parameter = (*this->parameters)[i++];
-            Type *parameterType = parameter->getSpecifiedType();
+            Type *parameterType = parameter->getSpecifiedType(context, scope);
             auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
             context->irBuilder->CreateStore(&parameterValue, parameterPointer, false);
             functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getPointerToType()));
