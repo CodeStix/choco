@@ -37,5 +37,4 @@ func recurse(a: Int32): Int32 {
     else {
         return a + recurse(a - 1)
     }
-    return 0
 }

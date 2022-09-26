@@ -2222,8 +2222,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         this->body->generateLLVM(context, functionScope);
 
         // Check if the function was propery terminated
-        llvm::BasicBlock *functionEndBlock = context->irBuilder->GetInsertBlock();
-        if (functionEndBlock->getTerminator() == NULL)
+        // llvm::BasicBlock *functionEndBlock = context->irBuilder->GetInsertBlock();
+        if (!this->body->isTerminating())
         {
             if (this->returnType == NULL)
             {
@@ -2231,7 +2231,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             }
             else
             {
-                std::cout << "ERROR: Function '" << this->nameToken->value << "' must return a value";
+                std::cout << "ERROR: Function '" << this->nameToken->value << "' must return a value\n";
                 return NULL;
             }
         }
@@ -2307,7 +2307,10 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     }
 
     context->irBuilder->SetInsertPoint(continueBlock);
-    continueBlock->insertInto(parentFunction);
+    if (continueBlock->hasNPredecessorsOrMore(1))
+    {
+        continueBlock->insertInto(parentFunction);
+    }
     return NULL;
 }
 
@@ -2442,7 +2445,10 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
     }
 
     context->irBuilder->SetInsertPoint(continueBlock);
-    continueBlock->insertInto(parentFunction);
+    if (continueBlock->hasNPredecessorsOrMore(1))
+    {
+        continueBlock->insertInto(parentFunction);
+    }
 
     return NULL;
 }

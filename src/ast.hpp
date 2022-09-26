@@ -141,6 +141,11 @@ public:
         std::cout << "WARNING: ASTNode::generateLLVM was called without any implementation\n";
         return NULL;
     }
+
+    virtual bool isTerminating()
+    {
+        return false;
+    }
 };
 
 class ASTUnaryOperator : public ASTNode
@@ -599,6 +604,11 @@ public:
         return str;
     }
 
+    bool isTerminating() override
+    {
+        return true;
+    }
+
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
@@ -619,6 +629,18 @@ public:
         }
         str += "}";
         return str;
+    }
+
+    bool isTerminating() override
+    {
+        for (ASTNode *statement : *this->statements)
+        {
+            if (statement->isTerminating())
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
@@ -697,11 +719,11 @@ public:
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTNode *returnType, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
+    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTNode *returnType, ASTBlock *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
     const Token *nameToken;
     std::vector<ASTParameter *> *parameters;
     ASTNode *returnType;
-    ASTNode *body;
+    ASTBlock *body;
     bool exported;
 
     std::string toString() override
@@ -824,6 +846,18 @@ public:
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+    bool isTerminating() override
+    {
+        if (this->elseBody != NULL)
+        {
+            return this->thenBody->isTerminating() && this->elseBody->isTerminating();
+        }
+        else
+        {
+            return false;
+        }
+    }
 };
 
 class ASTWhileStatement : public ASTNode
@@ -845,6 +879,19 @@ public:
             str += this->elseBody->toString();
         }
         return str;
+    }
+
+    bool isTerminating() override
+    {
+        if (this->elseBody != NULL)
+        {
+            // TODO: check if break is used
+            return this->loopBody->isTerminating() && this->elseBody->isTerminating();
+        }
+        else
+        {
+            return false;
+        }
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
