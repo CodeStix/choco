@@ -104,6 +104,11 @@ public:
         return this->tokens[this->position++];
     }
 
+    int size()
+    {
+        return this->tokens.size();
+    }
+
     const Token *peek()
     {
         if (this->isEndOfFile())

@@ -514,7 +514,7 @@ ASTNode *parseUnaryOperator(TokenStream *tokens)
     ASTNode *operand = parseValueAndSuffix(tokens);
     if (operand == NULL)
     {
-        std::cout << "ERROR: Invalid unary operand at " << tok->position << " type " << getTokenTypeName(tok->type) << "\n";
+        // std::cout << "ERROR: Invalid unary operand at " << tok->position << " type " << getTokenTypeName(tok->type) << "\n";
         tokens->setPosition(saved);
         return NULL;
     }
@@ -1141,7 +1141,9 @@ llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm
 
 TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTSymbol::generateLLVM\n";
+#endif
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
@@ -1158,7 +1160,9 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
 
 TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTLiteralNumber::generateLLVM\n";
+#endif
     int integerBase = 10;
     std::string noPrefix = this->valueToken->value;
     if (this->valueToken->value.find("0x") == 0)
@@ -1194,21 +1198,29 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 
     if (isFloating)
     {
+#ifdef DEBUG
         std::cout << "debug: ASTLiteralNumber::generateLLVM floating\n";
+#endif
         double floatingValue = strtod(cleaned.c_str(), NULL);
         Type *type = new FloatType(64);
         auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), floatingValue);
+#ifdef DEBUG
         std::cout << "debug: ASTLiteralNumber::generateLLVM floating 2\n";
+#endif
         return new TypedValue(value, type);
     }
     else
     {
+#ifdef DEBUG
         std::cout << "debug: ASTLiteralNumber::generateLLVM int\n";
+#endif
         unsigned long long integerValue = strtoull(cleaned.c_str(), NULL, integerBase);
         bool isSigned = integerValue <= INT64_MAX;
         Type *type = new IntegerType(64, isSigned);
         auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, isSigned);
+#ifdef DEBUG
         std::cout << "debug: ASTLiteralNumber::generateLLVM int 2\n";
+#endif
         return new TypedValue(value, type);
     }
 }
@@ -1514,7 +1526,9 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
 TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTStruct::generateLLVM\n";
+#endif
 
     bool isType = false;
     std::vector<TypedValue *> fieldValues;
@@ -1571,13 +1585,17 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
 
 TypedValue *ASTStructField::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTStructField::generateLLVM\n";
+#endif
     return this->value->generateLLVM(context, scope);
 }
 
 TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTUnaryOperator::generateLLVM\n";
+#endif
     auto *operand = this->operand->generateLLVM(context, scope);
 
     switch (this->operatorToken->type)
@@ -1630,7 +1648,9 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTCast::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTCast::generateLLVM\n";
+#endif
 
     auto targetType = this->targetType->generateLLVM(context, scope);
     if (targetType == NULL || !targetType->isType())
@@ -1653,9 +1673,13 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 {
     TokenType operatorType = this->operatorToken->type;
 
+#ifdef DEBUG
     std::cout << "debug: ASTOperator::generateLLVM left\n";
+#endif
     auto *left = this->left->generateLLVM(context, scope);
+#ifdef DEBUG
     std::cout << "debug: ASTOperator::generateLLVM right\n";
+#endif
     auto *right = this->right->generateLLVM(context, scope);
 
     if (!left || !right)
@@ -1910,7 +1934,9 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
 TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTLiteralString::generateLLVM\n";
+#endif
     auto value = context->irBuilder->CreateGlobalString(this->valueToken->value, "str");
     Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length() + 1);
     return new TypedValue(value, type);
@@ -1918,7 +1944,9 @@ TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTDeclaration::generateLLVM\n";
+#endif
 
     if (scope->hasValue(this->nameToken->value))
     {
@@ -2000,7 +2028,9 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
 
 TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTAssignment::generateLLVM\n";
+#endif
 
     TypedValue *valuePointer = this->pointerValue->generateLLVM(context, scope);
     if (valuePointer == NULL)
@@ -2039,7 +2069,9 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 
 TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTReturn::generateLLVM\n";
+#endif
     if (this->value != NULL)
     {
         auto value = this->value->generateLLVM(context, scope);
@@ -2070,11 +2102,15 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
 
 TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTBlock::generateLLVM\n";
+#endif
     TypedValue *lastValue = NULL;
     for (ASTNode *statement : *this->statements)
     {
+#ifdef DEBUG
         std::cout << "debug: ASTBlock::generateLLVM generate " << astNodeTypeToString(statement->type) << "\n";
+#endif
         lastValue = statement->generateLLVM(context, scope);
     }
     return lastValue;
@@ -2082,13 +2118,17 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
 
 TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTParameter::generateLLVM\n";
+#endif
     return this->typeSpecifier->generateLLVM(context, scope);
 }
 
 TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTFunction::generateLLVM\n";
+#endif
 
     std::vector<FunctionParameter> parameters;
     for (ASTParameter *parameter : *this->parameters)
@@ -2212,7 +2252,9 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
 TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTWhileStatement::generateLLVM\n";
+#endif
     TypedValue *preConditionValue = this->condition->generateLLVM(context, scope);
     if (*preConditionValue->getType() != BOOL_TYPE)
     {
@@ -2271,7 +2313,9 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
 
 TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTIndexDereference::generateLLVM\n";
+#endif
 
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
     TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
@@ -2289,7 +2333,9 @@ TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, Functi
 
 TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTMemberDereference::generateLLVM\n";
+#endif
 
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
 
@@ -2351,7 +2397,9 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
 
 TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTIfStatement::generateLLVM\n";
+#endif
 
     TypedValue *condition = this->condition->generateLLVM(context, scope);
     // llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionFloat, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "ifcond");
@@ -2401,7 +2449,9 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 
 TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTInvocation::generateLLVM\n";
+#endif
     TypedValue *functionValue = this->functionPointerValue->generateLLVM(context, scope);
     if (functionValue == NULL)
     {
@@ -2459,13 +2509,17 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
 
 TypedValue *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTBrackets::generateLLVM\n";
+#endif
     return this->inner->generateLLVM(context, scope);
 }
 
 TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTFile::generateLLVM\n";
+#endif
     FunctionScope *fileScope = new FunctionScope(*scope);
     for (ASTNode *statement : *this->statements)
     {
@@ -2476,7 +2530,9 @@ TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *sco
 
 TypedValue *ASTStructDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
+#ifdef DEBUG
     std::cout << "debug: ASTStructDeclaration::generateLLVM\n";
+#endif
 
     TypedValue *type = this->structNode->generateLLVM(context, scope);
     if (type == NULL)

@@ -1,3 +1,4 @@
+// #define DEBUG
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -33,25 +34,34 @@ int main()
     std::string fileContent;
     std::getline(std::ifstream("test.ch"), fileContent, '\0');
 
-    std::cout << "Tokenizing...\n";
+    std::cout << "[1/4] Tokenizing...\n";
 
     std::vector<const Token *> tokens;
     parseString(fileContent, tokens);
 
     TokenStream *tokenStream = new TokenStream(tokens);
 
-    std::cout << "Tokenizing done\n";
-    // for (const auto &token : tokens)
-    // {
-    //     std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
-    // }
+#ifdef DEBUG
+    std::cout << "[1/4] " << tokenStream->size() << " tokens parsed\n";
+    for (const auto &token : tokens)
+    {
+        std::cout << getTokenTypeName(token->type) << " token at " << token->position << ", value = " << token->value << "\n";
+    }
+#endif
 
-    std::cout << "Parsing...\n";
+    std::cout << "[2/4] Parsing...\n";
     ASTFile *file = parseFile(tokenStream);
-    std::cout << "Parsing done\n";
-    std::cout << file->toString() << "\n";
+    if (file == NULL)
+    {
+        std::cout << "ERROR: Could not parse file, check console for programs\n";
+        return 1;
+    }
 
-    std::cout << "Generating code...\n";
+#ifdef DEBUG
+    std::cout << file->toString() << "\n";
+#endif
+
+    std::cout << "[3/4] Generating code...\n";
 
     auto context = new GenerationContext();
     file->declareStaticNames(&context->globalModule);
@@ -69,14 +79,15 @@ int main()
     TypedValue *mainFunction = context->globalModule.getValue("main", context, scope);
     if (mainFunction == NULL)
     {
-        std::cout << "ERROR: could not find main function\n";
+        std::cout << "ERROR: Could not find main function (probably wasn't generated because of other problems)\n";
         return 1;
     }
-    std::cout << "Generation done\n";
 
+#ifdef DEBUG
     context->module->print(llvm::errs(), NULL);
+#endif
 
-    std::cout << "Creating executable...\n";
+    std::cout << "[4/4] Creating executable...\n";
 
     auto targetCpu = "x86-64";
     auto targetFeatures = ""; // "+avx,+avx2,+aes,+sse,+sse2,+sse3";
@@ -109,7 +120,6 @@ int main()
     passManager.run(*context->module);
     outputFile.close();
 
-    std::cout << "Wrote to " << outputFilePath << "\n";
-    std::cout << "Everything is done\n";
+    std::cout << "[4/4] Wrote to " << outputFilePath << "\n";
     return 0;
 }
