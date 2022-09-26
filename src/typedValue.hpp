@@ -616,8 +616,17 @@ public:
             str += "unmanaged ";
         }
         str += "{";
+        bool first = true;
         for (auto &field : this->fields)
         {
+            if (first)
+            {
+                first = false;
+            }
+            else
+            {
+                str += ", ";
+            }
             str += field.name;
             str += ": ";
             str += field.type->toString();

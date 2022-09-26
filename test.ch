@@ -2,10 +2,11 @@
 export extern func printDouble(float: Float32): Float32
 
 func getInteger(): Int64 {
-    return 12
+    return 16
 }
 
 struct TestStruct {
+    original: Int32
     val: Int32
 }
 
@@ -15,6 +16,7 @@ func printStruct(str: TestStruct) {
 
 export func main() {
     let b = TestStruct {
+        original: Int32 getInteger()
         val: Int32 getInteger()
     } 
 
@@ -27,7 +29,8 @@ export func main() {
         printStruct(b)
     }
 
-    printDouble(recurse(5))
+    printDouble(recurse(50))
+    printDouble(b.original)
 }
 
 func recurse(a: Int32): Int32 {
