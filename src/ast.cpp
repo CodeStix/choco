@@ -1,32 +1,26 @@
 #include "ast.hpp"
 
-ASTBlock *parseBlock(std::list<const Token *> &tokens)
+ASTBlock *parseBlock(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
+
     if (tok->type != TokenType::CURLY_BRACKET_OPEN)
     {
         std::cout << "ERROR: Expected { to open code block\n";
+        tokens->setPosition(saved);
         return NULL;
     }
-    tokens.pop_front();
+    tokens->next();
 
     std::list<ASTNode *> *statements = new std::list<ASTNode *>();
     while (1)
     {
-        tok = tokens.front();
-        if (tok == NULL)
-        {
-            std::cout << "ERROR: Unexpected end of file\n";
-            return NULL;
-        }
+        tok = tokens->peek();
+
         if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
         {
-            tokens.pop_front();
+            tokens->next();
             return new ASTBlock(statements);
         }
 
@@ -60,7 +54,7 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
         if (statement == NULL)
         {
             std::cout << "ERROR: Invalid statement at '" << getTokenTypeName(tok->type) << "'\n";
-            tokens.pop_front();
+            tokens->next();
         }
         else
         {
@@ -69,37 +63,31 @@ ASTBlock *parseBlock(std::list<const Token *> &tokens)
     }
 }
 
-ASTParameter *parseParameter(std::list<const Token *> &tokens)
+ASTParameter *parseParameter(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
+
     if (tok->type != TokenType::SYMBOL)
     {
         std::cout << "ERROR: Type must be a name\n";
+        tokens->setPosition(saved);
         return NULL;
     }
     const Token *nameToken = tok;
-    tokens.pop_front();
-    tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    tokens->next();
+    tok = tokens->peek();
 
     ASTNode *typeSpecifier;
     if (tok->type == TokenType::COLON)
     {
         // Parse type specifier
-        tokens.pop_front();
+        tokens->next();
         typeSpecifier = parseInlineType(tokens);
         if (typeSpecifier == NULL)
         {
             std::cout << "ERROR: Could not parse type specifier\n";
+            tokens->setPosition(saved);
             return NULL;
         }
     }
@@ -118,41 +106,36 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
     return new ASTParameter(nameToken, typeSpecifier);
 }
 
-// ASTTypeNode *parseStructType(std::list<const Token *> &tokens, bool isInline)
+// ASTTypeNode *parseStructType(TokenStream* tokens, bool isInline)
 // {
-//     const Token *tok = tokens.front();
-//     if (tok == NULL)
-//     {
-//         std::cout << "ERROR: Unexpected end of file\n";
-//         return NULL;
-//     }
+//     const Token *tok = tokens->peek();
 //     if (!isInline)
 //     {
 //         if (tok->type != TokenType::STRUCT_KEYWORD)
 //         {
 //             return NULL;
 //         }
-//         tokens.pop_front();
+//         tokens->next();
 //     }
 
 //     bool managed = true, packed = false, value = false;
 //     bool readingModifiers = true;
 //     while (readingModifiers)
 //     {
-//         tok = tokens.front();
+//         tok = tokens->peek();
 //         switch (tok->type)
 //         {
 //         case TokenType::VALUE_KEYWORD:
 //             value = true;
-//             tokens.pop_front();
+//             tokens->next();
 //             break;
 //         case TokenType::PACKED_KEYWORD:
 //             packed = true;
-//             tokens.pop_front();
+//             tokens->next();
 //             break;
 //         case TokenType::UNMANAGED_KEYWORD:
 //             managed = false;
-//             tokens.pop_front();
+//             tokens->next();
 //             break;
 //         default:
 //             readingModifiers = false;
@@ -164,8 +147,8 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
 //     if (tok->type == TokenType::SYMBOL)
 //     {
 //         nameToken = tok;
-//         tokens.pop_front();
-//         tok = tokens.front();
+//         tokens->next();
+//         tok = tokens->peek();
 //     }
 //     else
 //     {
@@ -183,15 +166,15 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
 //         std::cout << "ERROR: Struct type must start with {\n";
 //         return NULL;
 //     }
-//     tokens.pop_front();
+//     tokens->next();
 
 //     std::vector<ASTStructTypeField *> fields;
 //     while (1)
 //     {
-//         const Token *tok = tokens.front();
+//         const Token *tok = tokens->peek();
 //         if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
 //         {
-//             tokens.pop_front();
+//             tokens->next();
 //             break;
 //         }
 
@@ -200,80 +183,65 @@ ASTParameter *parseParameter(std::list<const Token *> &tokens)
 //         {
 //             // Parse field name
 //             fieldNameToken = tok;
-//             tokens.pop_front();
-//             tok = tokens.front();
+//             tokens->next();
+//             tok = tokens->peek();
 //         }
 
 //         if (tok->type == TokenType::COLON)
 //         {
 //             // Parse field type
-//             tokens.pop_front();
+//             tokens->next();
 
 //             ASTTypeNode *fieldType = parseInlineType(tokens);
 //             bool hidden = false;
 //             fields.push_back(new ASTStructTypeField(fieldNameToken, fieldType, hidden));
 
-//             tok = tokens.front();
+//             tok = tokens->peek();
 //         }
 //         else
 //         {
 //             std::cout << "ERROR: Unexpected token while parsing struct\n";
-//             tokens.pop_front();
+//             tokens->next();
 //             continue;
 //         }
 
 //         if (tok->type == TokenType::COMMA)
 //         {
-//             tokens.pop_front();
+//             tokens->next();
 //         }
 //     }
 
 //     return new ASTStructType(nameToken, fields, managed, packed);
 // }
 
-ASTFunction *parseFunction(std::list<const Token *> &tokens)
+ASTFunction *parseFunction(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+
+    const Token *tok = tokens->peek();
     const Token *exportToken = NULL;
     if (tok->type == TokenType::EXPORT_KEYWORD)
     {
         exportToken = tok;
-        tokens.pop_front();
-        tok = tokens.front();
+        tokens->next();
+        tok = tokens->peek();
     }
     const Token *externToken = NULL;
     if (tok->type == TokenType::EXTERN_KEYWORD)
     {
         externToken = tok;
-        tokens.pop_front();
-        tok = tokens.front();
+        tokens->next();
+        tok = tokens->peek();
     }
     if (tok->type != TokenType::FUNC_KEYWORD)
     {
-        if (externToken != NULL)
-        {
-            tokens.push_front(externToken);
-        }
-        if (exportToken != NULL)
-        {
-            tokens.push_front(exportToken);
-        }
+        tokens->setPosition(saved);
         std::cout << "ERROR: Function must start with 'func'\n";
         return NULL;
     }
-    tokens.pop_front();
+    tokens->next();
 
-    tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    tok = tokens->peek();
     const Token *nameToken = tok;
     if (nameToken->type != TokenType::SYMBOL)
     {
@@ -281,36 +249,26 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
     }
     else
     {
-        tokens.pop_front();
+        tokens->next();
     }
 
-    tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    tok = tokens->peek();
     if (tok->type != TokenType::BRACKET_OPEN)
     {
         std::cout << "ERROR: Function must have parameter list\n";
     }
     else
     {
-        tokens.pop_front();
+        tokens->next();
     }
 
     std::vector<ASTParameter *> *parameters = new std::vector<ASTParameter *>();
     while (true)
     {
-        tok = tokens.front();
-        if (tok == NULL)
-        {
-            std::cout << "ERROR: Unexpected end of file\n";
-            return NULL;
-        }
+        tok = tokens->peek();
         if (tok->type == TokenType::BRACKET_CLOSE)
         {
-            tokens.pop_front();
+            tokens->next();
             break;
         }
 
@@ -322,12 +280,7 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         }
         parameters->push_back(parameter);
 
-        tok = tokens.front();
-        if (tok == NULL)
-        {
-            std::cout << "ERROR: Unexpected end of file\n";
-            return NULL;
-        }
+        tok = tokens->peek();
         if (tok->type != TokenType::COMMA)
         {
             if (tok->type != TokenType::BRACKET_CLOSE)
@@ -337,21 +290,16 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
         }
         else
         {
-            tokens.pop_front();
+            tokens->next();
         }
     }
 
-    tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    tok = tokens->peek();
 
     ASTNode *returnType;
     if (tok->type == TokenType::COLON)
     {
-        tokens.pop_front();
+        tokens->next();
         returnType = parseInlineType(tokens);
         if (returnType == NULL)
         {
@@ -366,12 +314,7 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
 
     if (externToken == NULL)
     {
-        tok = tokens.front();
-        if (tok == NULL)
-        {
-            std::cout << "ERROR: Unexpected end of file\n";
-            return NULL;
-        }
+        tok = tokens->peek();
 
         if (tok->type == TokenType::CURLY_BRACKET_OPEN)
         {
@@ -391,20 +334,18 @@ ASTFunction *parseFunction(std::list<const Token *> &tokens)
     }
 }
 
-ASTNode *parseIfStatement(std::list<const Token *> &tokens)
+ASTNode *parseIfStatement(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
+
     if (tok->type != TokenType::IF_KEYWORD)
     {
+        tokens->setPosition(saved);
         return NULL;
     }
 
-    tokens.pop_front();
+    tokens->next();
 
     ASTNode *condition = parseValueOrOperator(tokens);
     if (condition == NULL)
@@ -419,10 +360,10 @@ ASTNode *parseIfStatement(std::list<const Token *> &tokens)
     }
 
     ASTNode *elseBody = NULL;
-    tok = tokens.front();
+    tok = tokens->peek();
     if (tok->type == TokenType::ELSE_KEYWORD)
     {
-        tokens.pop_front();
+        tokens->next();
 
         elseBody = parseBlock(tokens);
         if (elseBody == NULL)
@@ -434,20 +375,18 @@ ASTNode *parseIfStatement(std::list<const Token *> &tokens)
     return new ASTIfStatement(condition, thenBody, elseBody);
 }
 
-ASTNode *parseWhileStatement(std::list<const Token *> &tokens)
+ASTNode *parseWhileStatement(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
+
     if (tok->type != TokenType::WHILE_KEYWORD)
     {
+        tokens->setPosition(saved);
         return NULL;
     }
 
-    tokens.pop_front();
+    tokens->next();
 
     ASTNode *condition = parseValueOrOperator(tokens);
     if (condition == NULL)
@@ -462,10 +401,10 @@ ASTNode *parseWhileStatement(std::list<const Token *> &tokens)
     }
 
     ASTNode *elseBody = NULL;
-    tok = tokens.front();
+    tok = tokens->peek();
     if (tok->type == TokenType::ELSE_KEYWORD)
     {
-        tokens.pop_front();
+        tokens->next();
 
         elseBody = parseBlock(tokens);
         if (elseBody == NULL)
@@ -477,14 +416,10 @@ ASTNode *parseWhileStatement(std::list<const Token *> &tokens)
     return new ASTWhileStatement(condition, loopBody, elseBody);
 }
 
-ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
+ASTNode *parseUnaryOperator(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
 
     const Token *operandToken = tok;
     switch (operandToken->type)
@@ -494,10 +429,11 @@ ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
     case TokenType::OPERATOR_EXCLAMATION:
         break;
     default:
+        tokens->setPosition(saved);
         return NULL;
     }
 
-    tokens.pop_front();
+    tokens->next();
 
     ASTNode *operand = parseValueAndSuffix(tokens);
     if (operand == NULL)
@@ -509,33 +445,29 @@ ASTNode *parseUnaryOperator(std::list<const Token *> &tokens)
     return new ASTUnaryOperator(operandToken, operand);
 }
 
-ASTNode *parseStruct(std::list<const Token *> &tokens)
+ASTNode *parseStruct(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
 
     bool managed = true, packed = false, value = false;
     bool readingModifiers = true;
     while (readingModifiers)
     {
-        tok = tokens.front();
+        tok = tokens->peek();
         switch (tok->type)
         {
         case TokenType::VALUE_KEYWORD:
             value = true;
-            tokens.pop_front();
+            tokens->next();
             break;
         case TokenType::PACKED_KEYWORD:
             packed = true;
-            tokens.pop_front();
+            tokens->next();
             break;
         case TokenType::UNMANAGED_KEYWORD:
             managed = false;
-            tokens.pop_front();
+            tokens->next();
             break;
         default:
             readingModifiers = false;
@@ -546,59 +478,56 @@ ASTNode *parseStruct(std::list<const Token *> &tokens)
     if (tok->type != TokenType::CURLY_BRACKET_OPEN)
     {
         std::cout << "ERROR: Struct value must start with {\n";
+        tokens->setPosition(saved);
         return NULL;
     }
-    tokens.pop_front();
+    tokens->next();
 
     std::vector<ASTStructField *> fields;
     while (1)
     {
-        tok = tokens.front();
+        tok = tokens->peek();
         if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
         {
-            tokens.pop_front();
+            tokens->next();
             break;
         }
 
         if (tok->type != TokenType::SYMBOL)
         {
-            tokens.pop_front();
+            tokens->next();
             std::cout << "ERROR: Struct value must contain fields at " << tok->position << " but got '" << tok->value << "'\n";
             return NULL;
         }
         const Token *fieldNameToken = tok;
 
-        tokens.pop_front();
-        tok = tokens.front();
+        tokens->next();
+        tok = tokens->peek();
         if (tok->type != TokenType::COLON)
         {
-            tokens.pop_front();
+            tokens->next();
             std::cout << "ERROR: Struct value must have colon\n";
             return NULL;
         }
-        tokens.pop_front();
+        tokens->next();
 
         ASTNode *fieldValue = parseValueOrOperator(tokens);
         fields.push_back(new ASTStructField(fieldNameToken, fieldValue));
 
-        tok = tokens.front();
+        tok = tokens->peek();
         if (tok->type == TokenType::COMMA)
         {
-            tokens.pop_front();
+            tokens->next();
         }
     }
 
     return new ASTStruct(fields);
 }
 
-ASTNode *parseInlineType(std::list<const Token *> &tokens)
+ASTNode *parseInlineType(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
 
     ASTNode *value;
     switch (tok->type)
@@ -614,7 +543,7 @@ ASTNode *parseInlineType(std::list<const Token *> &tokens)
 
     case TokenType::BRACKET_OPEN:
     {
-        tokens.pop_front();
+        tokens->next();
 
         ASTNode *innerValue = parseInlineType(tokens);
         if (innerValue == NULL)
@@ -623,14 +552,14 @@ ASTNode *parseInlineType(std::list<const Token *> &tokens)
             return NULL;
         }
 
-        tok = tokens.front();
+        tok = tokens->peek();
         if (tok->type != TokenType::BRACKET_CLOSE)
         {
             std::cout << "ERROR: Brackets must be closed\n";
         }
         else
         {
-            tokens.pop_front();
+            tokens->next();
         }
 
         value = new ASTBrackets(innerValue);
@@ -639,7 +568,7 @@ ASTNode *parseInlineType(std::list<const Token *> &tokens)
 
     case TokenType::SYMBOL:
     {
-        tokens.pop_front();
+        tokens->next();
         value = new ASTSymbol(tok);
         break;
     }
@@ -651,14 +580,10 @@ ASTNode *parseInlineType(std::list<const Token *> &tokens)
     return value;
 }
 
-ASTNode *parseValueOrType(std::list<const Token *> &tokens)
+ASTNode *parseValueOrType(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
 
     ASTNode *value;
     switch (tok->type)
@@ -679,12 +604,12 @@ ASTNode *parseValueOrType(std::list<const Token *> &tokens)
 
     case TokenType::LITERAL_STRING:
         value = new ASTLiteralString(tok);
-        tokens.pop_front();
+        tokens->next();
         break;
 
     case TokenType::LITERAL_NUMBER:
         value = new ASTLiteralNumber(tok);
-        tokens.pop_front();
+        tokens->next();
         break;
 
     case TokenType::OPERATOR_ADDITION:
@@ -695,7 +620,7 @@ ASTNode *parseValueOrType(std::list<const Token *> &tokens)
 
     case TokenType::BRACKET_OPEN:
     {
-        tokens.pop_front();
+        tokens->next();
 
         ASTNode *innerValue = parseValueOrOperator(tokens);
         if (innerValue == NULL)
@@ -704,14 +629,14 @@ ASTNode *parseValueOrType(std::list<const Token *> &tokens)
             return NULL;
         }
 
-        tok = tokens.front();
+        tok = tokens->peek();
         if (tok->type != TokenType::BRACKET_CLOSE)
         {
             std::cout << "ERROR: Brackets must be closed\n";
         }
         else
         {
-            tokens.pop_front();
+            tokens->next();
         }
 
         value = new ASTBrackets(innerValue);
@@ -737,7 +662,7 @@ ASTNode *parseValueOrType(std::list<const Token *> &tokens)
 
     case TokenType::SYMBOL:
     {
-        tokens.pop_front();
+        tokens->next();
         value = new ASTSymbol(tok);
 
         ASTNode *castedValue = parseValueAndSuffix(tokens);
@@ -755,37 +680,34 @@ ASTNode *parseValueOrType(std::list<const Token *> &tokens)
     return value;
 }
 
-ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
+ASTNode *parseValueAndSuffix(TokenStream *tokens)
 {
+    int saved = tokens->getPosition();
     ASTNode *value = parseValueOrType(tokens);
 
     while (1)
     {
-        const Token *tok = tokens.front();
+        const Token *tok = tokens->peek();
         if (tok->type == TokenType::BRACKET_OPEN)
         {
             // Invocation
-            tokens.pop_front();
+            tokens->next();
 
             std::vector<ASTNode *> *parameterValues = new std::vector<ASTNode *>();
             while (true)
             {
-                tok = tokens.front();
-                if (tok == NULL)
-                {
-                    std::cout << "ERROR: Unexpected end of file\n";
-                    return NULL;
-                }
+                tok = tokens->peek();
+
                 if (tok->type == TokenType::BRACKET_CLOSE)
                 {
-                    tokens.pop_front();
+                    tokens->next();
                     break;
                 }
 
                 ASTNode *value = parseValueOrOperator(tokens);
                 parameterValues->push_back(value);
 
-                tok = tokens.front();
+                tok = tokens->peek();
                 if (tok->type != TokenType::COMMA)
                 {
                     if (tok->type != TokenType::BRACKET_CLOSE)
@@ -795,7 +717,7 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
                 }
                 else
                 {
-                    tokens.pop_front();
+                    tokens->next();
                 }
             }
 
@@ -804,9 +726,9 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
         else if (tok->type == TokenType::PERIOD)
         {
             // Parse member dereference
-            tokens.pop_front();
+            tokens->next();
 
-            tok = tokens.front();
+            tok = tokens->peek();
             if (tok->type != TokenType::SYMBOL)
             {
                 std::cout << "ERROR: only symbols can be used to dereference fields\n";
@@ -814,19 +736,19 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
             }
 
             value = new ASTMemberDereference(value, tok);
-            tokens.pop_front();
+            tokens->next();
         }
         else if (tok->type == TokenType::SQUARE_BRACKET_OPEN)
         {
             // Parsse index dereference
-            tokens.pop_front();
+            tokens->next();
             ASTNode *indexValue = parseValueOrOperator(tokens);
             if (indexValue == NULL)
             {
                 return NULL;
             }
 
-            tok = tokens.front();
+            tok = tokens->peek();
             if (tok->type != TokenType::SQUARE_BRACKET_CLOSE)
             {
                 std::cout << "ERROR: index dereference must end with ]\n";
@@ -849,8 +771,9 @@ ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens)
     return value;
 }
 
-ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
+ASTNode *parseValueOrOperator(TokenStream *tokens)
 {
+    int saved = tokens->getPosition();
     ASTNode *top = parseValueAndSuffix(tokens);
     if (top == NULL)
     {
@@ -859,7 +782,7 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
 
     while (true)
     {
-        const Token *tok = tokens.front();
+        const Token *tok = tokens->peek();
         if (tok == NULL)
         {
             return top;
@@ -867,7 +790,7 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
 
         if (tok->type == TokenType::OPERATOR_ASSIGNMENT)
         {
-            tokens.pop_front();
+            tokens->next();
             ASTNode *right = parseValueOrOperator(tokens);
             if (right == NULL)
             {
@@ -884,7 +807,7 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
             return top;
         }
 
-        tokens.pop_front();
+        tokens->next();
         ASTNode *right = parseValueAndSuffix(tokens);
         if (right == NULL)
         {
@@ -915,46 +838,36 @@ ASTNode *parseValueOrOperator(std::list<const Token *> &tokens)
     }
 }
 
-ASTReturn *parseReturn(std::list<const Token *> &tokens)
+ASTReturn *parseReturn(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
+
     if (tok->type != TokenType::RETURN_KEYWORD)
     {
         std::cout << "ERROR: Expected 'return'\n";
         return NULL;
     }
-    tokens.pop_front();
+    tokens->next();
 
     ASTNode *value = parseValueOrOperator(tokens);
     return new ASTReturn(value);
 }
 
-ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
+ASTDeclaration *parseDeclaration(TokenStream *tokens)
 {
-    const Token *tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    int saved = tokens->getPosition();
+    const Token *tok = tokens->peek();
+
     if (tok->type != TokenType::CONST_KEYWORD && tok->type != TokenType::LET_KEYWORD)
     {
         std::cout << "ERROR: Declaration must start with 'const' or 'let'\n";
         return NULL;
     }
-    tokens.pop_front();
+    tokens->next();
 
-    tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    tok = tokens->peek();
+
     const Token *nameToken = tok;
     if (nameToken->type != TokenType::SYMBOL)
     {
@@ -962,14 +875,14 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     }
     else
     {
-        tokens.pop_front();
+        tokens->next();
     }
 
-    tok = tokens.front();
+    tok = tokens->peek();
     ASTNode *typeSpecifier;
     if (tok->type == TokenType::COLON)
     {
-        tokens.pop_front();
+        tokens->next();
         typeSpecifier = parseInlineType(tokens);
     }
     else
@@ -977,16 +890,12 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
         typeSpecifier = NULL;
     }
 
-    tok = tokens.front();
-    if (tok == NULL)
-    {
-        std::cout << "ERROR: Unexpected end of file\n";
-        return NULL;
-    }
+    tok = tokens->peek();
+
     if (tok->type == TokenType::OPERATOR_ASSIGNMENT)
     {
         // Parse assignment
-        tokens.pop_front();
+        tokens->next();
         ASTNode *value = parseValueOrOperator(tokens);
         if (value == NULL)
         {
@@ -1002,7 +911,7 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
     }
 }
 
-// ASTNode *parseValueOrTypeCast(std::list<const Token *> &tokens)
+// ASTNode *parseValueOrTypeCast(TokenStream* tokens)
 // {
 //     ASTTypeNode *leftType = parseInlineType(tokens);
 //     if (leftType == NULL)
@@ -1012,14 +921,14 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
 //     }
 //     else
 //     {
-//         const Token *tok = tokens.front();
+//         const Token *tok = tokens->peek();
 //         switch (tok->type)
 //         {
 //         case TokenType::AS_KEYWORD:
 //         {
 //             // This is a cast
 //             const Token *operatorToken = tok;
-//             tokens.pop_front();
+//             tokens->next();
 //             ASTNode *rightValue = parseValueOrTypeCast(tokens);
 //             if (rightValue == NULL)
 //             {
@@ -1036,13 +945,14 @@ ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens)
 //     }
 // }
 
-ASTFile *parseFile(std::list<const Token *> &tokens)
+ASTFile *parseFile(TokenStream *tokens)
 {
+    int saved = tokens->getPosition();
     std::list<ASTNode *> *rootNodes = new std::list<ASTNode *>();
 
-    while (!tokens.empty())
+    while (!tokens->isEndOfFile())
     {
-        const Token *tok = tokens.front();
+        const Token *tok = tokens->peek();
 
         ASTNode *statement = NULL;
         switch (tok->type)
@@ -1066,7 +976,7 @@ ASTFile *parseFile(std::list<const Token *> &tokens)
 
         if (statement == NULL)
         {
-            tokens.pop_front();
+            tokens->next();
             std::cout << "ERROR: Invalid statement, unexpected " << getTokenTypeName(tok->type) << "(" << (int)tok->type << ")"
                       << " at " << tok->position << "\n";
         }

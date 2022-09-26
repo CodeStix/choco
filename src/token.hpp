@@ -3,6 +3,7 @@
 #include <string>
 #include <list>
 #include <iostream>
+#include <vector>
 
 enum class TokenType
 {
@@ -70,6 +71,73 @@ public:
     std::string value;
 };
 
+class TokenStream
+{
+public:
+    TokenStream(std::vector<const Token *> tokens) : tokens(tokens), position(0) {}
+
+    int getPosition()
+    {
+        return this->position;
+    }
+
+    void setPosition(int p)
+    {
+        this->position = p;
+    }
+
+    bool isEndOfFile()
+    {
+        return this->position >= this->tokens.size();
+    }
+
+    const Token *next()
+    {
+        if (this->isEndOfFile())
+        {
+            std::cout << "FATAL: Token::next reached end of file\n";
+            exit(-1);
+            return NULL;
+        }
+        return this->tokens[this->position++];
+    }
+
+    const Token *peek()
+    {
+        if (this->isEndOfFile())
+        {
+            std::cout << "FATAL: Token::peek reached end of file\n";
+            exit(-1);
+            return NULL;
+        }
+        return this->tokens[this->position];
+    }
+
+    const Token *nextRequire(TokenType type)
+    {
+        if (this->isEndOfFile())
+        {
+            std::cout << "FATAL: Token::nextRequire reached end of file\n";
+            exit(-1);
+            return NULL;
+        }
+        const Token *tok = this->tokens[this->position];
+        if (tok->type == type)
+        {
+            this->position++;
+            return tok;
+        }
+        else
+        {
+            return NULL;
+        }
+    }
+
+private:
+    int position;
+    std::vector<const Token *> tokens;
+};
+
 const char *getTokenTypeName(TokenType type);
 int getTokenOperatorImportance(TokenType type);
-void parseString(std::string &input, std::list<const Token *> &tokenList);
+void parseString(std::string &input, std::vector<const Token *> &tokenList);

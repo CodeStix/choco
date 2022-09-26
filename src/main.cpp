@@ -35,8 +35,10 @@ int main()
 
     std::cout << "Tokenizing...\n";
 
-    std::list<const Token *> tokens;
+    std::vector<const Token *> tokens;
     parseString(fileContent, tokens);
+
+    TokenStream *tokenStream = new TokenStream(tokens);
 
     std::cout << "Tokenizing done\n";
     // for (const auto &token : tokens)
@@ -45,7 +47,7 @@ int main()
     // }
 
     std::cout << "Parsing...\n";
-    ASTFile *file = parseFile(tokens);
+    ASTFile *file = parseFile(tokenStream);
     std::cout << "Parsing done\n";
     std::cout << file->toString() << "\n";
 

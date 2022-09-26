@@ -11,7 +11,7 @@ enum class TokenizeState
     PARSING_COMMENT,
 };
 
-void parseString(std::string &input, std::list<const Token *> &tokenList)
+void parseString(std::string &input, std::vector<const Token *> &tokenList)
 {
     std::string currentString;
     TokenizeState state = TokenizeState::NONE;
