@@ -512,7 +512,42 @@ ASTNode *parseUnaryOperator(TokenStream *tokens)
     return new ASTUnaryOperator(operandToken, operand);
 }
 
-ASTNode *parseStruct(TokenStream *tokens)
+ASTNode *parseStructDeclaration(TokenStream *tokens)
+{
+    int saved = tokens->getPosition();
+
+    const Token *tok = tokens->peek();
+    if (tok->type != TokenType::STRUCT_KEYWORD)
+    {
+        tokens->setPosition(saved);
+        return NULL;
+    }
+    tokens->next();
+
+    tokens->consume(TokenType::WHITESPACE);
+
+    tok = tokens->peek();
+    if (tok->type != TokenType::SYMBOL)
+    {
+        std::cout << "ERROR: A struct declaration must have a name\n";
+        return NULL;
+    }
+    const Token *nameToken = tok;
+    tokens->next();
+
+    tokens->consume(TokenType::WHITESPACE);
+    tokens->consume(TokenType::NEWLINE);
+
+    ASTStruct *structType = parseStruct(tokens);
+    if (structType == NULL)
+    {
+        return NULL;
+    }
+
+    return new ASTStructDeclaration(nameToken, structType);
+}
+
+ASTStruct *parseStruct(TokenStream *tokens)
 {
     int saved = tokens->getPosition();
     const Token *tok = tokens->peek();
@@ -1100,7 +1135,7 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
-        valuePointer = context->staticNamedValues.getValue(this->nameToken->value);
+        valuePointer = context->globalModule.getValue(this->nameToken->value, context, scope);
         if (!valuePointer)
         {
             std::cout << "ERROR: Could not find variable '" << this->nameToken->value << "'\n";
@@ -2035,67 +2070,65 @@ TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope
 TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
     std::cout << "DEBUG: ASTFunction::generateLLVM\n";
-    TypedValue *existingFunctionValue = context->staticNamedValues.getValue(this->nameToken->value);
 
-    if (existingFunctionValue == NULL)
+    if (context->globalModule.hasValue(this->nameToken->value))
     {
-        std::vector<FunctionParameter> parameters;
-        for (ASTParameter *parameter : *this->parameters)
-        {
-            TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope);
-            if (!parameterTypeValue->isType())
-            {
-                std::cout << "ERROR: parameter type specifier may not have value\n";
-                return NULL;
-            }
-            parameters.push_back(FunctionParameter(parameterTypeValue->getType(), parameter->getParameterName()));
-        }
+        std::cout << "ERROR: Duplicate name '" << this->nameToken->value << "' cannot be used again for function.\n";
+        return NULL;
+    }
 
-        Type *returnType;
-        if (this->returnType != NULL)
+    std::vector<FunctionParameter> parameters;
+    for (ASTParameter *parameter : *this->parameters)
+    {
+        TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope);
+        if (!parameterTypeValue->isType())
         {
-            TypedValue *returnTypeValue = this->returnType->generateLLVM(context, scope);
-            if (!returnTypeValue->isType())
-            {
-                std::cout << "ERROR: return type specifier may not have value\n";
-                return NULL;
-            }
-            returnType = returnTypeValue->getType();
-        }
-        else
-        {
-            returnType = NULL;
-        }
-
-        FunctionType *newFunctionType = new FunctionType(returnType, parameters);
-
-        bool isVarArg = false;
-        llvm::GlobalValue::LinkageTypes linkage = this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage;
-        llvm::FunctionType *functionType = static_cast<llvm::FunctionType *>(newFunctionType->getLLVMType(*context->context));
-        llvm::Function *function = llvm::Function::Create(functionType, linkage, this->nameToken->value, *context->module);
-        if (function == NULL)
-        {
-            std::cout << "ERROR: Function::Create returned null\n";
+            std::cout << "ERROR: parameter type specifier may not have value\n";
             return NULL;
         }
+        parameters.push_back(FunctionParameter(parameterTypeValue->getType(), parameter->getParameterName()));
+    }
 
-        int i = 0;
-        for (auto &arg : function->args())
+    Type *returnType;
+    if (this->returnType != NULL)
+    {
+        TypedValue *returnTypeValue = this->returnType->generateLLVM(context, scope);
+        if (!returnTypeValue->isType())
         {
-            ASTParameter *parameter = (*this->parameters)[i++];
-            arg.setName(parameter->getParameterName());
-        }
-
-        existingFunctionValue = new TypedValue(function, newFunctionType->getPointerToType());
-        if (!context->staticNamedValues.addValue(this->nameToken->value, existingFunctionValue))
-        {
-            std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
+            std::cout << "ERROR: return type specifier may not have value\n";
             return NULL;
         }
+        returnType = returnTypeValue->getType();
     }
     else
     {
-        std::cout << "ERROR: Duplicate name '" << this->nameToken->value << "' cannot be used again for function.\n";
+        returnType = NULL;
+    }
+
+    FunctionType *newFunctionType = new FunctionType(returnType, parameters);
+
+    bool isVarArg = false;
+    llvm::GlobalValue::LinkageTypes linkage = this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage;
+    llvm::FunctionType *functionType = static_cast<llvm::FunctionType *>(newFunctionType->getLLVMType(*context->context));
+    llvm::Function *function = llvm::Function::Create(functionType, linkage, this->nameToken->value, *context->module);
+    if (function == NULL)
+    {
+        std::cout << "ERROR: Function::Create returned null\n";
+        return NULL;
+    }
+
+    int i = 0;
+    for (auto &arg : function->args())
+    {
+        ASTParameter *parameter = (*this->parameters)[i++];
+        arg.setName(parameter->getParameterName());
+    }
+
+    TypedValue *existingFunctionValue = new TypedValue(function, newFunctionType->getPointerToType());
+
+    if (!context->globalModule.addValue(this->nameToken->value, existingFunctionValue))
+    {
+        std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
         return NULL;
     }
 

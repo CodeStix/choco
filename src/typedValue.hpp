@@ -16,6 +16,7 @@ enum class TypeCode
     STRING,
     FUNCTION,
     POINTER,
+    MODULE,
 };
 
 class Type
@@ -53,6 +54,88 @@ public:
 
 private:
     TypeCode typeCode;
+};
+
+class ModuleType : public Type
+{
+public:
+    ModuleType(ModuleType *parent = NULL) : Type(TypeCode::MODULE), parent(parent) {}
+
+    bool addLazyValue(std::string name, ASTNode *node)
+    {
+        if (this->lazyNamedStatics[name])
+        {
+            return false;
+        }
+        else
+        {
+            this->lazyNamedStatics[name] = node;
+            return true;
+        }
+    }
+
+    bool addValue(std::string name, TypedValue *value)
+    {
+        if (this->namedStatics[name])
+        {
+            return false;
+        }
+        else
+        {
+            this->namedStatics[name] = value;
+            return true;
+        }
+    }
+
+    bool hasValue(std::string name)
+    {
+        return this->namedStatics[name] != NULL || this->lazyNamedStatics[name] != NULL;
+    }
+
+    TypedValue *getValue(std::string name, GenerationContext *context, FunctionScope *scope)
+    {
+        TypedValue *value = this->namedStatics[name];
+        if (value != NULL)
+        {
+            return value;
+        }
+        else
+        {
+            ASTNode *lazyValue = this->lazyNamedStatics[name];
+            if (lazyValue != NULL)
+            {
+                value = lazyValue->generateLLVM(context, scope);
+                this->namedStatics[name] = value;
+                return value;
+            }
+            else
+            {
+                if (parent != NULL)
+                {
+                    return parent->getValue(name, context, scope);
+                }
+                else
+                {
+                    return NULL;
+                }
+            }
+        }
+    }
+
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        return NULL;
+    }
+
+    bool operator==(const Type &b) const override
+    {
+        return false;
+    }
+
+private:
+    ModuleType *parent;
+    std::map<std::string, ASTNode *> lazyNamedStatics;
+    std::map<std::string, TypedValue *> namedStatics;
 };
 
 class FloatType : public Type

@@ -72,7 +72,7 @@ public:
                           irBuilder(std::make_unique<llvm::IRBuilder<>>(*context)),
                           module(std::make_unique<llvm::Module>("default-choco-module", *context)),
                           passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get())),
-                          staticNamedValues(FunctionScope())
+                          globalModule(NULL)
     {
         passManager->add(llvm::createPromoteMemoryToRegisterPass());
         passManager->add(llvm::createInstructionCombiningPass());
@@ -88,8 +88,7 @@ public:
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
     FunctionType *currentFunction;
-    FunctionScope staticNamedValues;
-    // std::map<std::string, Type *> staticNamedTypes;
+    ModuleType globalModule;
 };
 
 enum class ASTNodeType
@@ -117,6 +116,7 @@ enum class ASTNodeType
     DEREFERENCE_MEMBER,
     DEREFERENCE_INDEX,
     CAST,
+    STRUCT_DECLARATION
 };
 
 std::string astNodeTypeToString(ASTNodeType type);
@@ -130,6 +130,10 @@ public:
     virtual std::string toString()
     {
         return astNodeTypeToString(this->type);
+    }
+
+    virtual void declareStaticNames()
+    {
     }
 
     virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -758,6 +762,28 @@ public:
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
+class ASTStructDeclaration : public ASTNode
+{
+public:
+    ASTStructDeclaration(const Token *nameToken, ASTStruct *structNode) : ASTNode(ASTNodeType::STRUCT_DECLARATION), nameToken(nameToken), structNode(structNode) {}
+
+    virtual std::string toString() override
+    {
+        std::string str = "struct ";
+        str += this->nameToken->value;
+        str += " ";
+        str += this->structNode->toString();
+        str += "\n";
+        return str;
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+private:
+    const Token *nameToken;
+    ASTStruct *structNode;
+};
+
 class ASTIfStatement : public ASTNode
 {
 public:
@@ -817,5 +843,5 @@ ASTFile *parseFile(TokenStream *tokens);
 ASTReturn *parseReturn(TokenStream *tokens);
 ASTParameter *parseParameter(TokenStream *tokens);
 ASTNode *parseValueAndSuffix(TokenStream *tokens);
-ASTNode *parseStruct(TokenStream *tokens);
+ASTStruct *parseStruct(TokenStream *tokens);
 ASTNode *parseInlineType(TokenStream *tokens);
