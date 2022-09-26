@@ -52,7 +52,16 @@ int main()
     std::cout << file->toString() << "\n";
 
     std::cout << "Generating code...\n";
+
     auto context = new GenerationContext();
+    context->staticNamedValues.addValue("Float32", new TypedValue(NULL, new FloatType(32)));
+    context->staticNamedValues.addValue("Float64", new TypedValue(NULL, new FloatType(64)));
+    context->staticNamedValues.addValue("Int64", new TypedValue(NULL, new IntegerType(64, true)));
+    context->staticNamedValues.addValue("UInt64", new TypedValue(NULL, new IntegerType(64, false)));
+    context->staticNamedValues.addValue("Int32", new TypedValue(NULL, new IntegerType(32, true)));
+    context->staticNamedValues.addValue("UInt32", new TypedValue(NULL, new IntegerType(32, false)));
+    context->staticNamedValues.addValue("Bool", new TypedValue(NULL, new IntegerType(1, false)));
+
     auto scope = new FunctionScope();
     file->generateLLVM(context, scope);
     std::cout << "Generation done\n";
