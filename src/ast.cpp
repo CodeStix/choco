@@ -1381,8 +1381,17 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
     if (targetType->getTypeCode() == TypeCode::POINTER)
     {
-        std::cout << "ERROR: Cannot convert " << valueToConvert->getType()->toString() << " to " << targetType->toString() << "\n";
-        return NULL;
+        // Try converting to a single-deep pointer and try again
+        TypedValue *currentValue = generateDereferenceToPointer(context, valueToConvert);
+        if (*currentValue->getType() == *targetType)
+        {
+            return currentValue;
+        }
+        else
+        {
+            std::cout << "ERROR: Cannot convert " << valueToConvert->getType()->toString() << " to " << targetType->toString() << "\n";
+            return NULL;
+        }
     }
 
     valueToConvert = generateDereferenceToValue(context, valueToConvert);
