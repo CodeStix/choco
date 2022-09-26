@@ -5,9 +5,14 @@ func getInteger(): Int64 {
     return 16
 }
 
+struct NestedStruct {
+    bigNumber: Float64
+}
+
 struct TestStruct {
     original: Int32
     val: Int32
+    data: NestedStruct
 }
 
 func printStruct(str: TestStruct) {
@@ -18,6 +23,9 @@ export func main() {
     let b = TestStruct {
         original: Int32 getInteger()
         val: Int32 getInteger()
+        data: {
+            bigNumber: Float64 1234,
+        }
     } 
 
     if ((b.val == 100) || (b.val == 200)) {
@@ -31,6 +39,7 @@ export func main() {
 
     printDouble(recurse(50))
     printDouble(b.original)
+    printDouble(b.data.bigNumber)
 }
 
 func recurse(a: Int32): Int32 {

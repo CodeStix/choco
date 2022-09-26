@@ -1132,6 +1132,40 @@ ASTFile *parseFile(TokenStream *tokens)
     return new ASTFile(rootNodes);
 }
 
+llvm::Value *createSizeOf(GenerationContext *context, llvm::Type *type)
+{
+    return context->irBuilder->CreateGEP(type, llvm::ConstantPointerNull::get(type->getPointerTo()), llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1)), "sizeof");
+}
+
+llvm::Value *createMalloc(GenerationContext *context, llvm::Type *type)
+{
+    llvm::Function *mallocFunction = context->module->getFunction("malloc");
+    if (mallocFunction == NULL)
+    {
+        std::cout << "ERROR: Cannot generate 'malloc' because the allocator function wasn't found\n";
+        return NULL;
+    }
+
+    std::vector<llvm::Value *> parameters;
+    llvm::Value *sizeOf = createSizeOf(context, type);
+    parameters.push_back(sizeOf);
+    return context->irBuilder->CreateCall(mallocFunction, parameters, "malloc");
+}
+
+llvm::Value *createFree(GenerationContext *context, llvm::Value *toFree)
+{
+    llvm::Function *freeFunction = context->module->getFunction("free");
+    if (freeFunction == NULL)
+    {
+        std::cout << "ERROR: Cannot generate 'free' because the allocator function wasn't found\n";
+        return NULL;
+    }
+
+    std::vector<llvm::Value *> parameters;
+    parameters.push_back(toFree);
+    return context->irBuilder->CreateCall(freeFunction, parameters, "malloc");
+}
+
 llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm::Type *type, llvm::StringRef twine = "")
 {
     llvm::Function *function = context->irBuilder->GetInsertBlock()->getParent();
@@ -1565,7 +1599,19 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         // This struct is not a type definition
         llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
-        auto structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
+        // TODO: analyse if this object can be allocated on the stack
+        bool useStack = false;
+
+        auto structPointer;
+        if (useStack)
+        {
+
+            structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
+        }
+        else
+        {
+            structPointer =
+        }
 
         int fieldIndex = 0;
         for (auto &field : fieldValues)
