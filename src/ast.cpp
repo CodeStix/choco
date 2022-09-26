@@ -1381,7 +1381,7 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
     if (targetType->getTypeCode() == TypeCode::POINTER)
     {
-        std::cout << "ERROR: Cannot generateTypeConversion(...) to pointer type\n";
+        std::cout << "ERROR: Cannot convert " << valueToConvert->getType()->toString() << " to " << targetType->toString() << "\n";
         return NULL;
     }
 
@@ -2438,7 +2438,7 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
         TypedValue *convertedValue = generateTypeConversion(context, parameterValue, parameter.type, true); // TODO: remove allowLosePrecision when casts are supported
         if (convertedValue == NULL || convertedValue->getValue() == NULL)
         {
-            std::cout << "ERROR: cannot convert value '" << parameter.name << "' for invoke '" << functionValue->getOriginVariable() << "'\n";
+            std::cout << "ERROR: Cannot convert value '" << parameter.name << "' for invoke '" << functionValue->getOriginVariable() << "'\n";
             return NULL;
         }
         parameterValues.push_back(convertedValue->getValue());

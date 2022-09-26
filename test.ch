@@ -9,6 +9,10 @@ struct TestStruct {
     val: Int32
 }
 
+func printStruct(str: TestStruct) {
+    printDouble(str.val)
+}
+
 export func main() {
     let b = TestStruct {
         val: Int32 getInteger()
@@ -20,7 +24,7 @@ export func main() {
 
     while (b.val > 0) {
         b.val = b.val - 1
-        printDouble(b.val)
+        printStruct(b)
     }
 
     printDouble(recurse(5))

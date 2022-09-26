@@ -42,6 +42,11 @@ public:
         return !(*this == b);
     }
 
+    virtual std::string toString()
+    {
+        return "<Unknown>";
+    }
+
     // Type *getDeepPointedType()
     // {
     //     if (this->typeCode == TypeCode::POINTER)
@@ -197,6 +202,14 @@ public:
         }
     }
 
+    std::string toString() override
+    {
+        std::string str = "module ";
+        str += this->name;
+        str += " { ... }";
+        return str;
+    }
+
 private:
     std::string name;
     ModuleType *parent;
@@ -244,6 +257,13 @@ public:
         }
     }
 
+    std::string toString() override
+    {
+        std::string str = "Float";
+        str += std::to_string(this->bitSize);
+        return str;
+    }
+
 private:
     int bitSize;
 };
@@ -281,6 +301,13 @@ public:
         return llvm::Type::getIntNTy(context, this->bitSize);
     }
 
+    std::string toString() override
+    {
+        std::string str = this->isSigned ? "Int" : "UInt";
+        str += std::to_string(this->bitSize);
+        return str;
+    }
+
 private:
     bool isSigned;
     int bitSize;
@@ -307,6 +334,15 @@ public:
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
         return llvm::Type::getIntNTy(context, 32);
+    }
+
+    std::string toString() override
+    {
+        std::string str = "";
+        str += this->startInclusive;
+        str += "..";
+        str += this->endExclusive;
+        return str;
     }
 
 private:
@@ -342,6 +378,13 @@ public:
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
         return llvm::PointerType::get(this->pointedType->getLLVMType(context), 0);
+    }
+
+    std::string toString() override
+    {
+        std::string str = "&";
+        str += this->pointedType->toString();
+        return str;
     }
 
 private:
@@ -406,6 +449,38 @@ public:
         return this->isVarArg;
     }
 
+    std::string toString() override
+    {
+        std::string str = "func(";
+
+        bool first = true;
+        for (auto &param : this->parameters)
+        {
+            if (first)
+            {
+                first = false;
+            }
+            else
+            {
+                str += ", ";
+            }
+
+            str += param.name;
+            str += ": ";
+            str += param.type->toString();
+        }
+
+        str += ")";
+
+        if (this->returnType != NULL)
+        {
+            str += " ";
+            str += this->returnType->toString();
+        }
+
+        return str;
+    }
+
 private:
     bool isVarArg;
     std::vector<FunctionParameter> parameters;
@@ -425,6 +500,19 @@ public:
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
         return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
+    }
+
+    std::string toString() override
+    {
+        std::string str = "[";
+        str += this->innerType->toString();
+        if (this->knownCount)
+        {
+            str += " # ";
+            str += std::to_string(this->count);
+        }
+        str += "]";
+        return str;
     }
 
 private:
@@ -516,6 +604,28 @@ public:
         return this->fields.size();
     }
 
+    std::string toString() override
+    {
+        std::string str = "";
+        if (this->packed)
+        {
+            str += "packed ";
+        }
+        if (!this->managed)
+        {
+            str += "unmanaged ";
+        }
+        str += "{";
+        for (auto &field : this->fields)
+        {
+            str += field.name;
+            str += ": ";
+            str += field.type->toString();
+        }
+        str += "}";
+        return str;
+    }
+
 private:
     std::vector<StructTypeField> fields;
     bool managed;
@@ -525,3 +635,5 @@ private:
 extern IntegerType BYTE_TYPE;
 extern IntegerType CHAR_TYPE;
 extern IntegerType BOOL_TYPE;
+
+std::string typeCodeToString(TypeCode code);

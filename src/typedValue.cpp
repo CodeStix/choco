@@ -35,3 +35,36 @@ TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, F
         }
     }
 }
+
+std::string typeCodeToString(TypeCode code)
+{
+    switch (code)
+    {
+    case TypeCode::BITS:
+        return "BITS";
+    case TypeCode::INTEGER:
+        return "INTEGER";
+    case TypeCode::FLOAT:
+        return "FLOAT";
+    case TypeCode::ARRAY:
+        return "ARRAY";
+    case TypeCode::STRUCT:
+        return "STRUCT";
+    case TypeCode::ENUM:
+        return "ENUM";
+    case TypeCode::UNION:
+        return "UNION";
+    case TypeCode::RANGE:
+        return "RANGE";
+    case TypeCode::STRING:
+        return "STRING";
+    case TypeCode::FUNCTION:
+        return "FUNCTION";
+    case TypeCode::POINTER:
+        return "POINTER";
+    case TypeCode::MODULE:
+        return "MODULE";
+    default:
+        return "Unknown";
+    }
+}
