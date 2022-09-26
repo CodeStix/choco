@@ -331,7 +331,7 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
         {
             if (currentChar == '\n')
             {
-                std::cout << "DEBUG: parsed comment '" << currentString << "'\n";
+                std::cout << "debug: parsed comment '" << currentString << "'\n";
                 state = TokenizeState::NONE;
             }
             else

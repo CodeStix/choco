@@ -72,7 +72,7 @@ public:
                           irBuilder(std::make_unique<llvm::IRBuilder<>>(*context)),
                           module(std::make_unique<llvm::Module>("default-choco-module", *context)),
                           passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get())),
-                          globalModule(NULL)
+                          globalModule(ModuleType("Global"))
     {
         passManager->add(llvm::createPromoteMemoryToRegisterPass());
         passManager->add(llvm::createInstructionCombiningPass());
@@ -562,11 +562,6 @@ public:
         return str;
     }
 
-    void declareStaticNames(ModuleType *currentModule) override
-    {
-        currentModule->addLazyValue(this->nameToken->value, this);
-    }
-
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
@@ -793,6 +788,11 @@ public:
         str += this->structNode->toString();
         str += "\n";
         return str;
+    }
+
+    void declareStaticNames(ModuleType *currentModule) override
+    {
+        currentModule->addLazyValue(this->nameToken->value, this);
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;

@@ -64,7 +64,14 @@ int main()
     context->globalModule.addValue("Bool", new TypedValue(NULL, new IntegerType(1, false)));
 
     auto scope = new FunctionScope();
-    file->generateLLVM(context, scope);
+
+    // Trigger compilation by getting the main function value lazily
+    TypedValue *mainFunction = context->globalModule.getValue("main", context, scope);
+    if (mainFunction == NULL)
+    {
+        std::cout << "ERROR: could not find main function\n";
+        return 1;
+    }
     std::cout << "Generation done\n";
 
     context->module->print(llvm::errs(), NULL);

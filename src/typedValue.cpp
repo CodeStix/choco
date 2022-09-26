@@ -22,8 +22,11 @@ TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, F
         ASTNode *lazyValue = this->lazyNamedStatics[name];
         if (lazyValue != NULL)
         {
+            auto savedBlock = context->irBuilder->GetInsertBlock();
+            FunctionType *savedCurrentFunction = context->currentFunction;
             value = lazyValue->generateLLVM(context, scope);
-            this->namedStatics[name] = value;
+            context->currentFunction = savedCurrentFunction;
+            context->irBuilder->SetInsertPoint(savedBlock);
             return value;
         }
         else

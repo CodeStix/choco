@@ -5,8 +5,12 @@ func getInteger(): Int64 {
     return 12
 }
 
+struct TestStruct {
+    val: Int32
+}
+
 export func main() {
-    let b = {
+    let b = TestStruct {
         val: Int32 getInteger()
     } 
 
@@ -18,4 +22,16 @@ export func main() {
         b.val = b.val - 1
         printDouble(b.val)
     }
+
+    printDouble(recurse(5))
+}
+
+func recurse(a: Int32): Int32 {
+    if (a == 0) {
+        return 0
+    }
+    else {
+        return a + recurse(a - 1)
+    }
+    return 0
 }

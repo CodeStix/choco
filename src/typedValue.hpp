@@ -451,7 +451,28 @@ public:
 
     bool operator==(const Type &b) const override
     {
-        return false;
+        if (b.getTypeCode() == TypeCode::STRUCT)
+        {
+            auto other = static_cast<const StructType &>(b);
+            if (other.fields.size() != this->fields.size())
+            {
+                return false;
+            }
+
+            for (int i = 0; i < this->fields.size(); i++)
+            {
+                if (*this->fields[i].type != *other.fields[i].type)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
