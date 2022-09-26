@@ -9,6 +9,8 @@ enum class TokenizeState
     PARSING_OPERATOR,
     PARSING_SYMBOL,
     PARSING_COMMENT,
+    PARSING_WHITESPACE,
+    PARSING_NEWLINE,
 };
 
 void parseString(std::string &input, std::vector<const Token *> &tokenList)
@@ -20,7 +22,31 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
     {
         char currentChar = input[i];
 
-        if (state == TokenizeState::PARSING_LITERAL_STRING)
+        if (state == TokenizeState::PARSING_WHITESPACE)
+        {
+            if (currentChar == '\t' || currentChar == ' ')
+            {
+                currentString += currentChar;
+            }
+            else
+            {
+                tokenList.push_back(new Token(i, TokenType::WHITESPACE, currentString));
+                state = TokenizeState::NONE;
+            }
+        }
+        else if (state == TokenizeState::PARSING_NEWLINE)
+        {
+            if (currentChar == '\n' || currentChar == '\r' || currentChar == '\t' || currentChar == ' ')
+            {
+                currentString += currentChar;
+            }
+            else
+            {
+                tokenList.push_back(new Token(i, TokenType::NEWLINE, currentString));
+                state = TokenizeState::NONE;
+            }
+        }
+        else if (state == TokenizeState::PARSING_LITERAL_STRING)
         {
             if (currentChar == '"')
             {
@@ -327,9 +353,15 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
                 state = TokenizeState::PARSING_LITERAL_NUMBER;
                 currentString = std::string(1, currentChar);
             }
-            else if (isspace(currentChar))
+            else if (currentChar == '\n' || currentChar == '\r')
             {
-                continue;
+                state = TokenizeState::PARSING_NEWLINE;
+                currentString = std::string(1, currentChar);
+            }
+            else if (currentChar == '\t' || currentChar == ' ')
+            {
+                state = TokenizeState::PARSING_WHITESPACE;
+                currentString = std::string(1, currentChar);
             }
             else
             {
@@ -513,6 +545,10 @@ const char *getTokenTypeName(TokenType type)
         return "AS_KEWORD";
     case TokenType::STRUCT_KEYWORD:
         return "STRUCT_KEYWORD";
+    case TokenType::WHITESPACE:
+        return "WHITESPACE";
+    case TokenType::NEWLINE:
+        return "NEWLINE";
     default:
         return "Unknown";
     }

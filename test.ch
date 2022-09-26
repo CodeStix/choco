@@ -14,7 +14,7 @@ export func main() {
         return
     }
 
-    while b.val > 0 {
+    while (b.val > 0) {
         b.val = b.val + 1
         printDouble(b.val)
     }

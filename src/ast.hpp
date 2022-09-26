@@ -356,6 +356,19 @@ public:
         return this->nameToken->value;
     }
 
+    std::string toString() override
+    {
+        std::string str = "";
+        if (this->nameToken != NULL)
+        {
+            str += this->nameToken->value;
+        }
+        str += ": ";
+        str += this->value->toString();
+        str += "\n";
+        return str;
+    }
+
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 
 private:
@@ -369,6 +382,30 @@ public:
     ASTStruct(std::vector<ASTStructField *> fields, bool managed = true, bool packed = false, bool value = false) : ASTNode(ASTNodeType::STRUCT), fields(fields), managed(managed), packed(packed), value(value) {}
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+    std::string toString() override
+    {
+        std::string str = "";
+        if (!this->managed)
+        {
+            str += "unmanaged ";
+        }
+        if (this->packed)
+        {
+            str += "packed ";
+        }
+        if (this->value)
+        {
+            str += "value ";
+        }
+        str += "{";
+        for (auto &field : this->fields)
+        {
+            str += field->toString();
+        }
+        str += "}";
+        return str;
+    }
 
 private:
     std::vector<ASTStructField *> fields;

@@ -58,7 +58,9 @@ enum class TokenType
     AS_KEYWORD,
     VALUE_KEYWORD,
     PERIOD,
-    STRUCT_KEYWORD
+    STRUCT_KEYWORD,
+    WHITESPACE,
+    NEWLINE,
 };
 
 class Token
@@ -113,11 +115,11 @@ public:
         return this->tokens[this->position];
     }
 
-    const Token *nextRequire(TokenType type)
+    const Token *consume(TokenType type)
     {
         if (this->isEndOfFile())
         {
-            std::cout << "FATAL: Token::nextRequire reached end of file\n";
+            std::cout << "FATAL: Token::consume reached end of file\n";
             exit(-1);
             return NULL;
         }
