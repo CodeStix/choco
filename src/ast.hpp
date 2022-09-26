@@ -132,7 +132,7 @@ public:
         return astNodeTypeToString(this->type);
     }
 
-    virtual void declareStaticNames()
+    virtual void declareStaticNames(ModuleType *currentModule)
     {
     }
 
@@ -562,6 +562,11 @@ public:
         return str;
     }
 
+    void declareStaticNames(ModuleType *currentModule) override
+    {
+        currentModule->addLazyValue(this->nameToken->value, this);
+    }
+
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
@@ -739,6 +744,11 @@ public:
         return str;
     }
 
+    void declareStaticNames(ModuleType *currentModule) override
+    {
+        currentModule->addLazyValue(this->nameToken->value, this);
+    }
+
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
@@ -757,6 +767,14 @@ public:
             str += "\n";
         }
         return str;
+    }
+
+    void declareStaticNames(ModuleType *currentModule) override
+    {
+        for (ASTNode *statement : *this->statements)
+        {
+            statement->declareStaticNames(currentModule);
+        }
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;

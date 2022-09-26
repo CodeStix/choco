@@ -54,6 +54,7 @@ int main()
     std::cout << "Generating code...\n";
 
     auto context = new GenerationContext();
+    file->declareStaticNames(&context->globalModule);
     context->globalModule.addValue("Float32", new TypedValue(NULL, new FloatType(32)));
     context->globalModule.addValue("Float64", new TypedValue(NULL, new FloatType(64)));
     context->globalModule.addValue("Int64", new TypedValue(NULL, new IntegerType(64, true)));

@@ -1135,10 +1135,10 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
     {
-        valuePointer = context->globalModule.getValue(this->nameToken->value, context, scope);
+        valuePointer = context->globalModule.getValueCascade(this->nameToken->value, context, scope);
         if (!valuePointer)
         {
-            std::cout << "ERROR: Could not find variable '" << this->nameToken->value << "'\n";
+            std::cout << "ERROR: Could not find '" << this->nameToken->value << "'\n";
             return NULL;
         }
     }
@@ -2071,11 +2071,11 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 {
     std::cout << "DEBUG: ASTFunction::generateLLVM\n";
 
-    if (context->globalModule.hasValue(this->nameToken->value))
-    {
-        std::cout << "ERROR: Duplicate name '" << this->nameToken->value << "' cannot be used again for function.\n";
-        return NULL;
-    }
+    // if (context->globalModule.hasValue(this->nameToken->value))
+    // {
+    //     std::cout << "ERROR: Duplicate name '" << this->nameToken->value << "' cannot be used again for function.\n";
+    //     return NULL;
+    // }
 
     std::vector<FunctionParameter> parameters;
     for (ASTParameter *parameter : *this->parameters)
@@ -2126,11 +2126,11 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
     TypedValue *existingFunctionValue = new TypedValue(function, newFunctionType->getPointerToType());
 
-    if (!context->globalModule.addValue(this->nameToken->value, existingFunctionValue))
-    {
-        std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
-        return NULL;
-    }
+    // if (!context->globalModule.addValue(this->nameToken->value, existingFunctionValue))
+    // {
+    //     std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
+    //     return NULL;
+    // }
 
     if (this->body != NULL)
     {
@@ -2278,6 +2278,27 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     std::cout << "DEBUG: ASTMemberDereference::generateLLVM\n";
 
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
+
+    if (valueToIndex->isType())
+    {
+        if (valueToIndex->getType()->getTypeCode() == TypeCode::MODULE)
+        {
+            ModuleType *mod = static_cast<ModuleType *>(valueToIndex->getType());
+            TypedValue *moduleValue = mod->getValue(this->nameToken->value, context, scope);
+            if (moduleValue == NULL)
+            {
+                std::cout << "ERROR: '" << this->nameToken->value << "' cannot be found in module '" << mod->getFullName() << "'\n";
+                return NULL;
+            }
+            return moduleValue;
+        }
+        else
+        {
+            std::cout << "ERROR: type has no members to dereference\n";
+            return NULL;
+        }
+    }
+
     TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
     if (pointerToIndex == NULL)
     {

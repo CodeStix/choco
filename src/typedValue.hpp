@@ -1,7 +1,12 @@
 #pragma once
 #include <iostream>
+#include <map>
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Constants.h"
+
+class GenerationContext;
+class FunctionScope;
+class ASTNode;
 
 enum class TypeCode
 {
@@ -56,10 +61,61 @@ private:
     TypeCode typeCode;
 };
 
+class TypedValue
+{
+public:
+    TypedValue(llvm::Value *value, Type *type) : value(value), type(type), originVariableName("") {}
+
+    inline llvm::Value *getValue()
+    {
+        return this->value;
+    }
+
+    inline bool isType()
+    {
+        return this->value == NULL;
+    }
+
+    inline Type *getType()
+    {
+        return this->type;
+    }
+
+    inline TypeCode getTypeCode()
+    {
+        return this->type->getTypeCode();
+    }
+
+    void setOriginVariable(std::string name)
+    {
+        this->originVariableName = name;
+    }
+
+    std::string getOriginVariable()
+    {
+        return this->originVariableName;
+    }
+
+    bool operator==(TypedValue &b)
+    {
+        return this->value == b.getValue() && this->type == b.getType();
+    }
+
+    bool operator!=(TypedValue &b)
+    {
+        return !(*this == b);
+    }
+
+private:
+    llvm::Value *value;
+    Type *type;
+    std::string originVariableName;
+};
+
 class ModuleType : public Type
 {
 public:
-    ModuleType(ModuleType *parent = NULL) : Type(TypeCode::MODULE), parent(parent) {}
+    ModuleType(std::string name, ModuleType *parent = NULL) : Type(TypeCode::MODULE), name(name), parent(parent) {}
 
     bool addLazyValue(std::string name, ASTNode *node)
     {
@@ -92,32 +148,24 @@ public:
         return this->namedStatics[name] != NULL || this->lazyNamedStatics[name] != NULL;
     }
 
-    TypedValue *getValue(std::string name, GenerationContext *context, FunctionScope *scope)
+    TypedValue *getValue(std::string name, GenerationContext *context, FunctionScope *scope);
+
+    TypedValue *getValueCascade(std::string name, GenerationContext *context, FunctionScope *scope)
     {
-        TypedValue *value = this->namedStatics[name];
+        TypedValue *value = this->getValue(name, context, scope);
         if (value != NULL)
         {
             return value;
         }
         else
         {
-            ASTNode *lazyValue = this->lazyNamedStatics[name];
-            if (lazyValue != NULL)
+            if (parent != NULL)
             {
-                value = lazyValue->generateLLVM(context, scope);
-                this->namedStatics[name] = value;
-                return value;
+                return parent->getValueCascade(name, context, scope);
             }
             else
             {
-                if (parent != NULL)
-                {
-                    return parent->getValue(name, context, scope);
-                }
-                else
-                {
-                    return NULL;
-                }
+                return NULL;
             }
         }
     }
@@ -132,7 +180,25 @@ public:
         return false;
     }
 
+    std::string getName()
+    {
+        return this->name;
+    }
+
+    std::string getFullName()
+    {
+        if (this->parent != NULL)
+        {
+            return this->parent->getFullName() + "." + this->name;
+        }
+        else
+        {
+            return this->name;
+        }
+    }
+
 private:
+    std::string name;
     ModuleType *parent;
     std::map<std::string, ASTNode *> lazyNamedStatics;
     std::map<std::string, TypedValue *> namedStatics;
@@ -433,57 +499,6 @@ private:
     std::vector<StructTypeField> fields;
     bool managed;
     bool packed;
-};
-
-class TypedValue
-{
-public:
-    TypedValue(llvm::Value *value, Type *type) : value(value), type(type), originVariableName("") {}
-
-    inline llvm::Value *getValue()
-    {
-        return this->value;
-    }
-
-    inline bool isType()
-    {
-        return this->value == NULL;
-    }
-
-    inline Type *getType()
-    {
-        return this->type;
-    }
-
-    inline TypeCode getTypeCode()
-    {
-        return this->type->getTypeCode();
-    }
-
-    void setOriginVariable(std::string name)
-    {
-        this->originVariableName = name;
-    }
-
-    std::string getOriginVariable()
-    {
-        return this->originVariableName;
-    }
-
-    bool operator==(TypedValue &b)
-    {
-        return this->value == b.getValue() && this->type == b.getType();
-    }
-
-    bool operator!=(TypedValue &b)
-    {
-        return !(*this == b);
-    }
-
-private:
-    llvm::Value *value;
-    Type *type;
-    std::string originVariableName;
 };
 
 extern IntegerType BYTE_TYPE;
