@@ -362,6 +362,11 @@ public:
         return this->value;
     }
 
+    inline bool isType()
+    {
+        return this->value == NULL;
+    }
+
     inline Type *getType()
     {
         return this->type;

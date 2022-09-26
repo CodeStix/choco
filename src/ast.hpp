@@ -111,14 +111,12 @@ enum class ASTNodeType
     FOR,
     TYPE,
     PARAMETER,
-    STRUCT_TYPE,
-    STRUCT_TYPE_FIELD,
-    STRUCT_VALUE,
-    STRUCT_VALUE_FIELD,
+    STRUCT,
+    STRUCT_FIELD,
     DEREFERENCE,
     DEREFERENCE_MEMBER,
     DEREFERENCE_INDEX,
-    CAST_OPERATOR,
+    CAST,
 };
 
 std::string astNodeTypeToString(ASTNodeType type);
@@ -181,27 +179,25 @@ public:
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
-class ASTTypeNode : public ASTNode
-{
-public:
-    ASTTypeNode(ASTNodeType type) : ASTNode(type) {}
-    virtual Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) = 0;
-};
+// class ASTTypeNode : public ASTNode
+// {
+// public:
+//     ASTTypeNode(ASTNodeType type) : ASTNode(type) {}
+//     virtual Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) = 0;
+// };
 
-class ASTCastOperator : public ASTNode
+class ASTCast : public ASTNode
 {
 public:
-    ASTCastOperator(const Token *operatorToken, ASTTypeNode *targetType, ASTNode *value) : ASTNode(ASTNodeType::CAST_OPERATOR), operatorToken(operatorToken), targetType(targetType), value(value) {}
-    const Token *operatorToken;
-    ASTTypeNode *targetType;
+    ASTCast(ASTNode *targetType, ASTNode *value) : ASTNode(ASTNodeType::CAST), targetType(targetType), value(value) {}
+    ASTNode *targetType;
     ASTNode *value;
 
     std::string toString() override
     {
-        std::string str = this->targetType->toString();
-        str += " ";
-        str += this->operatorToken->value;
-        str += " ";
+        std::string str = "(";
+        str += this->targetType->toString();
+        str += ")";
         str += this->value->toString();
         return str;
     }
@@ -267,93 +263,93 @@ public:
 //     const Token *nameToken;
 // };
 
-class ASTStructTypeField : public ASTTypeNode
+// class ASTStructTypeField : public ASTTypeNode
+// {
+// public:
+//     ASTStructTypeField(const Token *fieldNameToken, ASTTypeNode *type, bool hidden = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE_FIELD), fieldNameToken(fieldNameToken), type(type), hidden(hidden) {}
+
+//     Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
+//     {
+//         return this->type->getSpecifiedType(context, scope);
+//     }
+
+//     std::string getName()
+//     {
+//         if (this->fieldNameToken != NULL)
+//         {
+//             return this->fieldNameToken->value;
+//         }
+//         else
+//         {
+//             return NULL;
+//         }
+//     }
+
+//     std::string toString() override
+//     {
+//         std::string str = "";
+//         if (this->fieldNameToken != NULL)
+//         {
+//             str += this->fieldNameToken->value;
+//         }
+//         str += ": ";
+//         str += this->type->toString();
+//         str += "\n";
+//         return str;
+//     }
+
+// private:
+//     const Token *fieldNameToken;
+//     ASTTypeNode *type;
+//     bool hidden;
+// };
+
+// class ASTStructType : public ASTTypeNode
+// {
+// public:
+//     ASTStructType(const Token *nameToken, std::vector<ASTStructTypeField *> fields, bool managed = true, bool packed = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE), nameToken(nameToken), fields(fields), managed(managed), packed(packed) {}
+
+//     Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
+//     {
+//         std::vector<StructTypeField> fields;
+//         for (auto &field : this->fields)
+//         {
+//             fields.push_back(StructTypeField(field->getSpecifiedType(context, scope), field->getName()));
+//         }
+//         return new StructType(fields, this->managed, this->packed);
+//     }
+
+//     std::string toString() override
+//     {
+//         std::string str = "";
+//         if (!this->managed)
+//         {
+//             str += "unmanaged ";
+//         }
+//         if (this->packed)
+//         {
+//             str += "packed ";
+//         }
+//         str += "{";
+//         for (auto &field : this->fields)
+//         {
+//             str += field->toString();
+//         }
+//         str += "}";
+//         return str;
+//     }
+
+// private:
+//     bool managed;
+//     bool packed;
+//     const Token *nameToken;
+//     std::vector<ASTStructTypeField *> fields;
+// };
+
+class ASTStructField : public ASTNode
 {
 public:
-    ASTStructTypeField(const Token *fieldNameToken, ASTTypeNode *type, bool hidden = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE_FIELD), fieldNameToken(fieldNameToken), type(type), hidden(hidden) {}
-
-    Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
-    {
-        return this->type->getSpecifiedType(context, scope);
-    }
-
-    std::string getName()
-    {
-        if (this->fieldNameToken != NULL)
-        {
-            return this->fieldNameToken->value;
-        }
-        else
-        {
-            return NULL;
-        }
-    }
-
-    std::string toString() override
-    {
-        std::string str = "";
-        if (this->fieldNameToken != NULL)
-        {
-            str += this->fieldNameToken->value;
-        }
-        str += ": ";
-        str += this->type->toString();
-        str += "\n";
-        return str;
-    }
-
-private:
-    const Token *fieldNameToken;
-    ASTTypeNode *type;
-    bool hidden;
-};
-
-class ASTStructType : public ASTTypeNode
-{
-public:
-    ASTStructType(const Token *nameToken, std::vector<ASTStructTypeField *> fields, bool managed = true, bool packed = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE), nameToken(nameToken), fields(fields), managed(managed), packed(packed) {}
-
-    Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
-    {
-        std::vector<StructTypeField> fields;
-        for (auto &field : this->fields)
-        {
-            fields.push_back(StructTypeField(field->getSpecifiedType(context, scope), field->getName()));
-        }
-        return new StructType(fields, this->managed, this->packed);
-    }
-
-    std::string toString() override
-    {
-        std::string str = "";
-        if (!this->managed)
-        {
-            str += "unmanaged ";
-        }
-        if (this->packed)
-        {
-            str += "packed ";
-        }
-        str += "{";
-        for (auto &field : this->fields)
-        {
-            str += field->toString();
-        }
-        str += "}";
-        return str;
-    }
-
-private:
-    bool managed;
-    bool packed;
-    const Token *nameToken;
-    std::vector<ASTStructTypeField *> fields;
-};
-
-class ASTStructValueField : public ASTNode
-{
-public:
-    ASTStructValueField(const Token *nameToken, ASTNode *value) : ASTNode(ASTNodeType::STRUCT_VALUE_FIELD), nameToken(nameToken), value(value) {}
+    ASTStructField(const Token *nameToken, ASTNode *value) : ASTNode(ASTNodeType::STRUCT_FIELD), nameToken(nameToken), value(value) {}
 
     std::string getName()
     {
@@ -367,16 +363,18 @@ private:
     ASTNode *value;
 };
 
-class ASTStructValue : public ASTNode
+class ASTStruct : public ASTNode
 {
 public:
-    ASTStructValue(std::vector<ASTStructValueField *> fields, const Token *typeNameToken) : ASTNode(ASTNodeType::STRUCT_VALUE), fields(fields), typeNameToken(typeNameToken) {}
+    ASTStruct(std::vector<ASTStructField *> fields, bool managed = true, bool packed = false, bool value = false) : ASTNode(ASTNodeType::STRUCT), fields(fields), managed(managed), packed(packed), value(value) {}
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 
 private:
-    std::vector<ASTStructValueField *> fields;
-    const Token *typeNameToken;
+    std::vector<ASTStructField *> fields;
+    bool managed = true;
+    bool packed = false;
+    bool value = false;
 };
 
 class ASTBrackets : public ASTNode
@@ -396,30 +394,15 @@ public:
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
 };
 
-class ASTSymbol : public ASTTypeNode
+class ASTSymbol : public ASTNode
 {
 public:
-    ASTSymbol(const Token *nameToken) : ASTTypeNode(ASTNodeType::SYMBOL), nameToken(nameToken) {}
+    ASTSymbol(const Token *nameToken) : ASTNode(ASTNodeType::SYMBOL), nameToken(nameToken) {}
     const Token *nameToken;
 
     std::string toString() override
     {
         return this->nameToken->value;
-    }
-
-    Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
-    {
-        TypedValue *type = scope->getValue(this->nameToken->value);
-        if (type == NULL)
-        {
-            return NULL;
-        }
-        if (type->getValue() != NULL)
-        {
-            std::cout << "ERROR: not a type symbol: " << this->nameToken->value << "\n";
-            return NULL;
-        }
-        return type->getType();
     }
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
@@ -516,10 +499,10 @@ public:
 class ASTDeclaration : public ASTNode
 {
 public:
-    ASTDeclaration(const Token *nameToken, ASTNode *value, ASTTypeNode *typeSpecifier) : ASTNode(ASTNodeType::DECLARATION), nameToken(nameToken), value(value), typeSpecifier(typeSpecifier) {}
+    ASTDeclaration(const Token *nameToken, ASTNode *value, ASTNode *typeSpecifier) : ASTNode(ASTNodeType::DECLARATION), nameToken(nameToken), value(value), typeSpecifier(typeSpecifier) {}
     const Token *nameToken;
     ASTNode *value;
-    ASTTypeNode *typeSpecifier;
+    ASTNode *typeSpecifier;
 
     std::string toString() override
     {
@@ -603,7 +586,7 @@ public:
 class ASTParameter : public ASTNode
 {
 public:
-    ASTParameter(const Token *nameToken, ASTTypeNode *typeSpecifier = NULL) : ASTNode(ASTNodeType::PARAMETER), nameToken(nameToken), typeSpecifier(typeSpecifier)
+    ASTParameter(const Token *nameToken, ASTNode *typeSpecifier = NULL) : ASTNode(ASTNodeType::PARAMETER), nameToken(nameToken), typeSpecifier(typeSpecifier)
     {
     }
 
@@ -618,18 +601,20 @@ public:
         return str;
     }
 
-    Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope)
-    {
-        if (this->typeSpecifier != NULL)
-        {
-            return this->typeSpecifier->getSpecifiedType(context, scope);
-        }
-        else
-        {
-            std::cout << "WARNING: ASTParameter::getSpecifiedType() was called without a type specifier";
-            return NULL;
-        }
-    }
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+
+    // Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope)
+    // {
+    //     if (this->typeSpecifier != NULL)
+    //     {
+    //         return this->typeSpecifier->getSpecifiedType(context, scope);
+    //     }
+    //     else
+    //     {
+    //         std::cout << "WARNING: ASTParameter::getSpecifiedType() was called without a type specifier";
+    //         return NULL;
+    //     }
+    // }
 
     std::string getParameterName()
     {
@@ -638,7 +623,7 @@ public:
 
 private:
     const Token *nameToken;
-    ASTTypeNode *typeSpecifier;
+    ASTNode *typeSpecifier;
 };
 
 class ASTInvocation : public ASTNode
@@ -671,10 +656,10 @@ public:
 class ASTFunction : public ASTNode
 {
 public:
-    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTTypeNode *returnType, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
+    ASTFunction(const Token *nameToken, std::vector<ASTParameter *> *parameters, ASTNode *returnType, ASTNode *body, bool exported = false) : ASTNode(ASTNodeType::FUNCTION), nameToken(nameToken), parameters(parameters), returnType(returnType), body(body), exported(exported) {}
     const Token *nameToken;
     std::vector<ASTParameter *> *parameters;
-    ASTTypeNode *returnType;
+    ASTNode *returnType;
     ASTNode *body;
     bool exported;
 
@@ -788,13 +773,12 @@ ASTNode *parseIfStatement(std::list<const Token *> &tokens);
 ASTNode *parseWhileStatement(std::list<const Token *> &tokens);
 ASTDeclaration *parseDeclaration(std::list<const Token *> &tokens);
 ASTNode *parseValueOrOperator(std::list<const Token *> &tokens);
-ASTNode *parseValue(std::list<const Token *> &tokens);
+ASTNode *parseValueOrType(std::list<const Token *> &tokens);
 ASTFunction *parseFunction(std::list<const Token *> &tokens);
 ASTNode *parseSymbolOperation(std::list<const Token *> &tokens);
 ASTFile *parseFile(std::list<const Token *> &tokens);
 ASTReturn *parseReturn(std::list<const Token *> &tokens);
-ASTTypeNode *parseInlineType(std::list<const Token *> &tokens);
 ASTParameter *parseParameter(std::list<const Token *> &tokens);
-ASTTypeNode *parseStructType(std::list<const Token *> &tokens, bool isInline);
 ASTNode *parseValueAndSuffix(std::list<const Token *> &tokens);
-ASTNode *parseValueOrTypeCast(std::list<const Token *> &tokens);
+ASTNode *parseStruct(std::list<const Token *> &tokens);
+ASTNode *parseInlineType(std::list<const Token *> &tokens);
