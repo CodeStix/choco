@@ -535,7 +535,7 @@ public:
 class StructType : public Type
 {
 public:
-    StructType(std::vector<StructTypeField> fields, bool managed = true, bool packed = false) : Type(TypeCode::STRUCT), fields(fields), managed(managed), packed(packed) {}
+    StructType(std::vector<StructTypeField> fields, bool managed, bool packed, bool value) : Type(TypeCode::STRUCT), fields(fields), managed(managed), packed(packed), value(value) {}
 
     bool operator==(const Type &b) const override
     {
@@ -639,6 +639,7 @@ private:
     std::vector<StructTypeField> fields;
     bool managed;
     bool packed;
+    bool value;
 };
 
 extern IntegerType BYTE_TYPE;

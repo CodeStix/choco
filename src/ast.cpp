@@ -1592,26 +1592,14 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         return NULL;
     }
 
-    StructType *structType = new StructType(fieldTypes, this->managed, this->packed);
+    StructType *structType = new StructType(fieldTypes, this->managed, this->packed, this->value);
 
     if (!isType)
     {
         // This struct is not a type definition
         llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
-        // TODO: analyse if this object can be allocated on the stack
-        bool useStack = false;
-
-        auto structPointer;
-        if (useStack)
-        {
-
-            structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
-        }
-        else
-        {
-            structPointer =
-        }
+        auto structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
 
         int fieldIndex = 0;
         for (auto &field : fieldValues)
@@ -2048,28 +2036,62 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     TypedValue *pointer = new TypedValue(pointerValue, pointerType->getPointerToType());
     scope->addValue(this->nameToken->value, pointer);
 
-    if (initialValue != NULL)
+    bool isVolatile = false;
+    if (!createAssignment(context, pointer, initialValue, isVolatile))
     {
-        TypedValue *convertedValue;
-        if (specifiedType != NULL)
-        {
-            convertedValue = generateTypeConversion(context, initialValue, specifiedType, true); // TODO: remove allowLosePrecision when casts are supported
-            if (convertedValue == NULL)
-            {
-                std::cout << "ERROR: Cannot declare variable '" << this->nameToken->value << "', right-hand side has invalid assignment type\n";
-                return NULL;
-            }
-        }
-        else
-        {
-            convertedValue = initialValue;
-        }
-
-        bool isVolatile = false;
-        context->irBuilder->CreateStore(convertedValue->getValue(), pointer->getValue(), isVolatile);
+        return NULL;
     }
 
     return initialValue;
+}
+
+bool createAssignment(GenerationContext *context, TypedValue *valuePointer, TypedValue *newValue, bool isVolatile)
+{
+    PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
+
+    if (newValue->getTypeCode() != TypeCode::POINTER)
+    {
+        // T* = T
+        auto convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), false);
+        if (convertedValue == NULL)
+        {
+            std::cout << "ERROR: Cannot assign '" << valuePointer->getOriginVariable() << "', right-hand side has invalid type\n";
+            return false;
+        }
+        context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
+    }
+    else
+    {
+        PointerType *newValuePointerType = static_cast<PointerType *>(newValue->getType());
+        if (valuePointerType->getPointedType()->getTypeCode() != TypeCode::POINTER && newValuePointerType->getPointedType()->getTypeCode() != TypeCode::POINTER)
+        {
+            // T* = T*
+            // Both types are a 1-level deep pointer, use memory copy
+            auto convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), false);
+            if (convertedValue == NULL)
+            {
+                std::cout << "ERROR:  Cannot assign '" << valuePointer->getOriginVariable() << "', right-hand side has invalid type\n";
+                return false;
+            }
+
+            llvm::Type *typeToCopy = valuePointerType->getPointedType()->getLLVMType(*context->context);
+            auto typeSize = createSizeOf(context, typeToCopy);
+            context->irBuilder->CreateMemCpyInline(valuePointer->getValue(), llvm::MaybeAlign(8), convertedValue->getValue(), llvm::MaybeAlign(8), typeSize, isVolatile);
+        }
+        else
+        {
+            // T** = T*
+            auto convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), false);
+            if (convertedValue == NULL)
+            {
+                std::cout << "ERROR:  Cannot assign '" << valuePointer->getOriginVariable() << "', right-hand side has invalid type\n";
+                return false;
+            }
+            context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
+        }
+    }
+
+    return true;
 }
 
 TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
@@ -2077,6 +2099,8 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 #ifdef DEBUG
     std::cout << "debug: ASTAssignment::generateLLVM\n";
 #endif
+
+    bool isVolatile = false;
 
     TypedValue *valuePointer = this->pointerValue->generateLLVM(context, scope);
     if (valuePointer == NULL)
@@ -2089,27 +2113,14 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
         std::cout << "ERROR: assert failed: valuePointer->getTypeCode() != TypeCode::POINTER\n";
         return NULL;
     }
-    PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
 
     TypedValue *newValue = this->value->generateLLVM(context, scope);
 
-    TypedValue *convertedValue;
-    if (*valuePointerType != *newValue->getType()->getPointerToType())
+    if (!createAssignment(context, valuePointer, newValue, isVolatile))
     {
-        convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), true); // TODO: remove allowLosePrecision when casts are supported
-        if (convertedValue == NULL)
-        {
-            std::cout << "ERROR: Cannot set variable '" << valuePointer->getOriginVariable() << "', right-hand side has invalid type\n";
-            return NULL;
-        }
-    }
-    else
-    {
-        convertedValue = newValue;
+        return NULL;
     }
 
-    bool isVolatile = false;
-    context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
     return newValue;
 }
 
