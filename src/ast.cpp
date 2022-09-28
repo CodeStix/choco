@@ -1198,6 +1198,7 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 #ifdef DEBUG
     std::cout << "debug: ASTLiteralNumber::generateLLVM\n";
 #endif
+
     int integerBase = 10;
     std::string noPrefix = this->valueToken->value;
     if (this->valueToken->value.find("0x") == 0)
@@ -1233,29 +1234,38 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 
     if (isFloating)
     {
-#ifdef DEBUG
-        std::cout << "debug: ASTLiteralNumber::generateLLVM floating\n";
-#endif
+        FloatType *type;
+        if (typeHint != NULL && typeHint->getTypeCode() == TypeCode::FLOAT)
+        {
+            type = static_cast<FloatType *>(typeHint);
+        }
+        else
+        {
+            type = new FloatType(64);
+        }
+
         double floatingValue = strtod(cleaned.c_str(), NULL);
-        Type *type = new FloatType(64);
         auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), floatingValue);
-#ifdef DEBUG
-        std::cout << "debug: ASTLiteralNumber::generateLLVM floating 2\n";
-#endif
+
         return new TypedValue(value, type);
     }
     else
     {
-#ifdef DEBUG
-        std::cout << "debug: ASTLiteralNumber::generateLLVM int\n";
-#endif
         unsigned long long integerValue = strtoull(cleaned.c_str(), NULL, integerBase);
-        bool isSigned = integerValue <= INT64_MAX;
-        Type *type = new IntegerType(64, isSigned);
-        auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, isSigned);
-#ifdef DEBUG
-        std::cout << "debug: ASTLiteralNumber::generateLLVM int 2\n";
-#endif
+
+        IntegerType *type;
+        if (typeHint != NULL && typeHint->getTypeCode() == TypeCode::INTEGER)
+        {
+            type = static_cast<IntegerType *>(typeHint);
+        }
+        else
+        {
+            bool isSigned = integerValue <= INT64_MAX;
+            type = new IntegerType(64, isSigned);
+        }
+
+        auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, type->getSigned());
+
         return new TypedValue(value, type);
     }
 }

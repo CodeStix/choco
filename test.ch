@@ -29,11 +29,11 @@ struct ReturnedStruct {
 
 export func returnStruct(add: Int32): ReturnedStruct {
     return ReturnedStruct {
-        nested: value {
+        nested: {
             bigNumber: Float32 (123.456 + add)
         }
-        x: Int32 (Int32 123 + add)
-        y: Int32 (Int32 456 + add)
+        x: 123
+        y: 456
     }
 }
 
