@@ -49,9 +49,18 @@ export func main() {
     printDouble(b.data.bigNumber)
 
     let structCopy = b.data
-    structCopy.bigNumber = Float32 getInteger()
+    b.data.bigNumber = Float32 getInteger()
     printDouble(structCopy.bigNumber)
     printDouble(b.data.bigNumber)
+
+    printNumbers(Int32 10)
+}
+
+export func printNumbers(max: Int32) {
+    while (max > 0) {
+        max = Int32 (max - 1)
+        printDouble(Float32 max)
+    }
 }
 
 func recurse(a: Int32): Int32 {

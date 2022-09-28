@@ -2279,7 +2279,14 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     }
 
     // Add function attributes
-    function->addFnAttr(llvm::Attribute::NoUnwind);
+    auto fnAttributeBuilder = llvm::AttrBuilder(*context->context);
+    fnAttributeBuilder.addAttribute(llvm::Attribute::NoUnwind);
+    if (this->exported)
+    {
+        // TODO: do this only if targetting WASM
+        fnAttributeBuilder.addAttribute("wasm-export-name", this->nameToken->value);
+    }
+    function->addFnAttrs(fnAttributeBuilder);
 
     // Name parameters and add parameter attributes when needed
     for (int i = 0; i < parameters.size(); i++)

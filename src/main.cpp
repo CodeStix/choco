@@ -83,15 +83,15 @@ int main()
         return 1;
     }
 
-    // #ifdef DEBUG
+#ifdef DEBUG
     context->module->print(llvm::errs(), NULL);
-    // #endif
+#endif
 
     std::cout << "[4/4] Creating executable...\n";
 
-    auto targetCpu = "x86-64";
-    auto targetFeatures = ""; // "+avx,+avx2,+aes,+sse,+sse2,+sse3";
-    auto targetTriple = llvm::sys::getDefaultTargetTriple();
+    auto targetCpu = "x86-64";                               // x86-64
+    auto targetFeatures = "";                                // "+avx,+avx2,+aes,+sse,+sse2,+sse3";
+    auto targetTriple = llvm::sys::getDefaultTargetTriple(); // "wasm32"
     std::string targetTripleError;
     auto target = llvm::TargetRegistry::lookupTarget(targetTriple, targetTripleError);
     if (!target)
