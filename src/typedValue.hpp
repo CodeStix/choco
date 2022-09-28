@@ -657,6 +657,11 @@ public:
         return str;
     }
 
+    std::vector<StructTypeField> getFields()
+    {
+        return this->fields;
+    }
+
 private:
     std::vector<StructTypeField> fields;
     bool managed;
@@ -666,5 +671,6 @@ private:
 extern IntegerType BYTE_TYPE;
 extern IntegerType CHAR_TYPE;
 extern IntegerType BOOL_TYPE;
+extern IntegerType UINT32_TYPE;
 
 std::string typeCodeToString(TypeCode code);

@@ -141,7 +141,7 @@ public:
     {
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope)
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint = NULL)
     {
         std::cout << "WARNING: ASTNode::generateLLVM was called without any implementation\n";
         return NULL;
@@ -167,7 +167,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTOperator : public ASTNode
@@ -190,14 +190,14 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 // class ASTTypeNode : public ASTNode
 // {
 // public:
 //     ASTTypeNode(ASTNodeType type) : ASTNode(type) {}
-//     virtual Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) = 0;
+//     virtual Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope, Type *typeHint) = 0;
 // };
 
 class ASTCast : public ASTNode
@@ -216,7 +216,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 // class ASTTypeName : public ASTTypeNode
@@ -263,7 +263,7 @@ public:
 //         return NULL;
 //     }
 
-//     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override
+//     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override
 //     {
 //         return NULL;
 //     }
@@ -282,7 +282,7 @@ public:
 // public:
 //     ASTStructTypeField(const Token *fieldNameToken, ASTTypeNode *type, bool hidden = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE_FIELD), fieldNameToken(fieldNameToken), type(type), hidden(hidden) {}
 
-//     Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
+//     Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope, Type *typeHint) override
 //     {
 //         return this->type->getSpecifiedType(context, scope);
 //     }
@@ -323,7 +323,7 @@ public:
 // public:
 //     ASTStructType(const Token *nameToken, std::vector<ASTStructTypeField *> fields, bool managed = true, bool packed = false) : ASTTypeNode(ASTNodeType::STRUCT_TYPE), nameToken(nameToken), fields(fields), managed(managed), packed(packed) {}
 
-//     Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope) override
+//     Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope, Type *typeHint) override
 //     {
 //         std::vector<StructTypeField> fields;
 //         for (auto &field : this->fields)
@@ -382,7 +382,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
 private:
     const Token *nameToken;
@@ -394,7 +394,7 @@ class ASTStruct : public ASTNode
 public:
     ASTStruct(std::vector<ASTStructField *> fields, bool managed = true, bool packed = false, bool value = false) : ASTNode(ASTNodeType::STRUCT), fields(fields), managed(managed), packed(packed), value(value) {}
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
     std::string toString() override
     {
@@ -450,7 +450,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTSymbol : public ASTNode
@@ -464,7 +464,7 @@ public:
         return this->nameToken->value;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 // class ASTDereference : public ASTNode
@@ -477,7 +477,7 @@ public:
 //         return this->nameToken->value;
 //     }
 
-//     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+//     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
 // private:
 //     const Token *nameToken;
@@ -497,7 +497,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
 private:
     ASTNode *toIndex;
@@ -516,7 +516,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
 private:
     ASTNode *toIndex;
@@ -537,7 +537,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTLiteralNumber : public ASTNode
@@ -552,7 +552,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTDeclaration : public ASTNode
@@ -580,7 +580,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTAssignment : public ASTNode
@@ -598,7 +598,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTReturn : public ASTNode
@@ -622,7 +622,7 @@ public:
         return true;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTBlock : public ASTNode
@@ -656,7 +656,7 @@ public:
         return false;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTParameter : public ASTNode
@@ -677,9 +677,9 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
-    // Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope)
+    // Type *getSpecifiedType(GenerationContext *context, FunctionScope *scope, Type *typeHint)
     // {
     //     if (this->typeSpecifier != NULL)
     //     {
@@ -726,7 +726,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTFunction : public ASTNode
@@ -779,7 +779,7 @@ public:
         currentModule->addLazyValue(this->nameToken->value, this);
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTFile : public ASTNode
@@ -807,7 +807,7 @@ public:
         }
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 class ASTStructDeclaration : public ASTNode
@@ -830,7 +830,7 @@ public:
         currentModule->addLazyValue(this->nameToken->value, this);
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
 private:
     const Token *nameToken;
@@ -858,7 +858,7 @@ public:
         return str;
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
     bool isTerminating() override
     {
@@ -907,7 +907,7 @@ public:
         }
     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope) override;
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
 ASTNode *parseIfStatement(TokenStream *tokens);

@@ -15,6 +15,11 @@ struct TestStruct {
     data: NestedStruct
 }
 
+struct PackedStruct packed {
+    a: Int32
+    b: Int64
+    c: Int32
+}
 
 struct ReturnedStruct {
     x: Int32
@@ -23,12 +28,12 @@ struct ReturnedStruct {
 }
 
 export func returnStruct(add: Int32): ReturnedStruct {
-    return {
-        x: Int32 (Int32 123 + add)
-        y: Int32 (Int32 456 + add)
+    return ReturnedStruct {
         nested: value {
             bigNumber: Float32 (123.456 + add)
         }
+        x: Int32 (Int32 123 + add)
+        y: Int32 (Int32 456 + add)
     }
 }
 
@@ -44,10 +49,10 @@ func modifyStruct(str: NestedStruct) {
 export func main() {
     let b = TestStruct {
         original: Int32 getInteger()
-        val: Int32 getInteger()
         data: value {
             bigNumber: Float32 1234,
         }
+        val: Int32 getInteger()
     } 
 
     if ((b.val == 100) || (b.val == 200)) {

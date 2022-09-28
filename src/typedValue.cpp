@@ -4,6 +4,7 @@
 IntegerType BYTE_TYPE(8, false);
 IntegerType CHAR_TYPE(8, false);
 IntegerType BOOL_TYPE(1, false);
+IntegerType UINT32_TYPE(32, false);
 
 Type *Type::getPointerToType(bool byValue)
 {
@@ -25,7 +26,7 @@ TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, F
             auto savedBlock = context->irBuilder->GetInsertBlock();
             FunctionType *savedCurrentFunction = context->currentFunction;
             TypedValue *savedSRet = context->currentFunctionSRet;
-            value = lazyValue->generateLLVM(context, scope);
+            value = lazyValue->generateLLVM(context, scope, NULL);
             context->currentFunctionSRet = savedSRet;
             context->currentFunction = savedCurrentFunction;
             context->irBuilder->SetInsertPoint(savedBlock);

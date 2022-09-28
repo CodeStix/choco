@@ -1174,7 +1174,7 @@ llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm
     return insertBuilder.CreateAlloca(type, NULL, twine);
 }
 
-TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTSymbol::generateLLVM " << this->nameToken->value << "\n";
@@ -1193,7 +1193,7 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
     return valuePointer;
 }
 
-TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTLiteralNumber::generateLLVM\n";
@@ -1625,49 +1625,91 @@ bool createAssignment(GenerationContext *context, TypedValue *valuePointer, Type
     return true;
 }
 
-TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTStruct::generateLLVM\n";
 #endif
 
+    std::map<std::string, TypedValue *> fieldValues;
+    StructType *structType = NULL;
     bool isType = false;
-    std::vector<TypedValue *> fieldValues;
-    std::vector<StructTypeField> fieldTypes;
-    bool first = true;
-    for (auto &field : this->fields)
-    {
-        TypedValue *fieldValue = field->generateLLVM(context, scope);
-        if (first)
-        {
-            first = false;
-            isType = fieldValue->isType();
-        }
-        if (fieldValue->isType() != isType)
-        {
-            std::cout << "ERROR: cannot mix value and type structs\n";
-            return NULL;
-        }
-        fieldValues.push_back(fieldValue);
 
-        Type *fieldType = NULL;
-        if (fieldValue->getTypeCode() == TypeCode::POINTER)
+    // Enforce type hint
+    if (typeHint != NULL && typeHint->getTypeCode() == TypeCode::POINTER)
+    {
+        PointerType *typeHintPointer = static_cast<PointerType *>(typeHint);
+        if (typeHintPointer->getPointedType()->getTypeCode() == TypeCode::STRUCT)
         {
-            PointerType *fieldPointerType = static_cast<PointerType *>(fieldValue->getType());
-            if (fieldPointerType->isByValue())
+            structType = static_cast<StructType *>(typeHintPointer->getPointedType());
+
+            if (this->value || !this->managed || this->packed)
             {
-                fieldType = fieldPointerType->getPointedType();
+                std::cout << "ERROR: Struct modifier cannot be specified again\n";
+                return NULL;
+            }
+
+            for (auto &field : this->fields)
+            {
+                auto hintField = structType->getField(field->getName());
+                if (hintField == NULL)
+                {
+                    std::cout << "ERROR: Struct field " << field->getName() << " does not exist on type " << typeHint->toString() << "\n";
+                    return NULL;
+                }
+
+                TypedValue *fieldValue = field->generateLLVM(context, scope, hintField->type);
+                if (fieldValue->isType())
+                {
+                    std::cout << "ERROR: Struct field cannot be initialized with a type\n";
+                    return NULL;
+                }
+
+                fieldValues[field->getName()] = fieldValue;
             }
         }
-        if (fieldType == NULL)
-        {
-            fieldType = fieldValue->getType();
-        }
-
-        fieldTypes.push_back(StructTypeField(fieldType, field->getName()));
     }
 
-    StructType *structType = new StructType(fieldTypes, this->managed, this->packed);
+    // Infer struct type from specified value
+    if (structType == NULL)
+    {
+        std::vector<StructTypeField> fieldTypes;
+        bool first = true;
+        for (auto &field : this->fields)
+        {
+            TypedValue *fieldValue = field->generateLLVM(context, scope, typeHint);
+            if (first)
+            {
+                first = false;
+                isType = fieldValue->isType();
+            }
+            if (fieldValue->isType() != isType)
+            {
+                std::cout << "ERROR: cannot mix value and type structs\n";
+                return NULL;
+            }
+
+            fieldValues[field->getName()] = fieldValue;
+
+            Type *fieldType = NULL;
+            if (fieldValue->getTypeCode() == TypeCode::POINTER)
+            {
+                PointerType *fieldPointerType = static_cast<PointerType *>(fieldValue->getType());
+                if (fieldPointerType->isByValue())
+                {
+                    fieldType = fieldPointerType->getPointedType();
+                }
+            }
+            if (fieldType == NULL)
+            {
+                fieldType = fieldValue->getType();
+            }
+
+            fieldTypes.push_back(StructTypeField(fieldType, field->getName()));
+        }
+
+        structType = new StructType(fieldTypes, this->managed, this->packed);
+    }
 
     if (!isType)
     {
@@ -1676,20 +1718,31 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
 
         auto structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
 
-        for (int i = 0; i < fieldValues.size(); i++)
+        for (auto &pair : fieldValues)
         {
-            auto field = fieldValues[i];
-            auto fieldType = fieldTypes[i];
-            auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, i, "structgep");
+            auto fieldName = pair.first;
+            auto fieldValue = pair.second;
+            auto fieldType = structType->getField(fieldName);
+            auto fieldIndex = structType->getFieldIndex(fieldName);
 
             bool isVolatile = false;
-            TypedValue *structFieldPointerValue = new TypedValue(structFieldPointer, fieldType.type->getPointerToType(fieldType.type->getTypeCode() != TypeCode::POINTER));
-            if (!createAssignment(context, structFieldPointerValue, field, isVolatile))
+            auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
+            TypedValue *structFieldPointerValue = new TypedValue(structFieldPointer, fieldType->type->getPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
+            if (!createAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
             {
-                std::cout << "ERROR: Cannot initialize field " << i << " of " << structType->toString() << "\n";
+                std::cout << "ERROR: Cannot initialize struct field " << fieldName << " of " << structType->toString() << "\n";
                 return NULL;
             }
-            // context->irBuilder->CreateStore(field->getValue(), structFieldPointer, false);
+        }
+
+        // Check if all fields were set
+        for (auto &field : structType->getFields())
+        {
+            if (fieldValues[field.name] == NULL)
+            {
+                std::cout << "ERROR: Struct field " << field.name << " of " << structType->toString() << " must be initialized\n";
+                return NULL;
+            }
         }
 
         return new TypedValue(structPointer, structType->getPointerToType(this->value));
@@ -1700,20 +1753,20 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
     }
 }
 
-TypedValue *ASTStructField::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTStructField::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTStructField::generateLLVM " << this->nameToken->value << "\n";
 #endif
-    return this->value->generateLLVM(context, scope);
+    return this->value->generateLLVM(context, scope, typeHint);
 }
 
-TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTUnaryOperator::generateLLVM\n";
 #endif
-    auto *operand = this->operand->generateLLVM(context, scope);
+    auto *operand = this->operand->generateLLVM(context, scope, NULL);
 
     switch (this->operatorToken->type)
     {
@@ -1763,20 +1816,20 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
     }
 }
 
-TypedValue *ASTCast::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTCast::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTCast::generateLLVM\n";
 #endif
 
-    auto targetType = this->targetType->generateLLVM(context, scope);
+    auto targetType = this->targetType->generateLLVM(context, scope, NULL);
     if (targetType == NULL || !targetType->isType())
     {
         std::cout << "ERROR: Left-hand side of cast must be a type (got a value)\n";
         return NULL;
     }
 
-    auto value = this->value->generateLLVM(context, scope);
+    auto value = this->value->generateLLVM(context, scope, targetType->getType());
     if (value == NULL || value->isType())
     {
         std::cout << "ERROR: Right-hand side of cast must be a value (got a type)\n";
@@ -1786,18 +1839,18 @@ TypedValue *ASTCast::generateLLVM(GenerationContext *context, FunctionScope *sco
     return generateTypeConversion(context, value, targetType->getType(), true);
 }
 
-TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
     TokenType operatorType = this->operatorToken->type;
 
 #ifdef DEBUG
     std::cout << "debug: ASTOperator::generateLLVM left\n";
 #endif
-    auto *left = this->left->generateLLVM(context, scope);
+    auto *left = this->left->generateLLVM(context, scope, NULL);
 #ifdef DEBUG
     std::cout << "debug: ASTOperator::generateLLVM right\n";
 #endif
-    auto *right = this->right->generateLLVM(context, scope);
+    auto *right = this->right->generateLLVM(context, scope, NULL);
 
     if (!left || !right)
     {
@@ -2049,7 +2102,7 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
     }
 }
 
-TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTLiteralString::generateLLVM\n";
@@ -2059,7 +2112,7 @@ TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionS
     return new TypedValue(value, type);
 }
 
-TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTDeclaration::generateLLVM\n";
@@ -2071,20 +2124,10 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         return NULL;
     }
 
-    TypedValue *initialValue;
-    if (this->value != NULL)
-    {
-        initialValue = this->value->generateLLVM(context, scope);
-    }
-    else
-    {
-        initialValue = NULL;
-    }
-
     Type *specifiedType;
     if (this->typeSpecifier != NULL)
     {
-        TypedValue *specifiedTypeValue = this->typeSpecifier->generateLLVM(context, scope);
+        TypedValue *specifiedTypeValue = this->typeSpecifier->generateLLVM(context, scope, NULL);
         if (!specifiedTypeValue->isType())
         {
             std::cout << "ERROR: Declaration type specifier may not have value\n";
@@ -2095,6 +2138,16 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     else
     {
         specifiedType = NULL;
+    }
+
+    TypedValue *initialValue;
+    if (this->value != NULL)
+    {
+        initialValue = this->value->generateLLVM(context, scope, specifiedType);
+    }
+    else
+    {
+        initialValue = NULL;
     }
 
     Type *pointerType;
@@ -2144,7 +2197,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     return initialValue;
 }
 
-TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTAssignment::generateLLVM\n";
@@ -2152,7 +2205,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 
     bool isVolatile = false;
 
-    TypedValue *valuePointer = this->pointerValue->generateLLVM(context, scope);
+    TypedValue *valuePointer = this->pointerValue->generateLLVM(context, scope, NULL);
     if (valuePointer == NULL)
     {
         std::cout << "ERROR: Cannot set variable '" << valuePointer->getOriginVariable() << "', it is not found\n";
@@ -2160,11 +2213,13 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     }
     if (valuePointer->getTypeCode() != TypeCode::POINTER)
     {
-        std::cout << "ERROR: assert failed: valuePointer->getTypeCode() != TypeCode::POINTER\n";
+        std::cout << "ERROR: Assert failed: valuePointer->getTypeCode() != TypeCode::POINTER\n";
         return NULL;
     }
 
-    TypedValue *newValue = this->value->generateLLVM(context, scope);
+    PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
+
+    TypedValue *newValue = this->value->generateLLVM(context, scope, valuePointerType->getPointedType());
 
     if (!createAssignment(context, valuePointer, newValue, isVolatile))
     {
@@ -2175,21 +2230,21 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     return newValue;
 }
 
-TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTReturn::generateLLVM\n";
 #endif
     if (this->value != NULL)
     {
-        auto value = this->value->generateLLVM(context, scope);
-
         Type *returnType = context->currentFunction->getReturnType();
         if (returnType == NULL)
         {
             std::cout << "ERROR: Function does not return value\n";
             return NULL;
         }
+
+        auto value = this->value->generateLLVM(context, scope, returnType);
 
         TypedValue *newValue = generateTypeConversion(context, value, returnType, true); // TODO: remove allowLosePrecision when casts are supported
         if (newValue == NULL)
@@ -2223,7 +2278,7 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
     }
 }
 
-TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTBlock::generateLLVM\n";
@@ -2234,20 +2289,20 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
 #ifdef DEBUG
         std::cout << "debug: ASTBlock::generateLLVM generate " << astNodeTypeToString(statement->type) << "\n";
 #endif
-        lastValue = statement->generateLLVM(context, scope);
+        lastValue = statement->generateLLVM(context, scope, NULL);
     }
     return lastValue;
 }
 
-TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTParameter::generateLLVM\n";
 #endif
-    return this->typeSpecifier->generateLLVM(context, scope);
+    return this->typeSpecifier->generateLLVM(context, scope, typeHint);
 }
 
-TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTFunction::generateLLVM " << this->nameToken->value << "\n";
@@ -2256,7 +2311,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     std::vector<FunctionParameter> parameters;
     for (ASTParameter *parameter : *this->parameters)
     {
-        TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope);
+        TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope, NULL);
         if (!parameterTypeValue->isType())
         {
             std::cout << "ERROR: parameter type specifier may not have value\n";
@@ -2268,7 +2323,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     Type *returnType;
     if (this->returnType != NULL)
     {
-        TypedValue *returnTypeValue = this->returnType->generateLLVM(context, scope);
+        TypedValue *returnTypeValue = this->returnType->generateLLVM(context, scope, NULL);
         if (!returnTypeValue->isType())
         {
             std::cout << "ERROR: return type specifier may not have value\n";
@@ -2364,7 +2419,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             auto parameterValue = function->getArg(i);
             ASTParameter *parameter = (*this->parameters)[i++];
 
-            TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope);
+            TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope, NULL);
             if (!parameterTypeValue->isType())
             {
                 std::cout << "ERROR: parameter type specifier may not have value\n";
@@ -2389,7 +2444,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             context->currentFunctionSRet = NULL;
         }
 
-        this->body->generateLLVM(context, functionScope);
+        this->body->generateLLVM(context, functionScope, NULL);
 
         // Check if the function was propery terminated
         // llvm::BasicBlock *functionEndBlock = context->irBuilder->GetInsertBlock();
@@ -2420,12 +2475,12 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     return newFunctionPointerType;
 }
 
-TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTWhileStatement::generateLLVM\n";
 #endif
-    TypedValue *preConditionValue = this->condition->generateLLVM(context, scope);
+    TypedValue *preConditionValue = this->condition->generateLLVM(context, scope, &BOOL_TYPE);
     if (*preConditionValue->getType() != BOOL_TYPE)
     {
         std::cout << "While condition must be a bool (UInt1) type!\n";
@@ -2447,9 +2502,9 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     context->irBuilder->SetInsertPoint(loopStartBlock);
     loopStartBlock->insertInto(parentFunction);
     auto loopScope = new FunctionScope(*scope);
-    this->loopBody->generateLLVM(context, loopScope);
+    this->loopBody->generateLLVM(context, loopScope, NULL);
 
-    TypedValue *conditionValue = this->condition->generateLLVM(context, loopScope);
+    TypedValue *conditionValue = this->condition->generateLLVM(context, loopScope, &BOOL_TYPE);
     if (*conditionValue->getType() != BOOL_TYPE)
     {
         std::cout << "While condition must be a bool (UInt1) type!\n";
@@ -2468,7 +2523,7 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     auto elseScope = new FunctionScope(*scope);
     if (this->elseBody != NULL)
     {
-        this->elseBody->generateLLVM(context, elseScope);
+        this->elseBody->generateLLVM(context, elseScope, NULL);
     }
     llvm::BasicBlock *elseEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
     if (elseEndBlock->getTerminator() == NULL)
@@ -2484,13 +2539,13 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
     return NULL;
 }
 
-TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTIndexDereference::generateLLVM\n";
 #endif
 
-    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
+    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope, NULL);
     TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
     if (pointerToIndex == NULL)
     {
@@ -2498,19 +2553,19 @@ TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, Functi
         return NULL;
     }
 
-    TypedValue *indexValue = this->index->generateLLVM(context, scope);
+    TypedValue *indexValue = this->index->generateLLVM(context, scope, &UINT32_TYPE);
 
     std::cout << "ERROR: index dereference not implemented\n";
     return NULL;
 }
 
-TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTMemberDereference::generateLLVM\n";
 #endif
 
-    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope);
+    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope, NULL);
 
     if (valueToIndex->isType())
     {
@@ -2568,13 +2623,13 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     }
 }
 
-TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTIfStatement::generateLLVM\n";
 #endif
 
-    TypedValue *condition = this->condition->generateLLVM(context, scope);
+    TypedValue *condition = this->condition->generateLLVM(context, scope, &BOOL_TYPE);
     // llvm::Value *condition = context->irBuilder->CreateFCmpONE(conditionFloat, llvm::ConstantFP::get(*context->context, llvm::APFloat(0.0)), "ifcond");
     if (*condition->getType() != BOOL_TYPE)
     {
@@ -2592,7 +2647,7 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
     context->irBuilder->SetInsertPoint(thenStartBlock);
     thenStartBlock->insertInto(parentFunction);
     auto thenScope = new FunctionScope(*scope);
-    this->thenBody->generateLLVM(context, thenScope);
+    this->thenBody->generateLLVM(context, thenScope, NULL);
 
     llvm::BasicBlock *thenEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
     if (thenEndBlock->getTerminator() == NULL)
@@ -2605,7 +2660,7 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
     auto elseScope = new FunctionScope(*scope);
     if (this->elseBody != NULL)
     {
-        this->elseBody->generateLLVM(context, elseScope);
+        this->elseBody->generateLLVM(context, elseScope, NULL);
     }
 
     llvm::BasicBlock *elseEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
@@ -2623,12 +2678,12 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
     return NULL;
 }
 
-TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTInvocation::generateLLVM\n";
 #endif
-    TypedValue *functionValue = this->functionPointerValue->generateLLVM(context, scope);
+    TypedValue *functionValue = this->functionPointerValue->generateLLVM(context, scope, NULL);
     if (functionValue == NULL)
     {
         std::cout << "ERROR: Function to call not found\n";
@@ -2664,7 +2719,7 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
     {
         FunctionParameter &parameter = parameters[p];
         ASTNode *parameterNode = (*this->parameterValues)[p];
-        TypedValue *parameterValue = parameterNode->generateLLVM(context, scope);
+        TypedValue *parameterValue = parameterNode->generateLLVM(context, scope, parameter.type);
         if (parameterValue == NULL || parameterValue->getValue() == NULL)
         {
             return NULL;
@@ -2702,15 +2757,15 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
     return new TypedValue(callResult, functionType->getReturnType());
 }
 
-TypedValue *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTBrackets::generateLLVM\n";
 #endif
-    return this->inner->generateLLVM(context, scope);
+    return this->inner->generateLLVM(context, scope, typeHint);
 }
 
-TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTFile::generateLLVM\n";
@@ -2718,20 +2773,25 @@ TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *sco
     FunctionScope *fileScope = new FunctionScope(*scope);
     for (ASTNode *statement : *this->statements)
     {
-        statement->generateLLVM(context, fileScope);
+        statement->generateLLVM(context, fileScope, NULL);
     }
     return NULL;
 }
 
-TypedValue *ASTStructDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope)
+TypedValue *ASTStructDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTStructDeclaration::generateLLVM\n";
 #endif
 
-    TypedValue *type = this->structNode->generateLLVM(context, scope);
+    TypedValue *type = this->structNode->generateLLVM(context, scope, typeHint);
     if (type == NULL)
     {
+        return NULL;
+    }
+    if (!type->isType())
+    {
+        std::cout << "ERROR: Struct declarations may not contain values";
         return NULL;
     }
 
