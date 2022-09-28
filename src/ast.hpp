@@ -75,6 +75,7 @@ public:
                           globalModule(ModuleType("Global"))
     {
 #ifndef DEBUG
+        passManager->add(llvm::createMemCpyOptPass());
         passManager->add(llvm::createPromoteMemoryToRegisterPass());
         passManager->add(llvm::createInstructionCombiningPass());
         passManager->add(llvm::createReassociatePass());
@@ -82,6 +83,7 @@ public:
         passManager->add(llvm::createCFGSimplificationPass());
         passManager->add(llvm::createDeadCodeEliminationPass());
 #endif
+
         passManager->doInitialization();
     };
 

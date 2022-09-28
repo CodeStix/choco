@@ -19,12 +19,16 @@ struct TestStruct {
 struct ReturnedStruct {
     x: Int32
     y: Int32
+    nested: NestedStruct
 }
 
-func returnStruct(): ReturnedStruct {
+export func returnStruct(add: Int32): ReturnedStruct {
     return {
-        x: Int32 123
-        y: Int32 456
+        x: Int32 (Int32 123 + add)
+        y: Int32 (Int32 456 + add)
+        nested: value {
+            bigNumber: Float32 (123.456 + add)
+        }
     }
 }
 
@@ -68,9 +72,14 @@ export func main() {
 
     printNumbers(Int32 10)
 
-    let a = returnStruct()
+    let a = returnStruct(Int32 0)
+    let ab = returnStruct(Int32 10)
     printDouble(Float32 a.x)
     printDouble(Float32 a.y)
+    printDouble(a.nested.bigNumber)
+    printDouble(Float32 ab.x)
+    printDouble(Float32 ab.y)
+    printDouble(ab.nested.bigNumber)
 }
 
 export func printNumbers(max: Int32) {

@@ -1,4 +1,4 @@
-#define DEBUG
+// #define DEBUG
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -83,9 +83,9 @@ int main()
         return 1;
     }
 
-#ifdef DEBUG
+// #ifdef DEBUG
     context->module->print(llvm::errs(), NULL);
-#endif
+// #endif
 
     std::cout << "[4/4] Creating executable...\n";
 
