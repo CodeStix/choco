@@ -1644,39 +1644,54 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
     std::map<std::string, TypedValue *> fieldValues;
     StructType *structType = NULL;
     bool isType = false;
+    bool byValue = false;
 
     // Enforce type hint
-    if (typeHint != NULL && typeHint->getTypeCode() == TypeCode::POINTER)
+    if (typeHint != NULL)
     {
-        PointerType *typeHintPointer = static_cast<PointerType *>(typeHint);
-        if (typeHintPointer->getPointedType()->getTypeCode() == TypeCode::STRUCT)
+        if (typeHint->getTypeCode() == TypeCode::POINTER)
         {
-            structType = static_cast<StructType *>(typeHintPointer->getPointedType());
-
-            if (this->value || !this->managed || this->packed)
+            PointerType *typeHintPointer = static_cast<PointerType *>(typeHint);
+            if (typeHintPointer->getPointedType()->getTypeCode() == TypeCode::STRUCT)
             {
-                std::cout << "ERROR: Struct modifier cannot be specified again\n";
+                structType = static_cast<StructType *>(typeHintPointer->getPointedType());
+                byValue = typeHintPointer->isByValue();
+            }
+        }
+        else if (typeHint->getTypeCode() == TypeCode::STRUCT)
+        {
+            structType = static_cast<StructType *>(typeHint);
+            byValue = true;
+        }
+        else
+        {
+            std::cout << "ERROR: Unexpected struct, expected " << typeHint->toString() << "\n";
+            return NULL;
+        }
+
+        if (this->value || !this->managed || this->packed)
+        {
+            std::cout << "ERROR: Struct modifier cannot be specified again\n";
+            return NULL;
+        }
+
+        for (auto &field : this->fields)
+        {
+            auto hintField = structType->getField(field->getName());
+            if (hintField == NULL)
+            {
+                std::cout << "ERROR: Struct field " << field->getName() << " does not exist on type " << typeHint->toString() << "\n";
                 return NULL;
             }
 
-            for (auto &field : this->fields)
+            TypedValue *fieldValue = field->generateLLVM(context, scope, hintField->type);
+            if (fieldValue->isType())
             {
-                auto hintField = structType->getField(field->getName());
-                if (hintField == NULL)
-                {
-                    std::cout << "ERROR: Struct field " << field->getName() << " does not exist on type " << typeHint->toString() << "\n";
-                    return NULL;
-                }
-
-                TypedValue *fieldValue = field->generateLLVM(context, scope, hintField->type);
-                if (fieldValue->isType())
-                {
-                    std::cout << "ERROR: Struct field cannot be initialized with a type\n";
-                    return NULL;
-                }
-
-                fieldValues[field->getName()] = fieldValue;
+                std::cout << "ERROR: Struct field cannot be initialized with a type\n";
+                return NULL;
             }
+
+            fieldValues[field->getName()] = fieldValue;
         }
     }
 
@@ -1687,7 +1702,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         bool first = true;
         for (auto &field : this->fields)
         {
-            TypedValue *fieldValue = field->generateLLVM(context, scope, typeHint);
+            TypedValue *fieldValue = field->generateLLVM(context, scope, NULL);
             if (first)
             {
                 first = false;
@@ -1719,6 +1734,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         }
 
         structType = new StructType(fieldTypes, this->managed, this->packed);
+        byValue = this->value;
     }
 
     if (!isType)
@@ -1755,11 +1771,11 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             }
         }
 
-        return new TypedValue(structPointer, structType->getPointerToType(this->value));
+        return new TypedValue(structPointer, structType->getPointerToType(byValue));
     }
     else
     {
-        return new TypedValue(NULL, structType->getPointerToType(this->value));
+        return new TypedValue(NULL, structType->getPointerToType(byValue));
     }
 }
 
@@ -2855,6 +2871,20 @@ std::string astNodeTypeToString(ASTNodeType type)
         return "TYPE";
     case ASTNodeType::PARAMETER:
         return "PARAMETER";
+    case ASTNodeType::STRUCT:
+        return "STRUCT";
+    case ASTNodeType::STRUCT_FIELD:
+        return "STRUCT_FIELD";
+    case ASTNodeType::DEREFERENCE:
+        return "DEREFERENCE";
+    case ASTNodeType::DEREFERENCE_MEMBER:
+        return "DEREFERENCE_MEMBER";
+    case ASTNodeType::DEREFERENCE_INDEX:
+        return "DEREFERENCE_INDEX";
+    case ASTNodeType::CAST:
+        return "CAST";
+    case ASTNodeType::STRUCT_DECLARATION:
+        return "STRUCT_DECLARATION";
     default:
         return "Unknown";
     }

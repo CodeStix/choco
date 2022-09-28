@@ -141,7 +141,7 @@ public:
     {
     }
 
-    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint = NULL)
+    virtual TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
     {
         std::cout << "WARNING: ASTNode::generateLLVM was called without any implementation\n";
         return NULL;

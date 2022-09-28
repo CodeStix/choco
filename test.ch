@@ -49,7 +49,7 @@ func modifyStruct(str: NestedStruct) {
 export func main() {
     let b = TestStruct {
         original: Int32 getInteger()
-        data: value {
+        data: {
             bigNumber: Float32 1234,
         }
         val: Int32 getInteger()
