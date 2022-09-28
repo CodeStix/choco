@@ -435,7 +435,17 @@ public:
         }
         else
         {
-            returnType = this->returnType->getLLVMType(context);
+            if (this->returnType->getTypeCode() == TypeCode::POINTER)
+            {
+                // Return value will be passed in sret argument
+                // returnType = this->returnType->getLLVMType(context);
+                returnType = llvm::Type::getVoidTy(context);
+                parameters.push_back(this->returnType->getLLVMType(context));
+            }
+            else
+            {
+                returnType = this->returnType->getLLVMType(context);
+            }
         }
 
         return llvm::FunctionType::get(returnType, parameters, this->isVarArg);

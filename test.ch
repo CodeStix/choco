@@ -15,6 +15,19 @@ struct TestStruct {
     data: NestedStruct
 }
 
+
+struct ReturnedStruct {
+    x: Int32
+    y: Int32
+}
+
+func returnStruct(): ReturnedStruct {
+    return {
+        x: Int32 123
+        y: Int32 456
+    }
+}
+
 func printStruct(str: TestStruct) {
     printDouble(Float32 str.val)
 }
@@ -54,6 +67,10 @@ export func main() {
     printDouble(b.data.bigNumber)
 
     printNumbers(Int32 10)
+
+    let a = returnStruct()
+    printDouble(Float32 a.x)
+    printDouble(Float32 a.y)
 }
 
 export func printNumbers(max: Int32) {

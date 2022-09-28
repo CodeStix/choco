@@ -1177,7 +1177,7 @@ llvm::AllocaInst *createAllocaInCurrentFunction(GenerationContext *context, llvm
 TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
 #ifdef DEBUG
-    std::cout << "debug: ASTSymbol::generateLLVM\n";
+    std::cout << "debug: ASTSymbol::generateLLVM " << this->nameToken->value << "\n";
 #endif
     auto valuePointer = scope->getValue(this->nameToken->value);
     if (!valuePointer)
@@ -1571,7 +1571,7 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
 bool createAssignment(GenerationContext *context, TypedValue *valuePointer, TypedValue *newValue, bool isVolatile)
 {
-    // std::cout << "debug: Assign " << newValue->getType()->toString() << " to " << valuePointer->getType()->toString() << " ('" << valuePointer->getOriginVariable() << "')\n";
+    std::cout << "debug: Assign " << newValue->getType()->toString() << " to " << valuePointer->getType()->toString() << " ('" << valuePointer->getOriginVariable() << "')\n";
 
     if (valuePointer->getTypeCode() != TypeCode::POINTER)
     {
@@ -1594,7 +1594,7 @@ bool createAssignment(GenerationContext *context, TypedValue *valuePointer, Type
     else
     {
         PointerType *newValuePointerType = static_cast<PointerType *>(newValue->getType());
-        if (valuePointerType->isByValue())
+        if (newValuePointerType->getPointedType()->getTypeCode() != TypeCode::POINTER && valuePointerType->getPointedType()->getTypeCode() != TypeCode::POINTER)
         {
             // T* = T*
             auto convertedValue = generateTypeConversion(context, newValue, valuePointerType, false);
@@ -1703,7 +1703,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
 TypedValue *ASTStructField::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
 #ifdef DEBUG
-    std::cout << "debug: ASTStructField::generateLLVM\n";
+    std::cout << "debug: ASTStructField::generateLLVM " << this->nameToken->value << "\n";
 #endif
     return this->value->generateLLVM(context, scope);
 }
@@ -2187,18 +2187,33 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         Type *returnType = context->currentFunction->getReturnType();
         if (returnType == NULL)
         {
-            std::cout << "ERROR: function does not return value\n";
+            std::cout << "ERROR: Function does not return value\n";
             return NULL;
         }
 
         TypedValue *newValue = generateTypeConversion(context, value, returnType, true); // TODO: remove allowLosePrecision when casts are supported
         if (newValue == NULL)
         {
-            std::cout << "ERROR: cannot convert return value in function\n";
+            std::cout << "ERROR: Cannot convert return value in function\n";
             return NULL;
         }
 
-        context->irBuilder->CreateRet(newValue->getValue());
+        if (returnType->getTypeCode() == TypeCode::POINTER)
+        {
+            // Create sret
+            if (!createAssignment(context, context->currentFunctionSRet, value, false))
+            {
+                std::cout << "ERROR: Could not assign return value (sret)\n";
+                return NULL;
+            }
+
+            context->irBuilder->CreateRetVoid();
+        }
+        else
+        {
+            context->irBuilder->CreateRet(newValue->getValue());
+        }
+
         return value;
     }
     else
@@ -2235,7 +2250,7 @@ TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope
 TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope)
 {
 #ifdef DEBUG
-    std::cout << "debug: ASTFunction::generateLLVM\n";
+    std::cout << "debug: ASTFunction::generateLLVM " << this->nameToken->value << "\n";
 #endif
 
     std::vector<FunctionParameter> parameters;
@@ -2288,6 +2303,18 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     }
     function->addFnAttrs(fnAttributeBuilder);
 
+    // When the return type is a pointer, the return value is stored in the last argument passed to the function
+    if (returnType != NULL && returnType->getTypeCode() == TypeCode::POINTER)
+    {
+        PointerType *returnPointerType = static_cast<PointerType *>(returnType);
+        auto returnAttributebuilder = llvm::AttrBuilder(*context->context);
+        returnAttributebuilder.addStructRetAttr(returnPointerType->getPointedType()->getLLVMType(*context->context));
+        returnAttributebuilder.addAttribute(llvm::Attribute::NoAlias);
+        returnAttributebuilder.addAttribute(llvm::Attribute::WriteOnly);
+        returnAttributebuilder.addAttribute(llvm::Attribute::NoCapture);
+        function->addParamAttrs(functionType->params().size() - 1, returnAttributebuilder);
+    }
+
     // Name parameters and add parameter attributes when needed
     for (int i = 0; i < parameters.size(); i++)
     {
@@ -2332,7 +2359,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         llvm::BasicBlock *functionStartBlock = llvm::BasicBlock::Create(*context->context, "block", function);
         context->irBuilder->SetInsertPoint(functionStartBlock);
 
-        for (int i = 0; i < function->arg_size(); i++)
+        for (int i = 0; i < this->parameters->size(); i++)
         {
             auto parameterValue = function->getArg(i);
             ASTParameter *parameter = (*this->parameters)[i++];
@@ -2348,6 +2375,18 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
             context->irBuilder->CreateStore(parameterValue, parameterPointer, false);
             functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getPointerToType(false)));
+        }
+
+        if (returnType != NULL && returnType->getTypeCode() == TypeCode::POINTER)
+        {
+            // Use the sret parameter (last parameter)
+            auto sretParameter = function->getArg(function->arg_size() - 1);
+            sretParameter->setName("sret");
+            context->currentFunctionSRet = new TypedValue(sretParameter, returnType);
+        }
+        else
+        {
+            context->currentFunctionSRet = NULL;
         }
 
         this->body->generateLLVM(context, functionScope);
@@ -2645,7 +2684,21 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
         parameterValues.push_back(convertedValue->getValue());
     }
 
-    llvm::Value *callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : "call");
+    llvm::Value *callResult;
+    if (functionType->getReturnType() != NULL && functionType->getReturnType()->getTypeCode() == TypeCode::POINTER)
+    {
+        // SRet will be used
+        PointerType *returnPointerType = static_cast<PointerType *>(functionType->getReturnType());
+        auto sretPointer = createAllocaInCurrentFunction(context, returnPointerType->getPointedType()->getLLVMType(*context->context), "allocasret");
+        parameterValues.push_back(sretPointer);
+        context->irBuilder->CreateCall(function, parameterValues);
+        callResult = sretPointer;
+    }
+    else
+    {
+        callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : "call");
+    }
+
     return new TypedValue(callResult, functionType->getReturnType());
 }
 
@@ -2688,6 +2741,9 @@ TypedValue *ASTStructDeclaration::generateLLVM(GenerationContext *context, Funct
         return NULL;
     }
 
+#ifdef DEBUG
+    std::cout << "debug: ASTStructDeclaration::generateLLVM done\n";
+#endif
     return type;
 }
 
