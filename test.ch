@@ -5,8 +5,8 @@ func getInteger(): Int64 {
     return 16
 }
 
-struct NestedStruct {
-    bigNumber: Float64
+struct NestedStruct value {
+    bigNumber: Float32
 }
 
 struct TestStruct {
@@ -16,15 +16,20 @@ struct TestStruct {
 }
 
 func printStruct(str: TestStruct) {
-    printDouble(str.val)
+    printDouble(Float32 str.val)
+}
+
+func modifyStruct(str: NestedStruct) {
+    str.bigNumber = str.bigNumber * 2
+    printDouble(str.bigNumber)
 }
 
 export func main() {
     let b = TestStruct {
         original: Int32 getInteger()
         val: Int32 getInteger()
-        data: {
-            bigNumber: Float64 1234,
+        data: value {
+            bigNumber: Float32 1234,
         }
     } 
 
@@ -33,12 +38,19 @@ export func main() {
     }
 
     while (b.val > 0) {
-        b.val = b.val - 1
+        b.val = Int32 (b.val - 1)
         printStruct(b)
     }
 
-    printDouble(recurse(50))
-    printDouble(b.original)
+    printDouble(Float32 recurse(Int32 60))
+    printDouble(Float32 b.original)
+
+    modifyStruct(b.data)
+    printDouble(b.data.bigNumber)
+
+    let structCopy = b.data
+    structCopy.bigNumber = Float32 getInteger()
+    printDouble(structCopy.bigNumber)
     printDouble(b.data.bigNumber)
 }
 
@@ -47,6 +59,6 @@ func recurse(a: Int32): Int32 {
         return 0
     }
     else {
-        return a + recurse(a - 1)
+        return a + recurse(Int32 (a - 1))
     }
 }

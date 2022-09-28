@@ -74,12 +74,14 @@ public:
                           passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get())),
                           globalModule(ModuleType("Global"))
     {
+#ifndef DEBUG
         passManager->add(llvm::createPromoteMemoryToRegisterPass());
         passManager->add(llvm::createInstructionCombiningPass());
         passManager->add(llvm::createReassociatePass());
         passManager->add(llvm::createGVNPass());
         passManager->add(llvm::createCFGSimplificationPass());
         passManager->add(llvm::createDeadCodeEliminationPass());
+#endif
         passManager->doInitialization();
     };
 
@@ -374,7 +376,6 @@ public:
         }
         str += ": ";
         str += this->value->toString();
-        str += "\n";
         return str;
     }
 
@@ -408,8 +409,17 @@ public:
             str += "value ";
         }
         str += "{";
+        bool first = true;
         for (auto &field : this->fields)
         {
+            if (first)
+            {
+                first = false;
+            }
+            else
+            {
+                str += ", ";
+            }
             str += field->toString();
         }
         str += "}";

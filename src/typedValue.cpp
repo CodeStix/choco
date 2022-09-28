@@ -5,9 +5,9 @@ IntegerType BYTE_TYPE(8, false);
 IntegerType CHAR_TYPE(8, false);
 IntegerType BOOL_TYPE(1, false);
 
-Type *Type::getPointerToType()
+Type *Type::getPointerToType(bool byValue)
 {
-    return new PointerType(this);
+    return new PointerType(this, byValue);
 }
 
 TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, FunctionScope *scope)

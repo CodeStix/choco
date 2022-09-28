@@ -60,7 +60,7 @@ public:
     //     }
     // }
 
-    Type *getPointerToType();
+    Type *getPointerToType(bool byValue);
 
 private:
     TypeCode typeCode;
@@ -353,7 +353,8 @@ private:
 class PointerType : public Type
 {
 public:
-    PointerType(Type *pointedType) : Type(TypeCode::POINTER), pointedType(pointedType)
+    // byValue contains whether the pointed value should be passed by value
+    PointerType(Type *pointedType, bool byValue) : Type(TypeCode::POINTER), pointedType(pointedType), byValue(byValue)
     {
     }
 
@@ -367,7 +368,7 @@ public:
         if (b.getTypeCode() == TypeCode::POINTER)
         {
             const PointerType &pointerType = static_cast<const PointerType &>(b);
-            return *pointerType.pointedType == *this->pointedType;
+            return pointerType.byValue == this->byValue && *pointerType.pointedType == *this->pointedType;
         }
         else
         {
@@ -382,12 +383,18 @@ public:
 
     std::string toString() override
     {
-        std::string str = "&";
+        std::string str = this->byValue ? "#" : "&";
         str += this->pointedType->toString();
         return str;
     }
 
+    bool isByValue()
+    {
+        return this->byValue;
+    }
+
 private:
+    bool byValue;
     Type *pointedType;
 };
 
@@ -535,7 +542,7 @@ public:
 class StructType : public Type
 {
 public:
-    StructType(std::vector<StructTypeField> fields, bool managed, bool packed, bool value) : Type(TypeCode::STRUCT), fields(fields), managed(managed), packed(packed), value(value) {}
+    StructType(std::vector<StructTypeField> fields, bool managed, bool packed) : Type(TypeCode::STRUCT), fields(fields), managed(managed), packed(packed) {}
 
     bool operator==(const Type &b) const override
     {
@@ -543,6 +550,11 @@ public:
         {
             auto other = static_cast<const StructType &>(b);
             if (other.fields.size() != this->fields.size())
+            {
+                return false;
+            }
+
+            if (other.packed != this->packed || other.managed != this->managed)
             {
                 return false;
             }
@@ -639,7 +651,6 @@ private:
     std::vector<StructTypeField> fields;
     bool managed;
     bool packed;
-    bool value;
 };
 
 extern IntegerType BYTE_TYPE;
