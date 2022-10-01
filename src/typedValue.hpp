@@ -1,6 +1,7 @@
 #pragma once
 #include <iostream>
 #include <map>
+#include <list>
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Constants.h"
 
@@ -423,10 +424,6 @@ public:
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
         std::vector<llvm::Type *> parameters;
-        for (auto &param : this->parameters)
-        {
-            parameters.push_back(param.type->getLLVMType(context));
-        }
 
         llvm::Type *returnType;
         if (this->returnType == NULL)
@@ -437,8 +434,7 @@ public:
         {
             if (this->returnType->getTypeCode() == TypeCode::POINTER)
             {
-                // Return value will be passed in sret argument
-                // returnType = this->returnType->getLLVMType(context);
+                // Return value will be passed in sret argument (the first argument of the function)
                 returnType = llvm::Type::getVoidTy(context);
                 parameters.push_back(this->returnType->getLLVMType(context));
             }
@@ -446,6 +442,11 @@ public:
             {
                 returnType = this->returnType->getLLVMType(context);
             }
+        }
+
+        for (auto &param : this->parameters)
+        {
+            parameters.push_back(param.type->getLLVMType(context));
         }
 
         return llvm::FunctionType::get(returnType, parameters, this->isVarArg);
