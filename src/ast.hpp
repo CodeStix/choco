@@ -24,6 +24,7 @@
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 #include "llvm/Transforms/Utils.h"
 #include "typedValue.hpp"
+#include "util.hpp"
 
 class FunctionScope
 {
