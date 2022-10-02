@@ -48,19 +48,6 @@ public:
         return "<Unknown>";
     }
 
-    // Type *getDeepPointedType()
-    // {
-    //     if (this->typeCode == TypeCode::POINTER)
-    //     {
-    //         PointerType *pointerType = static_cast<PointerType *>(this);
-    //         return pointerType->getDeepPointedType();
-    //     }
-    //     else
-    //     {
-    //         return this;
-    //     }
-    // }
-
     Type *getPointerToType(bool byValue);
 
 private:
