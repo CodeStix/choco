@@ -113,114 +113,6 @@ ASTParameter *parseParameter(TokenStream *tokens)
     return new ASTParameter(nameToken, typeSpecifier);
 }
 
-// ASTTypeNode *parseStructType(TokenStream* tokens, bool isInline)
-// {
-//     const Token *tok = tokens->peek();
-//     if (!isInline)
-//     {
-//         if (tok->type != TokenType::STRUCT_KEYWORD)
-//         {
-//             return NULL;
-//         }
-//         tokens->next();
-//     }
-
-//     bool managed = true, packed = false, value = false;
-//     bool readingModifiers = true;
-//     while (readingModifiers)
-//     {
-//         tok = tokens->peek();
-//         switch (tok->type)
-//         {
-//         case TokenType::VALUE_KEYWORD:
-//             value = true;
-//             tokens->next();
-//             break;
-//         case TokenType::PACKED_KEYWORD:
-//             packed = true;
-//             tokens->next();
-//             break;
-//         case TokenType::UNMANAGED_KEYWORD:
-//             managed = false;
-//             tokens->next();
-//             break;
-//         default:
-//             readingModifiers = false;
-//             break;
-//         }
-//     }
-
-//     const Token *nameToken;
-//     if (tok->type == TokenType::SYMBOL)
-//     {
-//         nameToken = tok;
-//         tokens->next();
-//         tok = tokens->peek();
-//     }
-//     else
-//     {
-//         // Unnamed struct
-//         nameToken = NULL;
-//         if (!isInline)
-//         {
-//             std::cout << "ERROR: Global structs must have a name {\n";
-//             return NULL;
-//         }
-//     }
-
-//     if (tok->type != TokenType::CURLY_BRACKET_OPEN)
-//     {
-//         std::cout << "ERROR: Struct type must start with {\n";
-//         return NULL;
-//     }
-//     tokens->next();
-
-//     std::vector<ASTStructTypeField *> fields;
-//     while (1)
-//     {
-//         const Token *tok = tokens->peek();
-//         if (tok->type == TokenType::CURLY_BRACKET_CLOSE)
-//         {
-//             tokens->next();
-//             break;
-//         }
-
-//         const Token *fieldNameToken = NULL;
-//         if (tok->type == TokenType::SYMBOL)
-//         {
-//             // Parse field name
-//             fieldNameToken = tok;
-//             tokens->next();
-//             tok = tokens->peek();
-//         }
-
-//         if (tok->type == TokenType::COLON)
-//         {
-//             // Parse field type
-//             tokens->next();
-
-//             ASTTypeNode *fieldType = parseInlineType(tokens);
-//             bool hidden = false;
-//             fields.push_back(new ASTStructTypeField(fieldNameToken, fieldType, hidden));
-
-//             tok = tokens->peek();
-//         }
-//         else
-//         {
-//             std::cout << "ERROR: Unexpected token while parsing struct\n";
-//             tokens->next();
-//             continue;
-//         }
-
-//         if (tok->type == TokenType::COMMA)
-//         {
-//             tokens->next();
-//         }
-//     }
-
-//     return new ASTStructType(nameToken, fields, managed, packed);
-// }
-
 ASTFunction *parseFunction(TokenStream *tokens)
 {
     int saved = tokens->getPosition();
@@ -1041,40 +933,6 @@ ASTDeclaration *parseDeclaration(TokenStream *tokens)
     }
 }
 
-// ASTNode *parseValueOrTypeCast(TokenStream* tokens)
-// {
-//     ASTTypeNode *leftType = parseInlineType(tokens);
-//     if (leftType == NULL)
-//     {
-//         // This can't be a type cast, return a value
-//         return parseValueOrOperator(tokens);
-//     }
-//     else
-//     {
-//         const Token *tok = tokens->peek();
-//         switch (tok->type)
-//         {
-//         case TokenType::AS_KEYWORD:
-//         {
-//             // This is a cast
-//             const Token *operatorToken = tok;
-//             tokens->next();
-//             ASTNode *rightValue = parseValueOrTypeCast(tokens);
-//             if (rightValue == NULL)
-//             {
-//                 std::cout << "ERROR: could not parse type cast\n";
-//                 return NULL;
-//             }
-//             return new ASTCast(operatorToken, leftType, rightValue);
-//         }
-
-//         default:
-//             std::cout << "ERROR: found type definition at invalid location\n";
-//             return NULL;
-//         }
-//     }
-// }
-
 ASTFile *parseFile(TokenStream *tokens)
 {
     int saved = tokens->getPosition();
@@ -1102,9 +960,6 @@ ASTFile *parseFile(TokenStream *tokens)
         case TokenType::LET_KEYWORD:
             statement = parseDeclaration(tokens);
             break;
-            // case TokenType::SYMBOL:
-            //     statement = parseValueOrOperator(tokens);
-            //     break;
         }
 
         if (statement == NULL)
