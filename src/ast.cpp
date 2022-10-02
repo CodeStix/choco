@@ -1184,7 +1184,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         // This is a struct value
         llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
-        auto structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
+        auto structPointer = generateAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
 
         for (auto &pair : fieldValues)
         {
@@ -1196,7 +1196,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             bool isVolatile = false;
             auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
             TypedValue *structFieldPointerValue = new TypedValue(structFieldPointer, fieldType->type->getPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
-            if (!createAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
+            if (!generateAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
             {
                 std::cout << "ERROR: Cannot initialize struct field " << fieldName << " of " << structType->toString() << "\n";
                 return NULL;
@@ -1654,21 +1654,21 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         PointerType *p = static_cast<PointerType *>(pointerType);
         if (p->isByValue())
         {
-            llvm::Value *pointerValue = createAllocaInCurrentFunction(context, p->getPointedType()->getLLVMType(*context->context), "allocavalue");
+            llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, p->getPointedType()->getLLVMType(*context->context), "allocavalue");
             pointer = new TypedValue(pointerValue, p->getPointedType()->getPointerToType(true));
         }
     }
 
     if (pointer == NULL)
     {
-        llvm::Value *pointerValue = createAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
+        llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
         pointer = new TypedValue(pointerValue, pointerType->getPointerToType(false));
     }
 
     scope->addValue(this->nameToken->value, pointer);
 
     bool isVolatile = false;
-    if (!createAssignment(context, pointer, initialValue, isVolatile))
+    if (!generateAssignment(context, pointer, initialValue, isVolatile))
     {
         std::cout << "ERROR: Cannot generate declaration at " << this->nameToken->position << "\n";
         return NULL;
@@ -1701,7 +1701,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 
     TypedValue *newValue = this->value->generateLLVM(context, scope, valuePointerType->getPointedType());
 
-    if (!createAssignment(context, valuePointer, newValue, isVolatile))
+    if (!generateAssignment(context, valuePointer, newValue, isVolatile))
     {
         std::cout << "ERROR: Cannot generate assignment\n";
         return NULL;
@@ -1736,7 +1736,7 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         if (returnType->getTypeCode() == TypeCode::POINTER)
         {
             // Create sret
-            if (!createAssignment(context, context->currentFunctionSRet, value, false))
+            if (!generateAssignment(context, context->currentFunctionSRet, value, false))
             {
                 std::cout << "ERROR: Could not assign return value (sret)\n";
                 return NULL;
@@ -2203,7 +2203,7 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
     if (functionType->getReturnType() != NULL && functionType->getReturnType()->getTypeCode() == TypeCode::POINTER)
     {
         PointerType *returnPointerType = static_cast<PointerType *>(functionType->getReturnType());
-        sretPointer = createAllocaInCurrentFunction(context, returnPointerType->getPointedType()->getLLVMType(*context->context), "allocasret");
+        sretPointer = generateAllocaInCurrentFunction(context, returnPointerType->getPointedType()->getLLVMType(*context->context), "allocasret");
         parameterValues.push_back(sretPointer);
     }
 
