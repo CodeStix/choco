@@ -553,7 +553,7 @@ public:
 class StructType : public Type
 {
 public:
-    StructType(std::vector<StructTypeField> fields, bool managed, bool packed) : Type(TypeCode::STRUCT), fields(fields), managed(managed), packed(packed) {}
+    StructType(std::string name, std::vector<StructTypeField> fields, bool managed, bool packed) : Type(TypeCode::STRUCT), name(name), fields(fields), managed(managed), packed(packed) {}
 
     bool operator==(const Type &b) const override
     {
@@ -638,6 +638,11 @@ public:
         {
             str += "unmanaged ";
         }
+        if (this->name != "")
+        {
+            str += this->name;
+            str += " ";
+        }
         str += "{";
         bool first = true;
         for (auto &field : this->fields)
@@ -667,6 +672,7 @@ private:
     std::vector<StructTypeField> fields;
     bool managed;
     bool packed;
+    std::string name;
 };
 
 extern IntegerType BYTE_TYPE;

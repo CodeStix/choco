@@ -31,7 +31,7 @@ ASTBlock *parseBlock(TokenStream *tokens)
         switch (tok->type)
         {
         case TokenType::STRUCT_KEYWORD:
-            statement = parseStruct(tokens);
+            statement = parseStructDeclaration(tokens);
             break;
         case TokenType::FUNC_KEYWORD:
             statement = parseFunction(tokens);
@@ -548,16 +548,10 @@ ASTNode *parseStructDeclaration(TokenStream *tokens)
     tokens->consume(TokenType::WHITESPACE);
     tokens->consume(TokenType::NEWLINE);
 
-    ASTStruct *structType = parseStruct(tokens);
-    if (structType == NULL)
-    {
-        return NULL;
-    }
-
-    return new ASTStructDeclaration(nameToken, structType);
+    return parseStruct(tokens, nameToken);
 }
 
-ASTStruct *parseStruct(TokenStream *tokens)
+ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken)
 {
     int saved = tokens->getPosition();
     const Token *tok = tokens->peek();
@@ -642,7 +636,7 @@ ASTStruct *parseStruct(TokenStream *tokens)
         tokens->consume(TokenType::NEWLINE);
     }
 
-    return new ASTStruct(fields, managed, packed, value);
+    return new ASTStruct(structNameToken, fields, managed, packed, value);
 }
 
 ASTNode *parseInlineType(TokenStream *tokens)
@@ -658,7 +652,7 @@ ASTNode *parseInlineType(TokenStream *tokens)
     case TokenType::VALUE_KEYWORD:
     case TokenType::CURLY_BRACKET_OPEN:
     {
-        value = parseStruct(tokens);
+        value = parseStruct(tokens, NULL);
         break;
     }
 
@@ -715,7 +709,7 @@ ASTNode *parseValueOrType(TokenStream *tokens)
     case TokenType::VALUE_KEYWORD:
     case TokenType::CURLY_BRACKET_OPEN:
     {
-        value = parseStruct(tokens);
+        value = parseStruct(tokens, NULL);
         break;
     }
 
@@ -1733,13 +1727,13 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             fieldTypes.push_back(StructTypeField(fieldType, field->getName()));
         }
 
-        structType = new StructType(fieldTypes, this->managed, this->packed);
+        structType = new StructType(this->nameToken == NULL ? "" : this->nameToken->value, fieldTypes, this->managed, this->packed);
         byValue = this->value;
     }
 
     if (!isType)
     {
-        // This struct is not a type definition
+        // This is a struct value
         llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
         auto structPointer = createAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
@@ -1775,7 +1769,19 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
     }
     else
     {
-        return new TypedValue(NULL, structType->getPointerToType(byValue));
+        // This struct is a type definition
+        TypedValue *type = new TypedValue(NULL, structType->getPointerToType(byValue));
+
+        if (this->nameToken != NULL)
+        {
+            if (!context->globalModule.addValue(this->nameToken->value, type))
+            {
+                std::cout << "ERROR: The struct '" << this->nameToken->value << "' has already been declared";
+                return NULL;
+            }
+        }
+
+        return type;
     }
 }
 
@@ -2813,35 +2819,6 @@ TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *sco
     return NULL;
 }
 
-TypedValue *ASTStructDeclaration::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
-{
-#ifdef DEBUG
-    std::cout << "debug: ASTStructDeclaration::generateLLVM\n";
-#endif
-
-    TypedValue *type = this->structNode->generateLLVM(context, scope, typeHint);
-    if (type == NULL)
-    {
-        return NULL;
-    }
-    if (!type->isType())
-    {
-        std::cout << "ERROR: Struct declarations may not contain values";
-        return NULL;
-    }
-
-    if (!context->globalModule.addValue(this->nameToken->value, type))
-    {
-        std::cout << "ERROR: The struct '" << this->nameToken->value << "' has already been declared";
-        return NULL;
-    }
-
-#ifdef DEBUG
-    std::cout << "debug: ASTStructDeclaration::generateLLVM done\n";
-#endif
-    return type;
-}
-
 std::string astNodeTypeToString(ASTNodeType type)
 {
     switch (type)
@@ -2892,8 +2869,6 @@ std::string astNodeTypeToString(ASTNodeType type)
         return "DEREFERENCE_INDEX";
     case ASTNodeType::CAST:
         return "CAST";
-    case ASTNodeType::STRUCT_DECLARATION:
-        return "STRUCT_DECLARATION";
     default:
         return "Unknown";
     }

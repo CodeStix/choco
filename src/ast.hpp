@@ -121,7 +121,6 @@ enum class ASTNodeType
     DEREFERENCE_MEMBER,
     DEREFERENCE_INDEX,
     CAST,
-    STRUCT_DECLARATION
 };
 
 std::string astNodeTypeToString(ASTNodeType type);
@@ -392,7 +391,7 @@ private:
 class ASTStruct : public ASTNode
 {
 public:
-    ASTStruct(std::vector<ASTStructField *> fields, bool managed = true, bool packed = false, bool value = false) : ASTNode(ASTNodeType::STRUCT), fields(fields), managed(managed), packed(packed), value(value) {}
+    ASTStruct(const Token *nameToken, std::vector<ASTStructField *> fields, bool managed = true, bool packed = false, bool value = false) : ASTNode(ASTNodeType::STRUCT), nameToken(nameToken), fields(fields), managed(managed), packed(packed), value(value) {}
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
@@ -410,6 +409,11 @@ public:
         if (this->value)
         {
             str += "value ";
+        }
+        if (this->nameToken != NULL)
+        {
+            str += this->nameToken->value;
+            str += " ";
         }
         str += "{";
         bool first = true;
@@ -429,11 +433,20 @@ public:
         return str;
     }
 
+    void declareStaticNames(ModuleType *currentModule) override
+    {
+        if (this->nameToken != NULL)
+        {
+            currentModule->addLazyValue(this->nameToken->value, this);
+        }
+    }
+
 private:
     std::vector<ASTStructField *> fields;
     bool managed = true;
     bool packed = false;
     bool value = false;
+    const Token *nameToken;
 };
 
 class ASTBrackets : public ASTNode
@@ -810,32 +823,32 @@ public:
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 };
 
-class ASTStructDeclaration : public ASTNode
-{
-public:
-    ASTStructDeclaration(const Token *nameToken, ASTStruct *structNode) : ASTNode(ASTNodeType::STRUCT_DECLARATION), nameToken(nameToken), structNode(structNode) {}
+// class ASTStructDeclaration : public ASTNode
+// {
+// public:
+//     ASTStructDeclaration(const Token *nameToken, ASTStruct *structNode) : ASTNode(ASTNodeType::STRUCT_DECLARATION), nameToken(nameToken), structNode(structNode) {}
 
-    virtual std::string toString() override
-    {
-        std::string str = "struct ";
-        str += this->nameToken->value;
-        str += " ";
-        str += this->structNode->toString();
-        str += "\n";
-        return str;
-    }
+//     virtual std::string toString() override
+//     {
+//         std::string str = "struct ";
+//         str += this->nameToken->value;
+//         str += " ";
+//         str += this->structNode->toString();
+//         str += "\n";
+//         return str;
+//     }
 
-    void declareStaticNames(ModuleType *currentModule) override
-    {
-        currentModule->addLazyValue(this->nameToken->value, this);
-    }
+//     void declareStaticNames(ModuleType *currentModule) override
+//     {
+//         currentModule->addLazyValue(this->nameToken->value, this);
+//     }
 
-    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
+//     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint) override;
 
-private:
-    const Token *nameToken;
-    ASTStruct *structNode;
-};
+// private:
+//     const Token *nameToken;
+//     ASTStruct *structNode;
+// };
 
 class ASTIfStatement : public ASTNode
 {
@@ -921,5 +934,6 @@ ASTFile *parseFile(TokenStream *tokens);
 ASTReturn *parseReturn(TokenStream *tokens);
 ASTParameter *parseParameter(TokenStream *tokens);
 ASTNode *parseValueAndSuffix(TokenStream *tokens);
-ASTStruct *parseStruct(TokenStream *tokens);
+ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken);
 ASTNode *parseInlineType(TokenStream *tokens);
+ASTNode *parseStructDeclaration(TokenStream *tokens);
