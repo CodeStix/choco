@@ -356,7 +356,7 @@ public:
         if (b.getTypeCode() == TypeCode::POINTER)
         {
             const PointerType &pointerType = static_cast<const PointerType &>(b);
-            return pointerType.byValue == this->byValue && *pointerType.pointedType == *this->pointedType;
+            return *pointerType.pointedType == *this->pointedType;
         }
         else
         {
@@ -580,7 +580,19 @@ public:
         {
             fieldTypes.push_back(field.type->getLLVMType(context));
         }
-        return llvm::StructType::get(context, fieldTypes, this->packed);
+        if (this->name != "")
+        {
+            auto type = llvm::StructType::getTypeByName(context, this->name);
+            if (type == NULL)
+            {
+                type = llvm::StructType::create(fieldTypes, this->name, this->packed);
+            }
+            return type;
+        }
+        else
+        {
+            return llvm::StructType::get(context, fieldTypes, this->packed);
+        }
     }
 
     StructTypeField *getField(std::string name)

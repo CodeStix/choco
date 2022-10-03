@@ -2028,16 +2028,8 @@ TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, Functi
 #endif
 
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope, NULL);
-    TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
-    if (pointerToIndex == NULL)
-    {
-        std::cout << "ERROR: index dereference only supports pointers\n";
-        return NULL;
-    }
-
     TypedValue *indexValue = this->index->generateLLVM(context, scope, &UINT32_TYPE);
-
-    std::cout << "ERROR: index dereference not implemented\n";
+    std::cout << "ERROR: Index dereference not implemented\n";
     return NULL;
 }
 
@@ -2064,7 +2056,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         }
         else
         {
-            std::cout << "ERROR: type has no members to dereference\n";
+            std::cout << "ERROR: Type has no members to dereference\n";
             return NULL;
         }
     }
@@ -2072,7 +2064,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     TypedValue *pointerToIndex = generateDereferenceToPointer(context, valueToIndex);
     if (pointerToIndex == NULL)
     {
-        std::cout << "ERROR: member dereference only supports pointers\n";
+        std::cout << "ERROR: Member dereference only supports pointers\n";
         return NULL;
     }
 

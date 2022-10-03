@@ -31,7 +31,7 @@ export func returnStruct(zero: Bool, bigNum: Float32): ReturnedStruct {
     if (zero == 0) {
         return {
             nested: {
-                bigNumber: Float32 bigNum
+                bigNumber: bigNum
             }
             x: 123
             y: 456
