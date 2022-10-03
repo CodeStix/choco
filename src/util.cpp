@@ -162,6 +162,75 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
     }
 }
 
+llvm::Type *getRefCountType(llvm::LLVMContext &context)
+{
+    return llvm::IntegerType::getInt64Ty(context);
+}
+
+TypedValue *generateDecrementReference(GenerationContext *context, TypedValue *valueToConvert)
+{
+    if (valueToConvert->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "WARNING: Cannot generateDecrementReference(...) a non pointer (" << valueToConvert->getType()->toString() << ")\n";
+        return NULL;
+    }
+    PointerType *pointerType = static_cast<PointerType *>(valueToConvert->getType());
+    if (!pointerType->isManaged())
+    {
+        std::cout << "WARNING: Cannot generateDecrementReference(...) an unmanaged pointer (" << valueToConvert->getType()->toString() << ")\n";
+        return NULL;
+    }
+
+    std::vector<llvm::Value *> indices;
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), valueToConvert->getValue(), indices, "geprefcount");
+
+    llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
+    // Decrease refCount by 1
+    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 1, false)), "increfcount", true, true);
+    context->irBuilder->CreateStore(refCount, refCountPointer, false);
+
+    llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)), "cmprefcountzero");
+
+    llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, "refcountfree");
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "refcountcontinue");
+
+    context->irBuilder->CreateCondBr(isRefZero, freeBlock, continueBlock);
+
+    // Free the block if refCount is zero
+    context->irBuilder->SetInsertPoint(freeBlock);
+    generateFree(context, valueToConvert->getValue());
+    context->irBuilder->CreateBr(continueBlock);
+
+    context->irBuilder->SetInsertPoint(continueBlock);
+}
+
+TypedValue *generateIncrementReference(GenerationContext *context, TypedValue *valueToConvert)
+{
+    if (valueToConvert->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "WARNING: Cannot generateIncrementReference(...) a non pointer (" << valueToConvert->getType()->toString() << ")\n";
+        return NULL;
+    }
+    PointerType *pointerType = static_cast<PointerType *>(valueToConvert->getType());
+    if (!pointerType->isManaged())
+    {
+        std::cout << "WARNING: Cannot generateIncrementReference(...) an unmanaged pointer (" << valueToConvert->getType()->toString() << ")\n";
+        return NULL;
+    }
+
+    std::vector<llvm::Value *> indices;
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), valueToConvert->getValue(), indices, "geprefcount");
+
+    llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
+    // Increase refCount by 1
+    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 1, false)), "increfcount", true, true);
+    context->irBuilder->CreateStore(refCount, refCountPointer, false);
+}
+
 // Try to cast a value to a specific type
 TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *valueToConvert, Type *targetType, bool allowLosePrecision)
 {
