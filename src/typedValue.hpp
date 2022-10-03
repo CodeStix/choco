@@ -342,8 +342,9 @@ class PointerType : public Type
 {
 public:
     // byValue contains whether the pointed value should be passed by value
-    PointerType(Type *pointedType, bool byValue) : Type(TypeCode::POINTER), pointedType(pointedType), byValue(byValue)
+    PointerType(Type *pointedType, bool byValue, bool managed) : Type(TypeCode::POINTER), pointedType(pointedType), byValue(byValue), managed(managed)
     {
+        assert(!(byValue && managed));
     }
 
     Type *getPointedType()
@@ -356,7 +357,7 @@ public:
         if (b.getTypeCode() == TypeCode::POINTER)
         {
             const PointerType &pointerType = static_cast<const PointerType &>(b);
-            return *pointerType.pointedType == *this->pointedType;
+            return pointerType.managed == this->managed && *pointerType.pointedType == *this->pointedType;
         }
         else
         {
@@ -366,12 +367,21 @@ public:
 
     llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
     {
-        return llvm::PointerType::get(this->pointedType->getLLVMType(context), 0);
+        llvm::Type *pointedType = this->pointedType->getLLVMType(context);
+        if (this->managed)
+        {
+            // Wrap containing value in a struct where the first value contains the reference count
+            std::vector<llvm::Type *> fields;
+            fields.push_back(getRefCountType(context));
+            fields.push_back(pointedType);
+            pointedType = llvm::StructType::get(context, fields, false);
+        }
+        return llvm::PointerType::get(pointedType, 0);
     }
 
     std::string toString() override
     {
-        std::string str = this->byValue ? "#" : "&";
+        std::string str = this->managed ? "m&" : (this->byValue ? "#" : "&");
         str += this->pointedType->toString();
         return str;
     }
@@ -381,7 +391,13 @@ public:
         return this->byValue;
     }
 
+    bool isManaged()
+    {
+        return this->managed;
+    }
+
 private:
+    bool managed;
     bool byValue;
     Type *pointedType;
 };
