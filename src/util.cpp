@@ -172,20 +172,32 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
     if (targetType->getTypeCode() == TypeCode::POINTER)
     {
-        // Try converting to a single-deep pointer and try again
-        TypedValue *currentValue = generateDereferenceToPointer(context, valueToConvert);
-        if (currentValue != NULL && *currentValue->getType() == *targetType)
+        while (1)
         {
-            return currentValue;
-        }
-        else
-        {
-            std::cout << "ERROR: Cannot convert " << valueToConvert->getType()->toString() << " to " << targetType->toString() << "\n";
-            return NULL;
+            if (valueToConvert->getTypeCode() != TypeCode::POINTER)
+            {
+                std::cout << "ERROR: Cannot convert " << valueToConvert->getType()->toString() << " to a pointer (" << targetType->toString() << ")\n";
+                return NULL;
+            }
+
+            PointerType *pointerToConvert = static_cast<PointerType *>(valueToConvert->getType());
+
+            llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerToConvert->getPointedType()->getLLVMType(*context->context), valueToConvert->getValue(), "deref");
+            valueToConvert = new TypedValue(derefValue, pointerToConvert->getPointedType());
+
+            if (*valueToConvert->getType() == *targetType)
+            {
+                return valueToConvert;
+            }
         }
     }
 
     valueToConvert = generateDereferenceToValue(context, valueToConvert);
+    if (*valueToConvert->getType() == *targetType)
+    {
+        return valueToConvert;
+    }
+
     llvm::Value *currentValue = valueToConvert->getValue();
     Type *currentType = valueToConvert->getType();
 
@@ -320,48 +332,13 @@ bool generateAssignment(GenerationContext *context, TypedValue *valuePointer, Ty
     }
     PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
 
-    if (newValue->getTypeCode() != TypeCode::POINTER)
+    auto convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), false);
+    if (convertedValue == NULL)
     {
-        // T* = T
-        auto convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), false);
-        if (convertedValue == NULL)
-        {
-            std::cout << "ERROR: Cannot assign " << newValue->getType()->toString() << " to " << valuePointer->getType()->toString() << " ('" << valuePointer->getOriginVariable() << "')\n";
-            return false;
-        }
-        context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
+        std::cout << "ERROR: Cannot assign " << newValue->getType()->toString() << " to " << valuePointer->getType()->toString() << " ('" << valuePointer->getOriginVariable() << "')\n";
+        return false;
     }
-    else
-    {
-        PointerType *newValuePointerType = static_cast<PointerType *>(newValue->getType());
-        if (newValuePointerType->getPointedType()->getTypeCode() != TypeCode::POINTER && valuePointerType->getPointedType()->getTypeCode() != TypeCode::POINTER)
-        {
-            // T* = T*
-            auto convertedValue = generateTypeConversion(context, newValue, valuePointerType, false);
-            if (convertedValue == NULL)
-            {
-                std::cout << "ERROR: Cannot assign (copy) " << newValue->getType()->toString() << " to " << valuePointer->getType()->toString() << " ('" << valuePointer->getOriginVariable() << "')\n";
-                return false;
-            }
-
-            llvm::Type *typeToCopy = valuePointerType->getPointedType()->getLLVMType(*context->context);
-            auto typeSize = generateSizeOf(context, typeToCopy);
-            // context->irBuilder->CreateMemCpyInline(valuePointer->getValue(), llvm::MaybeAlign(8), convertedValue->getValue(), llvm::MaybeAlign(8), typeSize, isVolatile);
-            context->irBuilder->CreateMemCpy(valuePointer->getValue(), llvm::MaybeAlign(8), convertedValue->getValue(), llvm::MaybeAlign(8), typeSize, isVolatile);
-        }
-        else
-        {
-            // T** = T*
-            auto convertedValue = generateTypeConversion(context, newValue, valuePointerType->getPointedType(), false);
-            if (convertedValue == NULL)
-            {
-                std::cout << "ERROR: Cannot assign " << newValue->getType()->toString() << " to " << valuePointer->getType()->toString() << " ('" << valuePointer->getOriginVariable() << "')\n";
-                return false;
-            }
-            context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
-        }
-    }
-
+    context->irBuilder->CreateStore(convertedValue->getValue(), valuePointer->getValue(), isVolatile);
     return true;
 }
 
