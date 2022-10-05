@@ -39,6 +39,6 @@ bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue 
 llvm::Type *getRefCountType(llvm::LLVMContext &context);
 
 llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type);
-llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, bool managed);
+llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type);
 llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree);
 llvm::AllocaInst *generateAllocaInCurrentFunction(GenerationContext *context, llvm::Type *type, llvm::StringRef twine);

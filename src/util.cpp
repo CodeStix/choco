@@ -204,6 +204,8 @@ llvm::Type *getRefCountType(llvm::LLVMContext &context)
 
 bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer)
 {
+    std::cout << "DEBUG: generateDecrementReference\n";
+
     if (managedPointer->getTypeCode() != TypeCode::POINTER)
     {
         std::cout << "WARNING: Cannot generateDecrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
@@ -218,20 +220,21 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
 
     std::vector<llvm::Value *> indices;
     // Get first pointer
-    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
     // Get first struct field
-    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), managedPointer->getValue(), indices, "geprefcount");
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, "geprefcount");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
     // Decrease refCount by 1
-    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 1, false)), "increfcount", true, true);
+    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), "increfcount", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
 
-    llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)), "cmprefcountzero");
+    llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), "cmprefcountzero");
 
-    llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, "refcountfree");
-    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "refcountcontinue");
+    llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
+    llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, "refcountfree", currentFunction);
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "refcountcontinue", currentFunction);
 
     context->irBuilder->CreateCondBr(isRefZero, freeBlock, continueBlock);
 
@@ -241,11 +244,13 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
     context->irBuilder->CreateBr(continueBlock);
 
     context->irBuilder->SetInsertPoint(continueBlock);
+    std::cout << "DEBUG: generateDecrementReference end\n";
     return true;
 }
 
 bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer)
 {
+    std::cout << "DEBUG: generateIncrementReference\n";
     if (managedPointer->getTypeCode() != TypeCode::POINTER)
     {
         std::cout << "WARNING: Cannot generateIncrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
@@ -259,14 +264,15 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
     }
 
     std::vector<llvm::Value *> indices;
-    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
-    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), managedPointer->getValue(), indices, "geprefcount");
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, "geprefcount");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
     // Increase refCount by 1
-    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 1, false)), "increfcount", true, true);
+    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), "increfcount", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
+    std::cout << "DEBUG: generateIncrementReference end\n";
     return true;
 }
 
@@ -493,31 +499,29 @@ bool generateAssignment(GenerationContext *context, TypedValue *valuePointer, Ty
 llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type)
 {
     auto fakePointer = context->irBuilder->CreateGEP(type, llvm::ConstantPointerNull::get(type->getPointerTo()), llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1)), "sizeof");
-    return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt32Ty(*context->context), "sizeoftoint");
+    return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt64Ty(*context->context), "sizeoftoint");
 }
 
-llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, bool managed)
+llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type)
 {
     llvm::Function *mallocFunction = context->module->getFunction("malloc");
     if (mallocFunction == NULL)
     {
-        std::cout << "ERROR: Cannot generate 'malloc' because the allocator function wasn't found\n";
-        return NULL;
-    }
-
-    if (managed)
-    {
-        // Add reference count field
-        std::vector<llvm::Type *> fields;
-        fields.push_back(getRefCountType(*context->context));
-        fields.push_back(type);
-        type = llvm::StructType::get(*context->context, fields, false);
+        // Define the malloc function
+        std::cout << "INFO: Declare malloc\n";
+        std::vector<llvm::Type *> mallocParams;
+        mallocParams.push_back(llvm::Type::getInt64Ty(*context->context));
+        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::PointerType::get(*context->context, 0), mallocParams, false);
+        mallocFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, "malloc", *context->module);
+        // std::cout << "ERROR: Cannot generate 'malloc' because the allocator function wasn't found\n";
+        // return NULL;
     }
 
     std::vector<llvm::Value *> parameters;
     llvm::Value *sizeOf = generateSizeOf(context, type);
     parameters.push_back(sizeOf);
-    return context->irBuilder->CreateCall(mallocFunction, parameters, "malloc");
+    auto opaquePointer = context->irBuilder->CreateCall(mallocFunction, parameters, "malloc");
+    return context->irBuilder->CreateBitCast(opaquePointer, llvm::PointerType::get(type, 0), "typedmalloc");
 }
 
 llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree)
@@ -525,13 +529,19 @@ llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree)
     llvm::Function *freeFunction = context->module->getFunction("free");
     if (freeFunction == NULL)
     {
-        std::cout << "ERROR: Cannot generate 'free' because the allocator function wasn't found\n";
-        return NULL;
+        std::cout << "INFO: Declare free\n";
+        std::vector<llvm::Type *> freeParams;
+        freeParams.push_back(llvm::PointerType::get(*context->context, 0));
+        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getVoidTy(*context->context), freeParams, false);
+        freeFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, "free", *context->module);
+        // std::cout << "ERROR: Cannot generate 'free' because the allocator function wasn't found\n";
+        // return NULL;
     }
 
+    auto opaquePointer = context->irBuilder->CreateBitCast(toFree, llvm::PointerType::get(*context->context, 0), "opaquefree");
     std::vector<llvm::Value *> parameters;
-    parameters.push_back(toFree);
-    return context->irBuilder->CreateCall(freeFunction, parameters, "malloc");
+    parameters.push_back(opaquePointer);
+    return context->irBuilder->CreateCall(freeFunction, parameters);
 }
 
 llvm::AllocaInst *generateAllocaInCurrentFunction(GenerationContext *context, llvm::Type *type, llvm::StringRef twine)
