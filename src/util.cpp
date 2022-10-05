@@ -1,5 +1,37 @@
 #include "util.hpp"
 
+// Generates a single dereference, decreasing/increasing pointer reference counts if needed
+// T*** -> T**
+// T* -> T
+// T -> (ERROR)
+TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *valuePointer)
+{
+    if (valuePointer->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "ERROR: generateReferenceAwareLoad(...) only accepts pointers\n";
+        return NULL;
+    }
+
+    if (!generateDecrementReferenceIfPointer(context, valuePointer))
+    {
+        std::cout << "ERROR: generateReferenceAwareLoad(...) could not decrement pointer\n";
+        return NULL;
+    }
+
+    std::string originVariable = "load_" + ((valuePointer->getOriginVariable() == "") ? "unknown" : valuePointer->getOriginVariable());
+    PointerType *pointerType = static_cast<PointerType *>(valuePointer->getType());
+    llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerType->getPointedType()->getLLVMType(*context->context), valuePointer->getValue(), originVariable);
+
+    // Pointer 'valueToConvert' just got loaded, increase reference
+    if (!generateIncrementReferenceIfPointer(context, valuePointer))
+    {
+        std::cout << "ERROR: generateReferenceAwareLoad(...) could not increment pointer\n";
+        return NULL;
+    }
+
+    return new TypedValue(derefValue, pointerType->getPointedType(), originVariable);
+}
+
 // Generates code that converts a deeply nested pointer to a single-deep pointer
 // T*** -> T*
 // T* -> T*
@@ -22,10 +54,12 @@ TypedValue *generateDereferenceToPointer(GenerationContext *context, TypedValue 
             break;
         }
 
-        llvm::Value *derefValue = context->irBuilder->CreateLoad(currentPointerType->getPointedType()->getLLVMType(*context->context), currentValue->getValue(), "deref");
-        std::string originVariable = currentValue->getOriginVariable();
-        currentValue = new TypedValue(derefValue, currentPointerType->getPointedType());
-        currentValue->setOriginVariable(originVariable);
+        currentValue = generateReferenceAwareLoad(context, currentValue);
+        if (currentValue == NULL)
+        {
+            std::cout << "ERROR: Could not generateDereferenceToPointer(...), generateReferenceAwareLoad(...) error\n";
+            return NULL;
+        }
     }
 
     return currentValue;
@@ -40,11 +74,12 @@ TypedValue *generateDereferenceToValue(GenerationContext *context, TypedValue *c
 {
     while (currentValue->getTypeCode() == TypeCode::POINTER)
     {
-        PointerType *currentPointerType = static_cast<PointerType *>(currentValue->getType());
-        llvm::Value *newValue = context->irBuilder->CreateLoad(currentPointerType->getPointedType()->getLLVMType(*context->context), currentValue->getValue(), "deref");
-        std::string originVariable = currentValue->getOriginVariable();
-        currentValue = new TypedValue(newValue, currentPointerType->getPointedType());
-        currentValue->setOriginVariable(originVariable);
+        currentValue = generateReferenceAwareLoad(context, currentValue);
+        if (currentValue == NULL)
+        {
+            std::cout << "ERROR: Could not generateDereferenceToValue(...), generateReferenceAwareLoad(...) error\n";
+            return NULL;
+        }
     }
 
     return currentValue;
@@ -167,24 +202,26 @@ llvm::Type *getRefCountType(llvm::LLVMContext &context)
     return llvm::IntegerType::getInt64Ty(context);
 }
 
-TypedValue *generateDecrementReference(GenerationContext *context, TypedValue *valueToConvert)
+bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer)
 {
-    if (valueToConvert->getTypeCode() != TypeCode::POINTER)
+    if (managedPointer->getTypeCode() != TypeCode::POINTER)
     {
-        std::cout << "WARNING: Cannot generateDecrementReference(...) a non pointer (" << valueToConvert->getType()->toString() << ")\n";
-        return NULL;
+        std::cout << "WARNING: Cannot generateDecrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
+        return false;
     }
-    PointerType *pointerType = static_cast<PointerType *>(valueToConvert->getType());
+    PointerType *pointerType = static_cast<PointerType *>(managedPointer->getType());
     if (!pointerType->isManaged())
     {
-        std::cout << "WARNING: Cannot generateDecrementReference(...) an unmanaged pointer (" << valueToConvert->getType()->toString() << ")\n";
-        return NULL;
+        std::cout << "WARNING: Cannot generateDecrementReference(...) an unmanaged pointer (" << managedPointer->getType()->toString() << ")\n";
+        return false;
     }
 
     std::vector<llvm::Value *> indices;
+    // Get first pointer
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+    // Get first struct field
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), valueToConvert->getValue(), indices, "geprefcount");
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), managedPointer->getValue(), indices, "geprefcount");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
     // Decrease refCount by 1
@@ -200,35 +237,73 @@ TypedValue *generateDecrementReference(GenerationContext *context, TypedValue *v
 
     // Free the block if refCount is zero
     context->irBuilder->SetInsertPoint(freeBlock);
-    generateFree(context, valueToConvert->getValue());
+    generateFree(context, managedPointer->getValue());
     context->irBuilder->CreateBr(continueBlock);
 
     context->irBuilder->SetInsertPoint(continueBlock);
+    return true;
 }
 
-TypedValue *generateIncrementReference(GenerationContext *context, TypedValue *valueToConvert)
+bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer)
 {
-    if (valueToConvert->getTypeCode() != TypeCode::POINTER)
+    if (managedPointer->getTypeCode() != TypeCode::POINTER)
     {
-        std::cout << "WARNING: Cannot generateIncrementReference(...) a non pointer (" << valueToConvert->getType()->toString() << ")\n";
-        return NULL;
+        std::cout << "WARNING: Cannot generateIncrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
+        return false;
     }
-    PointerType *pointerType = static_cast<PointerType *>(valueToConvert->getType());
+    PointerType *pointerType = static_cast<PointerType *>(managedPointer->getType());
     if (!pointerType->isManaged())
     {
-        std::cout << "WARNING: Cannot generateIncrementReference(...) an unmanaged pointer (" << valueToConvert->getType()->toString() << ")\n";
-        return NULL;
+        std::cout << "WARNING: Cannot generateIncrementReference(...) an unmanaged pointer (" << managedPointer->getType()->toString() << ")\n";
+        return false;
     }
 
     std::vector<llvm::Value *> indices;
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), valueToConvert->getValue(), indices, "geprefcount");
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMType(*context->context), managedPointer->getValue(), indices, "geprefcount");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
     // Increase refCount by 1
     refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), llvm::APInt(32, 1, false)), "increfcount", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
+    return true;
+}
+
+bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer)
+{
+    if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
+    {
+        // Increase reference count for loaded pointer
+        PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
+        if (loadedPointerType->isManaged())
+        {
+            if (!generateDecrementReference(context, maybeManagedPointer))
+            {
+                std::cout << "ERROR: Could not generate reference counting decrease code\n";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer)
+{
+    if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
+    {
+        // Increase reference count for loaded pointer
+        PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
+        if (loadedPointerType->isManaged())
+        {
+            if (!generateIncrementReference(context, maybeManagedPointer))
+            {
+                std::cout << "ERROR: Could not generate reference counting increase code\n";
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 // Try to cast a value to a specific type
@@ -251,8 +326,12 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
             PointerType *pointerToConvert = static_cast<PointerType *>(valueToConvert->getType());
 
-            llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerToConvert->getPointedType()->getLLVMType(*context->context), valueToConvert->getValue(), "deref");
-            valueToConvert = new TypedValue(derefValue, pointerToConvert->getPointedType());
+            valueToConvert = generateReferenceAwareLoad(context, valueToConvert);
+            if (valueToConvert == NULL)
+            {
+                std::cout << "ERROR: Could not generateTypeConversion(...), generateReferenceAwareLoad(...) error\n";
+                return NULL;
+            }
 
             if (*valueToConvert->getType() == *targetType)
             {

@@ -1195,7 +1195,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
 
             bool isVolatile = false;
             auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
-            TypedValue *structFieldPointerValue = new TypedValue(structFieldPointer, fieldType->type->getPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
+            TypedValue *structFieldPointerValue = new TypedValue(structFieldPointer, fieldType->type->getUnmanagedPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
             if (!generateAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
             {
                 std::cout << "ERROR: Cannot initialize struct field " << fieldName << " of " << structType->toString() << "\n";
@@ -1213,12 +1213,12 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             }
         }
 
-        return new TypedValue(structPointer, structType->getPointerToType(byValue));
+        return new TypedValue(structPointer, structType->getUnmanagedPointerToType(byValue));
     }
     else
     {
         // This struct is a type definition
-        TypedValue *type = new TypedValue(NULL, structType->getPointerToType(byValue));
+        TypedValue *type = new TypedValue(NULL, structType->getUnmanagedPointerToType(byValue));
 
         if (this->nameToken != NULL)
         {
@@ -1628,6 +1628,9 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     else
     {
         initialValue = NULL;
+        // TODO: remove this error when unimplemented variables have been implemented
+        std::cout << "ERROR: Declaration must have initial value (due to uninitialized variables not being implemented)\n";
+        return NULL;
     }
 
     Type *pointerType;
@@ -1655,14 +1658,14 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         if (p->isByValue())
         {
             llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, p->getPointedType()->getLLVMType(*context->context), "allocavalue");
-            pointer = new TypedValue(pointerValue, p->getPointedType()->getPointerToType(true));
+            pointer = new TypedValue(pointerValue, p->getPointedType()->getUnmanagedPointerToType(true));
         }
     }
 
     if (pointer == NULL)
     {
         llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
-        pointer = new TypedValue(pointerValue, pointerType->getPointerToType(false));
+        pointer = new TypedValue(pointerValue, pointerType->getUnmanagedPointerToType(false));
     }
 
     scope->addValue(this->nameToken->value, pointer);
@@ -1696,8 +1699,23 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
         std::cout << "ERROR: Assert failed: valuePointer->getTypeCode() != TypeCode::POINTER\n";
         return NULL;
     }
-
     PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
+
+    // TODO: this code will segfault when the declaration hasn't specified a value (previous value is uninitialized)
+    if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
+    {
+        // If a previous pointer value will be overwritten, the reference count must be decremented if was a managed pointer
+        PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
+        if (storedPointerType->isManaged())
+        {
+            llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), valuePointer->getValue(), "deref");
+            if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType)))
+            {
+                std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
+                return NULL;
+            }
+        }
+    }
 
     TypedValue *newValue = this->value->generateLLVM(context, scope, valuePointerType->getPointedType());
 
@@ -1872,7 +1890,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         }
     }
 
-    TypedValue *newFunctionPointerType = new TypedValue(function, newFunctionType->getPointerToType(false));
+    TypedValue *newFunctionPointerType = new TypedValue(function, newFunctionType->getUnmanagedPointerToType(false));
 
     if (!context->globalModule.addValue(this->nameToken->value, newFunctionPointerType))
     {
@@ -1911,7 +1929,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
             auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
             context->irBuilder->CreateStore(parameterValue, parameterPointer, false);
-            functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getPointerToType(false)));
+            functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getUnmanagedPointerToType(false)));
         }
 
         if (useSRet)
@@ -2088,7 +2106,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, fieldIndex, false)));
 
         llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getPointedType()->getLLVMType(*context->context), pointerToIndex->getValue(), indices, "memberstruct");
-        return new TypedValue(fieldPointer, structField->type->getPointerToType(structField->type->getTypeCode() != TypeCode::POINTER));
+        return new TypedValue(fieldPointer, structField->type->getUnmanagedPointerToType(structField->type->getTypeCode() != TypeCode::POINTER));
     }
     else
     {

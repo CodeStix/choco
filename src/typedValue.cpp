@@ -6,9 +6,9 @@ IntegerType CHAR_TYPE(8, false);
 IntegerType BOOL_TYPE(1, false);
 IntegerType UINT32_TYPE(32, false);
 
-Type *Type::getPointerToType(bool byValue)
+Type *Type::getUnmanagedPointerToType(bool byValue)
 {
-    return new PointerType(this, byValue);
+    return new PointerType(this, byValue, false);
 }
 
 TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, FunctionScope *scope)

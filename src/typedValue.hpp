@@ -5,6 +5,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Constants.h"
 
+llvm::Type *getRefCountType(llvm::LLVMContext &context);
 class GenerationContext;
 class FunctionScope;
 class ASTNode;
@@ -48,7 +49,7 @@ public:
         return "<Unknown>";
     }
 
-    Type *getPointerToType(bool byValue);
+    Type *getUnmanagedPointerToType(bool byValue);
 
 private:
     TypeCode typeCode;
@@ -57,7 +58,7 @@ private:
 class TypedValue
 {
 public:
-    TypedValue(llvm::Value *value, Type *type) : value(value), type(type), originVariableName("") {}
+    TypedValue(llvm::Value *value, Type *type, std::string originVariable = "") : value(value), type(type), originVariableName(originVariable) {}
 
     inline llvm::Value *getValue()
     {
