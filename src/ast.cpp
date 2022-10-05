@@ -1758,7 +1758,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
         return NULL;
     }
 
-    return newValue;
+    return valuePointer;
 }
 
 TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
@@ -1805,15 +1805,18 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
 #ifdef DEBUG
     std::cout << "debug: ASTBlock::generateLLVM\n";
 #endif
-    TypedValue *lastValue = NULL;
     for (ASTNode *statement : *this->statements)
     {
 #ifdef DEBUG
         std::cout << "debug: ASTBlock::generateLLVM generate " << astNodeTypeToString(statement->type) << "\n";
 #endif
-        lastValue = statement->generateLLVM(context, scope, NULL);
+        TypedValue *value = statement->generateLLVM(context, scope, NULL);
+        if (value != NULL)
+        {
+            generateDecrementReferenceIfPointer(context, value);
+        }
     }
-    return lastValue;
+    return NULL;
 }
 
 TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
