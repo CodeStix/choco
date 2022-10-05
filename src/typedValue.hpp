@@ -113,7 +113,7 @@ public:
 
     bool addLazyValue(std::string name, ASTNode *node)
     {
-        if (this->lazyNamedStatics[name])
+        if (this->lazyNamedStatics.count(name) > 0)
         {
             return false;
         }
@@ -126,7 +126,7 @@ public:
 
     bool addValue(std::string name, TypedValue *value)
     {
-        if (this->namedStatics[name])
+        if (this->namedStatics.count(name) > 0)
         {
             return false;
         }
@@ -139,7 +139,7 @@ public:
 
     bool hasValue(std::string name)
     {
-        return this->namedStatics[name] != NULL || this->lazyNamedStatics[name] != NULL;
+        return this->namedStatics.count(name) > 0 || this->lazyNamedStatics.count(name) > 0;
     }
 
     TypedValue *getValue(std::string name, GenerationContext *context, FunctionScope *scope);

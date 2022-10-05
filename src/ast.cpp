@@ -987,8 +987,8 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
 #ifdef DEBUG
     std::cout << "debug: ASTSymbol::generateLLVM " << this->nameToken->value << "\n";
 #endif
-    auto valuePointer = scope->getValue(this->nameToken->value);
-    if (!valuePointer)
+    auto valuePointer = scope == NULL ? NULL : scope->getValue(this->nameToken->value);
+    if (valuePointer == NULL)
     {
         valuePointer = context->globalModule.getValueCascade(this->nameToken->value, context, scope);
         if (!valuePointer)
@@ -1746,9 +1746,9 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
 #ifdef DEBUG
     std::cout << "debug: ASTReturn::generateLLVM\n";
 #endif
+    Type *returnType = context->currentFunction->getReturnType();
     if (this->value != NULL)
     {
-        Type *returnType = context->currentFunction->getReturnType();
         if (returnType == NULL)
         {
             std::cout << "ERROR: Function does not return value\n";
@@ -1764,12 +1764,18 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
             return NULL;
         }
 
-        context->irBuilder->CreateRet(newValue->getValue());
-        return value;
+        context->irBuilder->CreateStore(newValue->getValue(), context->currentFunctionReturnValuePointer, false);
+        context->irBuilder->CreateBr(context->currentFunctionReturnBlock);
+        return NULL;
     }
     else
     {
-        context->irBuilder->CreateRetVoid();
+        if (returnType != NULL)
+        {
+            std::cout << "ERROR: Return statement must provide a value\n";
+            return NULL;
+        }
+        context->irBuilder->CreateBr(context->currentFunctionReturnBlock);
         return NULL;
     }
 }
@@ -1798,7 +1804,7 @@ TypedValue *ASTParameter::generateLLVM(GenerationContext *context, FunctionScope
     return this->typeSpecifier->generateLLVM(context, scope, typeHint);
 }
 
-TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
+TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope *_, Type *typeHint)
 {
 #ifdef DEBUG
     std::cout << "debug: ASTFunction::generateLLVM " << this->nameToken->value << "\n";
@@ -1807,7 +1813,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     std::vector<FunctionParameter> parameters;
     for (ASTParameter *parameter : *this->parameters)
     {
-        TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope, NULL);
+        TypedValue *parameterTypeValue = parameter->generateLLVM(context, NULL, NULL);
         if (!parameterTypeValue->isType())
         {
             std::cout << "ERROR: parameter type specifier may not have value\n";
@@ -1819,7 +1825,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     Type *returnType;
     if (this->returnType != NULL)
     {
-        TypedValue *returnTypeValue = this->returnType->generateLLVM(context, scope, NULL);
+        TypedValue *returnTypeValue = this->returnType->generateLLVM(context, NULL, NULL);
         if (!returnTypeValue->isType())
         {
             std::cout << "ERROR: return type specifier may not have value\n";
@@ -1891,19 +1897,21 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             return NULL;
         }
 
+        FunctionScope *functionScope = new FunctionScope();
+        llvm::BasicBlock *functionStartBlock = llvm::BasicBlock::Create(*context->context, this->nameToken->value + ".entry", function);
+        context->irBuilder->SetInsertPoint(functionStartBlock);
+
         PointerType *functionPointerType = static_cast<PointerType *>(newFunctionPointerType->getType());
         context->currentFunction = static_cast<FunctionType *>(functionPointerType->getPointedType());
-
-        FunctionScope *functionScope = new FunctionScope(*scope);
-        llvm::BasicBlock *functionStartBlock = llvm::BasicBlock::Create(*context->context, "block", function);
-        context->irBuilder->SetInsertPoint(functionStartBlock);
+        context->currentFunctionReturnBlock = llvm::BasicBlock::Create(*context->context, this->nameToken->value + ".return", function);
+        context->currentFunctionReturnValuePointer = returnType == NULL ? NULL : generateAllocaInCurrentFunction(context, returnType->getLLVMType(*context->context), "returnvalue");
 
         for (int i = 0; i < this->parameters->size(); i++)
         {
             ASTParameter *parameter = (*this->parameters)[i];
             auto parameterValue = function->getArg(i);
 
-            TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope, NULL);
+            TypedValue *parameterTypeValue = parameter->generateLLVM(context, NULL, NULL);
             if (!parameterTypeValue->isType())
             {
                 std::cout << "ERROR: parameter type specifier may not have value\n";
@@ -1922,15 +1930,52 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         // llvm::BasicBlock *functionEndBlock = context->irBuilder->GetInsertBlock();
         if (!this->body->isTerminating())
         {
-            if (this->returnType == NULL)
+            if (returnType == NULL)
             {
-                context->irBuilder->CreateRetVoid();
+                context->irBuilder->CreateBr(context->currentFunctionReturnBlock);
             }
             else
             {
-                std::cout << "ERROR: Function '" << this->nameToken->value << "' must return a value\n";
+                std::cout << "ERROR: Function '" << this->nameToken->value << "' must return a value in all execution paths\n";
                 return NULL;
             }
+        }
+
+        // Create return block and free values
+        context->irBuilder->SetInsertPoint(context->currentFunctionReturnBlock);
+
+        for (auto &p : functionScope->namedValues)
+        {
+            if (p.second->isType())
+            {
+                // std::map value could be null
+                continue;
+            }
+
+            PointerType *valuePointerType = static_cast<PointerType *>(p.second->getType());
+            if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
+            {
+                PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
+                if (storedPointerType->isManaged())
+                {
+                    llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), p.second->getValue(), "deref");
+                    if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType)))
+                    {
+                        std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
+                        return NULL;
+                    }
+                }
+            }
+        }
+
+        if (context->currentFunctionReturnValuePointer != NULL)
+        {
+            auto returnValue = generateReferenceAwareLoad(context, new TypedValue(context->currentFunctionReturnValuePointer, returnType->getUnmanagedPointerToType(false)));
+            context->irBuilder->CreateRet(returnValue->getValue());
+        }
+        else
+        {
+            context->irBuilder->CreateRetVoid();
         }
 
         // Check generated IR for issues
@@ -2226,7 +2271,7 @@ TypedValue *ASTFile::generateLLVM(GenerationContext *context, FunctionScope *sco
 #ifdef DEBUG
     std::cout << "debug: ASTFile::generateLLVM\n";
 #endif
-    FunctionScope *fileScope = new FunctionScope(*scope);
+    FunctionScope *fileScope = new FunctionScope();
     for (ASTNode *statement : *this->statements)
     {
         statement->generateLLVM(context, fileScope, NULL);

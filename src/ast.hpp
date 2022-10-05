@@ -54,12 +54,19 @@ public:
 
     bool hasValue(const std::string &name)
     {
-        return this->getValue(name) != NULL;
+        return this->namedValues.count(name) > 0;
     }
 
     TypedValue *getValue(const std::string &name)
     {
-        return this->namedValues[name];
+        if (this->namedValues.count(name) > 0)
+        {
+            return this->namedValues[name];
+        }
+        else
+        {
+            return NULL;
+        }
     }
 
     // private:
@@ -93,6 +100,8 @@ public:
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
     FunctionType *currentFunction;
+    llvm::BasicBlock *currentFunctionReturnBlock;
+    llvm::Value *currentFunctionReturnValuePointer;
     ModuleType globalModule;
 };
 

@@ -13,19 +13,22 @@ Type *Type::getUnmanagedPointerToType(bool byValue)
 
 TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, FunctionScope *scope)
 {
-    TypedValue *value = this->namedStatics[name];
-    if (value != NULL)
+    if (this->namedStatics.count(name) > 0)
     {
-        return value;
+        return this->namedStatics[name];
     }
     else
     {
-        ASTNode *lazyValue = this->lazyNamedStatics[name];
-        if (lazyValue != NULL)
+        if (this->lazyNamedStatics.count(name) > 0)
         {
+            ASTNode *lazyValue = this->lazyNamedStatics[name];
             auto savedBlock = context->irBuilder->GetInsertBlock();
-            FunctionType *savedCurrentFunction = context->currentFunction;
-            value = lazyValue->generateLLVM(context, scope, NULL);
+            auto savedCurrentFunction = context->currentFunction;
+            auto savedReturnValuePointer = context->currentFunctionReturnValuePointer;
+            auto savedReturnBlock = context->currentFunctionReturnBlock;
+            auto value = lazyValue->generateLLVM(context, NULL, NULL);
+            context->currentFunctionReturnBlock = savedReturnBlock;
+            context->currentFunctionReturnValuePointer = savedReturnValuePointer;
             context->currentFunction = savedCurrentFunction;
             context->irBuilder->SetInsertPoint(savedBlock);
             return value;
