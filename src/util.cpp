@@ -219,6 +219,93 @@ llvm::Type *getRefCountType(llvm::LLVMContext &context)
     return llvm::IntegerType::getInt64Ty(context);
 }
 
+bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPointer)
+{
+    if (managedPointer->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "WARNING: Cannot generateFreeFunction(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
+        return false;
+    }
+    PointerType *pointerType = static_cast<PointerType *>(managedPointer->getType());
+    if (!pointerType->isManaged())
+    {
+        std::cout << "WARNING: Cannot generateFreeFunction(...) an unmanaged pointer (" << managedPointer->getType()->toString() << ")\n";
+        return false;
+    }
+
+    std::cout << "INFO: Generate free\n";
+
+    llvm::Function *freeFunction;
+    llvm::Type *llvmTypeToFree = pointerType->getLLVMPointedType(*context->context);
+    if (context->freeFunctions.count(llvmTypeToFree) > 0)
+    {
+        // Free function already generated
+        freeFunction = context->freeFunctions[llvmTypeToFree];
+    }
+    else
+    {
+        // Need to generate function
+        std::vector<llvm::Type *> freeParams;
+        freeParams.push_back(pointerType->getLLVMType(*context->context));
+        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getVoidTy(*context->context), freeParams, false);
+        freeFunction = llvm::Function::Create(functionType, llvm::Function::InternalLinkage, std::to_string(context->freeFunctions.size()) + ".free", *context->module);
+
+        context->freeFunctions[llvmTypeToFree] = freeFunction;
+
+        auto savedBlock = context->irBuilder->GetInsertBlock();
+
+        llvm::BasicBlock *freeFunctionBlock = llvm::BasicBlock::Create(*context->context, "free.entry", freeFunction);
+        context->irBuilder->SetInsertPoint(freeFunctionBlock);
+        auto pointerArg = freeFunction->getArg(0);
+
+        if (pointerType->getPointedType()->getTypeCode() == TypeCode::STRUCT)
+        {
+            StructType *structType = static_cast<StructType *>(pointerType->getPointedType());
+            for (auto &field : structType->getFields())
+            {
+                if (field.type->getTypeCode() == TypeCode::POINTER)
+                {
+                    PointerType *structFieldType = static_cast<PointerType *>(field.type);
+                    if (structFieldType->isManaged())
+                    {
+                        // Call freer function
+                        int fieldIndex = structType->getFieldIndex(field.name);
+
+                        std::vector<llvm::Value *> indices;
+                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0));
+                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1));
+                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), fieldIndex));
+                        auto fieldPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), pointerArg, indices, "member.free");
+                        auto fieldValue = context->irBuilder->CreateLoad(structFieldType->getLLVMType(*context->context), fieldPointer, "member.free.load");
+
+                        if (!generateDecrementReference(context, new TypedValue(fieldValue, structFieldType, field.name), true))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        generateFree(context, pointerArg, "free");
+
+        context->irBuilder->CreateRetVoid();
+
+        context->irBuilder->SetInsertPoint(savedBlock);
+
+        if (llvm::verifyFunction(*freeFunction, &llvm::errs()))
+        {
+            std::cout << "ERROR: LLVM reported invalid free function\n";
+            return false;
+        }
+    }
+
+    std::vector<llvm::Value *> params;
+    params.push_back(managedPointer->getValue());
+    context->irBuilder->CreateCall(freeFunction, params);
+    return true;
+}
+
 bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree)
 {
     std::cout << "DEBUG: generateDecrementReference\n";
@@ -260,7 +347,10 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
         context->irBuilder->CreateCondBr(isRefZero, freeBlock, continueBlock);
 
         context->irBuilder->SetInsertPoint(freeBlock);
-        generateFree(context, managedPointer->getValue(), twine + ".free");
+
+        // Also decrement pointers for nested pointers
+        generateCallFreeFunction(context, managedPointer);
+
         context->irBuilder->CreateBr(continueBlock);
 
         context->irBuilder->SetInsertPoint(continueBlock);
@@ -531,14 +621,11 @@ llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::s
     llvm::Function *mallocFunction = context->module->getFunction(mallocName);
     if (mallocFunction == NULL)
     {
-        // Define the malloc function
         std::cout << "INFO: Declare malloc\n";
         std::vector<llvm::Type *> mallocParams;
         mallocParams.push_back(llvm::Type::getInt64Ty(*context->context));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::PointerType::get(*context->context, 0), mallocParams, false);
         mallocFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, mallocName, *context->module);
-        // std::cout << "ERROR: Cannot generate 'malloc' because the allocator function wasn't found\n";
-        // return NULL;
     }
 
     std::vector<llvm::Value *> parameters;
@@ -553,13 +640,10 @@ llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree, std::
     llvm::Function *freeFunction = context->module->getFunction(freeName);
     if (freeFunction == NULL)
     {
-        std::cout << "INFO: Declare free\n";
         std::vector<llvm::Type *> freeParams;
         freeParams.push_back(llvm::PointerType::get(*context->context, 0));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getVoidTy(*context->context), freeParams, false);
         freeFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, freeName, *context->module);
-        // std::cout << "ERROR: Cannot generate 'free' because the allocator function wasn't found\n";
-        // return NULL;
     }
 
     auto opaquePointer = context->irBuilder->CreateBitCast(toFree, llvm::PointerType::get(*context->context, 0), twine + ".opaque");

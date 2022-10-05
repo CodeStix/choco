@@ -102,6 +102,7 @@ public:
     FunctionType *currentFunction;
     llvm::BasicBlock *currentFunctionReturnBlock;
     llvm::Value *currentFunctionReturnValuePointer;
+    std::map<llvm::Type*, llvm::Function*> freeFunctions;
     ModuleType globalModule;
 };
 
