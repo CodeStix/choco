@@ -2094,7 +2094,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         int fieldIndex = structType->getFieldIndex(this->nameToken->value);
         if (fieldIndex < 0)
         {
-            std::cout << "ERROR: cannot access member '" << this->nameToken->value << "' of struct\n";
+            std::cout << "ERROR: Cannot access member '" << this->nameToken->value << "' of struct\n";
             return NULL;
         }
 
@@ -2103,6 +2103,11 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         // A struct is indexed
         std::vector<llvm::Value *> indices;
         indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+        if (pointerTypeToIndex->isManaged())
+        {
+            // If the pointer is managed, the actual struct is loaded under the second field (the first field is the reference count)
+            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1, false)));
+        }
         indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, fieldIndex, false)));
 
         llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getPointedType()->getLLVMType(*context->context), pointerToIndex->getValue(), indices, "memberstruct");
@@ -2110,7 +2115,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     }
     else
     {
-        std::cout << "ERROR: member dereference only supports structs\n";
+        std::cout << "ERROR: Member dereference only supports structs\n";
         return NULL;
     }
 }
