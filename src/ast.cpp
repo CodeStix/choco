@@ -457,6 +457,7 @@ ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken)
         {
         case TokenType::VALUE_KEYWORD:
             value = true;
+            managed = false;
             tokens->next();
             tokens->consume(TokenType::WHITESPACE);
             break;
@@ -1087,6 +1088,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
     StructType *structType = NULL;
     bool isType = false;
     bool byValue = false;
+    bool managed = false;
 
     // Enforce type hint
     if (typeHint != NULL)
@@ -1098,12 +1100,14 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             {
                 structType = static_cast<StructType *>(typeHintPointer->getPointedType());
                 byValue = typeHintPointer->isByValue();
+                managed = typeHintPointer->isManaged();
             }
         }
         else if (typeHint->getTypeCode() == TypeCode::STRUCT)
         {
             structType = static_cast<StructType *>(typeHint);
             byValue = true;
+            managed = false;
         }
         else
         {
@@ -1175,8 +1179,9 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             fieldTypes.push_back(StructTypeField(fieldType, field->getName()));
         }
 
-        structType = new StructType(this->nameToken == NULL ? "" : this->nameToken->value, fieldTypes, this->managed, this->packed);
+        structType = new StructType(this->nameToken == NULL ? "" : this->nameToken->value, fieldTypes, this->packed);
         byValue = this->value;
+        managed = this->managed;
     }
 
     if (!isType)
@@ -1184,7 +1189,15 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         // This is a struct value
         llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
-        auto structPointer = generateAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
+        llvm::Value *structPointer;
+        if (managed)
+        {
+            structPointer = generateMalloc(context, llvmStructType, managed);
+        }
+        else
+        {
+            structPointer = generateAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
+        }
 
         for (auto &pair : fieldValues)
         {
@@ -1213,12 +1226,12 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             }
         }
 
-        return new TypedValue(structPointer, structType->getUnmanagedPointerToType(byValue));
+        return new TypedValue(structPointer, new PointerType(structType, byValue, managed));
     }
     else
     {
         // This struct is a type definition
-        TypedValue *type = new TypedValue(NULL, structType->getUnmanagedPointerToType(byValue));
+        TypedValue *type = new TypedValue(NULL, new PointerType(structType, byValue, managed));
 
         if (this->nameToken != NULL)
         {

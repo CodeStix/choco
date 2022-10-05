@@ -496,13 +496,22 @@ llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type)
     return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt32Ty(*context->context), "sizeoftoint");
 }
 
-llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type)
+llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, bool managed)
 {
     llvm::Function *mallocFunction = context->module->getFunction("malloc");
     if (mallocFunction == NULL)
     {
         std::cout << "ERROR: Cannot generate 'malloc' because the allocator function wasn't found\n";
         return NULL;
+    }
+
+    if (managed)
+    {
+        // Add reference count field
+        std::vector<llvm::Type *> fields;
+        fields.push_back(getRefCountType(*context->context));
+        fields.push_back(type);
+        type = llvm::StructType::get(*context->context, fields, false);
     }
 
     std::vector<llvm::Value *> parameters;
