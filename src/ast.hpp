@@ -93,7 +93,6 @@ public:
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::legacy::FunctionPassManager> passManager;
     FunctionType *currentFunction;
-    TypedValue *currentFunctionSRet;
     ModuleType globalModule;
 };
 

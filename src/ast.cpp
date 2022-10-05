@@ -1751,22 +1751,7 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
             return NULL;
         }
 
-        if (returnType->getTypeCode() == TypeCode::POINTER)
-        {
-            // Create sret
-            if (!generateAssignment(context, context->currentFunctionSRet, value, false))
-            {
-                std::cout << "ERROR: Could not assign return value (sret)\n";
-                return NULL;
-            }
-
-            context->irBuilder->CreateRetVoid();
-        }
-        else
-        {
-            context->irBuilder->CreateRet(newValue->getValue());
-        }
-
+        context->irBuilder->CreateRet(newValue->getValue());
         return value;
     }
     else
@@ -1856,25 +1841,11 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     }
     function->addFnAttrs(fnAttributeBuilder);
 
-    // When the return type is a pointer, the return value is stored in the first argument passed to the function
-    bool useSRet = returnType != NULL && returnType->getTypeCode() == TypeCode::POINTER;
-    if (useSRet)
-    {
-        PointerType *returnPointerType = static_cast<PointerType *>(returnType);
-        auto returnAttributebuilder = llvm::AttrBuilder(*context->context);
-        returnAttributebuilder.addStructRetAttr(returnPointerType->getPointedType()->getLLVMType(*context->context));
-        returnAttributebuilder.addAttribute(llvm::Attribute::NoAlias);
-        returnAttributebuilder.addAttribute(llvm::Attribute::WriteOnly);
-        returnAttributebuilder.addAttribute(llvm::Attribute::NoCapture);
-        // The sret argument is the first one (0)
-        function->addParamAttrs(0, returnAttributebuilder);
-    }
-
     // Name parameters and add parameter attributes when needed
     for (int i = 0; i < parameters.size(); i++)
     {
         auto parameter = parameters[i];
-        auto parameterValue = function->getArg(useSRet ? i + 1 : i);
+        auto parameterValue = function->getArg(i);
         parameterValue->setName(parameter.name);
 
         if (parameter.type->getTypeCode() == TypeCode::POINTER)
@@ -1917,7 +1888,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         for (int i = 0; i < this->parameters->size(); i++)
         {
             ASTParameter *parameter = (*this->parameters)[i];
-            auto parameterValue = function->getArg(useSRet ? i + 1 : 0);
+            auto parameterValue = function->getArg(i);
 
             TypedValue *parameterTypeValue = parameter->generateLLVM(context, scope, NULL);
             if (!parameterTypeValue->isType())
@@ -1930,18 +1901,6 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
             context->irBuilder->CreateStore(parameterValue, parameterPointer, false);
             functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getUnmanagedPointerToType(false)));
-        }
-
-        if (useSRet)
-        {
-            // Use the sret parameter (first parameter)
-            auto sretParameter = function->getArg(0);
-            sretParameter->setName("sret");
-            context->currentFunctionSRet = new TypedValue(sretParameter, returnType);
-        }
-        else
-        {
-            context->currentFunctionSRet = NULL;
         }
 
         this->body->generateLLVM(context, functionScope, NULL);
@@ -2213,15 +2172,6 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
 
     std::vector<llvm::Value *> parameterValues;
 
-    // Check if return value will be passed in sret parameter (is always the first parameter)
-    llvm::Value *sretPointer = NULL;
-    if (functionType->getReturnType() != NULL && functionType->getReturnType()->getTypeCode() == TypeCode::POINTER)
-    {
-        PointerType *returnPointerType = static_cast<PointerType *>(functionType->getReturnType());
-        sretPointer = generateAllocaInCurrentFunction(context, returnPointerType->getPointedType()->getLLVMType(*context->context), "allocasret");
-        parameterValues.push_back(sretPointer);
-    }
-
     for (int p = 0; p < actualParameterCount; p++)
     {
         FunctionParameter &parameter = parameters[p];
@@ -2246,18 +2196,7 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
         parameterValues.push_back(convertedValue->getValue());
     }
 
-    llvm::Value *callResult;
-    if (sretPointer != NULL)
-    {
-        // Function does not return an llvm::Value because sret is used, don't name the result (twine it)
-        context->irBuilder->CreateCall(function, parameterValues);
-        callResult = sretPointer;
-    }
-    else
-    {
-        callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : "call");
-    }
-
+    auto callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : "call");
     return new TypedValue(callResult, functionType->getReturnType());
 }
 

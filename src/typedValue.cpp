@@ -25,9 +25,7 @@ TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, F
         {
             auto savedBlock = context->irBuilder->GetInsertBlock();
             FunctionType *savedCurrentFunction = context->currentFunction;
-            TypedValue *savedSRet = context->currentFunctionSRet;
             value = lazyValue->generateLLVM(context, scope, NULL);
-            context->currentFunctionSRet = savedSRet;
             context->currentFunction = savedCurrentFunction;
             context->irBuilder->SetInsertPoint(savedBlock);
             return value;

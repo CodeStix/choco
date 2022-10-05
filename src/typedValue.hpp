@@ -436,16 +436,7 @@ public:
         }
         else
         {
-            if (this->returnType->getTypeCode() == TypeCode::POINTER)
-            {
-                // Return value will be passed in sret argument (the first argument of the function)
-                returnType = llvm::Type::getVoidTy(context);
-                parameters.push_back(this->returnType->getLLVMType(context));
-            }
-            else
-            {
-                returnType = this->returnType->getLLVMType(context);
-            }
+            returnType = this->returnType->getLLVMType(context);
         }
 
         for (auto &param : this->parameters)
