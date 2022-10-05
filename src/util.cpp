@@ -1,10 +1,13 @@
 #include "util.hpp"
 
+const char *mallocName = "chocoAlloc";
+const char *freeName = "chocoFree";
+
 TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer)
 {
     if (valuePointer->getTypeCode() != TypeCode::POINTER)
     {
-        std::cout << "ERROR: generateReferenceAwareLoad(...) only accepts pointers\n";
+        std::cout << "ERROR: generateLoad(...) only accepts pointers\n";
         return NULL;
     }
 
@@ -241,12 +244,13 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Decrease ref count by 1
-    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.dec", true, true);
+    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.dec");
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
 
     // Free the block if refCount is zero
     if (checkFree)
     {
+        std::cout << "DEBUG: generate free\n";
         llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), twine + ".refcount.dec.cmp");
 
         llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
@@ -290,7 +294,7 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Increase refCount by 1
-    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc", true, true);
+    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc");
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
     std::cout << "DEBUG: generateIncrementReference end\n";
     return true;
@@ -524,7 +528,7 @@ llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type, std::s
 
 llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::string twine)
 {
-    llvm::Function *mallocFunction = context->module->getFunction("malloc");
+    llvm::Function *mallocFunction = context->module->getFunction(mallocName);
     if (mallocFunction == NULL)
     {
         // Define the malloc function
@@ -532,7 +536,7 @@ llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::s
         std::vector<llvm::Type *> mallocParams;
         mallocParams.push_back(llvm::Type::getInt64Ty(*context->context));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::PointerType::get(*context->context, 0), mallocParams, false);
-        mallocFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, "malloc", *context->module);
+        mallocFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, mallocName, *context->module);
         // std::cout << "ERROR: Cannot generate 'malloc' because the allocator function wasn't found\n";
         // return NULL;
     }
@@ -546,14 +550,14 @@ llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::s
 
 llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree, std::string twine)
 {
-    llvm::Function *freeFunction = context->module->getFunction("free");
+    llvm::Function *freeFunction = context->module->getFunction(freeName);
     if (freeFunction == NULL)
     {
         std::cout << "INFO: Declare free\n";
         std::vector<llvm::Type *> freeParams;
         freeParams.push_back(llvm::PointerType::get(*context->context, 0));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getVoidTy(*context->context), freeParams, false);
-        freeFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, "free", *context->module);
+        freeFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, freeName, *context->module);
         // std::cout << "ERROR: Cannot generate 'free' because the allocator function wasn't found\n";
         // return NULL;
     }

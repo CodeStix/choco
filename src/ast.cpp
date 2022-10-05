@@ -1684,33 +1684,33 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         }
     }
 
-    TypedValue *pointer = NULL;
+    TypedValue *valuePointer = NULL;
     if (pointerType->getTypeCode() == TypeCode::POINTER)
     {
         PointerType *p = static_cast<PointerType *>(pointerType);
         if (p->isByValue())
         {
             llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, p->getPointedType()->getLLVMType(*context->context), this->nameToken->value);
-            pointer = new TypedValue(pointerValue, p->getPointedType()->getUnmanagedPointerToType(true));
+            valuePointer = new TypedValue(pointerValue, p->getPointedType()->getUnmanagedPointerToType(true));
         }
     }
 
-    if (pointer == NULL)
+    if (valuePointer == NULL)
     {
         llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), this->nameToken->value);
-        pointer = new TypedValue(pointerValue, pointerType->getUnmanagedPointerToType(false));
+        valuePointer = new TypedValue(pointerValue, pointerType->getUnmanagedPointerToType(false));
     }
 
-    scope->addValue(this->nameToken->value, pointer);
+    scope->addValue(this->nameToken->value, valuePointer);
 
     bool isVolatile = false;
-    if (!generateAssignment(context, pointer, initialValue, isVolatile))
+    if (!generateAssignment(context, valuePointer, initialValue, isVolatile))
     {
         std::cout << "ERROR: Cannot generate declaration at " << this->nameToken->position << "\n";
         return NULL;
     }
 
-    return initialValue;
+    return valuePointer;
 }
 
 TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)
@@ -2132,13 +2132,37 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     if (pointerTypeToIndex->getPointedType()->getTypeCode() == TypeCode::STRUCT)
     {
         StructType *structType = static_cast<StructType *>(pointerTypeToIndex->getPointedType());
+
+        // The builtin 'refs' field contains the reference count
+        if (this->nameToken->value == "refs")
+        {
+            if (!pointerTypeToIndex->isManaged())
+            {
+                std::cout << "ERROR: Cannot read reference count of unmanaged object\n";
+                return NULL;
+            }
+
+            std::vector<llvm::Value *> indices;
+            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+
+            std::string twine = pointerToIndex->getOriginVariable() + ".refs";
+            llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, twine);
+
+            if (!generateDecrementReferenceIfPointer(context, pointerToIndex, false))
+            {
+                return NULL;
+            }
+
+            return new TypedValue(fieldPointer, (new IntegerType(64, false))->getUnmanagedPointerToType(true));
+        }
+
         int fieldIndex = structType->getFieldIndex(this->nameToken->value);
         if (fieldIndex < 0)
         {
             std::cout << "ERROR: Cannot access member '" << this->nameToken->value << "' of struct\n";
             return NULL;
         }
-
         StructTypeField *structField = structType->getField(this->nameToken->value);
 
         // A struct is indexed

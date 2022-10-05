@@ -17,10 +17,12 @@ struct MultiplePeople {
 }
 
 export func getStruct(): Person {
-    return Person {
+    let p = Person {
         age: 21,
         birthDate: 20010130
     }
+    printDouble(Float32 p.refs)
+    return p
 }
 
 export func duplicatePerson(person: Person): MultiplePeople {
@@ -34,6 +36,7 @@ export func duplicatePerson(person: Person): MultiplePeople {
 
 export func main() {
     let person = getStruct()
+    printDouble(Float32 person.refs)
     printDouble(Float32 person.age)
 
     let duplicate = duplicatePerson(person)
