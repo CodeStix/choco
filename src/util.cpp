@@ -11,6 +11,7 @@ TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer)
     std::string originVariable = valuePointer->getOriginVariable();
     PointerType *pointerType = static_cast<PointerType *>(valuePointer->getType());
     llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerType->getPointedType()->getLLVMType(*context->context), valuePointer->getValue(), originVariable + ".load");
+
     return new TypedValue(derefValue, pointerType->getPointedType(), originVariable);
 }
 
@@ -27,7 +28,7 @@ TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *v
     }
 
     // Pointer 'valueToConvert' will be dereferenced, decrease ref count
-    if (!generateDecrementReferenceIfPointer(context, valuePointer))
+    if (!generateDecrementReferenceIfPointer(context, valuePointer, false))
     {
         std::cout << "ERROR: generateReferenceAwareLoad(...) could not decrement pointer\n";
         return NULL;
@@ -215,7 +216,7 @@ llvm::Type *getRefCountType(llvm::LLVMContext &context)
     return llvm::IntegerType::getInt64Ty(context);
 }
 
-bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer)
+bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree)
 {
     std::cout << "DEBUG: generateDecrementReference\n";
 
@@ -234,31 +235,33 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
     std::string twine = managedPointer->getOriginVariable();
 
     std::vector<llvm::Value *> indices;
-    // Get first pointer
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
-    // Get first struct field
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
     llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
-    // Decrease refCount by 1
+    // Decrease ref count by 1
     refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.dec", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
 
-    llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), twine + ".refcount.dec.cmp");
-
-    llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
-    llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, twine + ".free", currentFunction);
-    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, twine + ".nofree", currentFunction);
-
-    context->irBuilder->CreateCondBr(isRefZero, freeBlock, continueBlock);
-
     // Free the block if refCount is zero
-    context->irBuilder->SetInsertPoint(freeBlock);
-    generateFree(context, managedPointer->getValue(), twine + ".free");
-    context->irBuilder->CreateBr(continueBlock);
+    if (checkFree)
+    {
+        llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), twine + ".refcount.dec.cmp");
 
-    context->irBuilder->SetInsertPoint(continueBlock);
+        llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
+        llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, twine + ".free", currentFunction);
+        llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, twine + ".nofree", currentFunction);
+
+        context->irBuilder->CreateCondBr(isRefZero, freeBlock, continueBlock);
+
+        context->irBuilder->SetInsertPoint(freeBlock);
+        generateFree(context, managedPointer->getValue(), twine + ".free");
+        context->irBuilder->CreateBr(continueBlock);
+
+        context->irBuilder->SetInsertPoint(continueBlock);
+    }
+
     std::cout << "DEBUG: generateDecrementReference end\n";
     return true;
 }
@@ -293,7 +296,7 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
     return true;
 }
 
-bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer)
+bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree)
 {
     if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
     {
@@ -301,7 +304,7 @@ bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue 
         PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
         if (loadedPointerType->isManaged())
         {
-            if (!generateDecrementReference(context, maybeManagedPointer))
+            if (!generateDecrementReference(context, maybeManagedPointer, checkFree))
             {
                 std::cout << "ERROR: Could not generate reference counting decrease code\n";
                 return false;

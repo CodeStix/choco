@@ -1742,7 +1742,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
         if (storedPointerType->isManaged())
         {
             llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
-            if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType)))
+            if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), false))
             {
                 std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
                 return NULL;
@@ -1813,7 +1813,7 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
         TypedValue *value = statement->generateLLVM(context, scope, NULL);
         if (value != NULL)
         {
-            generateDecrementReferenceIfPointer(context, value);
+            generateDecrementReferenceIfPointer(context, value, false);
         }
     }
     return NULL;
@@ -1969,8 +1969,6 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
         for (auto &p : functionScope->namedValues)
         {
-            std::cout << "DEBUG: free " << p.first << "\n";
-
             if (p.second->isType())
             {
                 // std::map value could be null
@@ -1984,7 +1982,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
                 if (storedPointerType->isManaged())
                 {
                     llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), p.second->getValue(), p.second->getOriginVariable() + ".load");
-                    if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType)))
+                    if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), true))
                     {
                         std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
                         return NULL;
@@ -2162,7 +2160,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         std::string twine = pointerToIndex->getOriginVariable() + "." + this->nameToken->value + ".ptr";
         llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, twine);
 
-        if (!generateDecrementReferenceIfPointer(context, pointerToIndex))
+        if (!generateDecrementReferenceIfPointer(context, pointerToIndex, false))
         {
             return NULL;
         }

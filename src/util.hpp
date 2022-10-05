@@ -33,9 +33,9 @@ bool generateAssignment(GenerationContext *context, TypedValue *valuePointer, Ty
 TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *valuePointer);
 TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer);
 bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer);
-bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer);
+bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree);
 bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *managedPointer);
-bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer);
+bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree);
 
 llvm::Type *getRefCountType(llvm::LLVMContext &context);
 
