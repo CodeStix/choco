@@ -9,6 +9,7 @@ llvm::Type *getRefCountType(llvm::LLVMContext &context);
 class GenerationContext;
 class FunctionScope;
 class ASTNode;
+class PointerType;
 
 enum class TypeCode
 {
@@ -49,7 +50,8 @@ public:
         return "<Unknown>";
     }
 
-    Type *getUnmanagedPointerToType(bool byValue);
+    PointerType *getUnmanagedPointerToType(bool byValue);
+    PointerType *getManagedPointerToType();
 
 private:
     TypeCode typeCode;
@@ -366,7 +368,7 @@ public:
         }
     }
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    llvm::Type *getLLVMPointedType(llvm::LLVMContext &context) const
     {
         llvm::Type *pointedType = this->pointedType->getLLVMType(context);
         if (this->managed)
@@ -377,7 +379,12 @@ public:
             fields.push_back(pointedType);
             pointedType = llvm::StructType::get(context, fields, false);
         }
-        return llvm::PointerType::get(pointedType, 0);
+        return pointedType;
+    }
+
+    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    {
+        return llvm::PointerType::get(getLLVMPointedType(context), 0);
     }
 
     std::string toString() override

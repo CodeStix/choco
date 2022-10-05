@@ -1187,16 +1187,16 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
     if (!isType)
     {
         // This is a struct value
-        llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
+        // llvm::Type *llvmStructType = structType->getLLVMType(*context->context);
 
-        llvm::Value *structPointer;
+        TypedValue *structPointer;
         if (managed)
         {
-            structPointer = generateMalloc(context, llvmStructType, managed);
+            structPointer = new TypedValue(generateMalloc(context, structType->getManagedPointerToType()->getLLVMPointedType(*context->context)), new PointerType(structType, byValue, managed));
         }
         else
         {
-            structPointer = generateAllocaInCurrentFunction(context, llvmStructType, "allocstruct");
+            structPointer = new TypedValue(generateAllocaInCurrentFunction(context, structType->getLLVMType(*context->context), "allocstruct"), new PointerType(structType, byValue, managed));
         }
 
         for (auto &pair : fieldValues)
@@ -1206,9 +1206,21 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             auto fieldType = structType->getField(fieldName);
             auto fieldIndex = structType->getFieldIndex(fieldName);
 
+            std::vector<llvm::Value *> indices;
+            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+            if (managed)
+            {
+                // If the pointer is managed, the actual struct is loaded under the second field (the first field is the reference count)
+                indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1, false)));
+            }
+            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, fieldIndex, false)));
+
+            PointerType *structPointerType = static_cast<PointerType *>(structPointer->getType());
+            llvm::Value *fieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(*context->context), structPointer->getValue(), indices, "memberstruct");
+
+            // auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
+            TypedValue *structFieldPointerValue = new TypedValue(fieldPointer, fieldType->type->getUnmanagedPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
             bool isVolatile = false;
-            auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
-            TypedValue *structFieldPointerValue = new TypedValue(structFieldPointer, fieldType->type->getUnmanagedPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
             if (!generateAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
             {
                 std::cout << "ERROR: Cannot initialize struct field " << fieldName << " of " << structType->toString() << "\n";
@@ -1226,7 +1238,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             }
         }
 
-        return new TypedValue(structPointer, new PointerType(structType, byValue, managed));
+        return structPointer;
     }
     else
     {
@@ -2127,7 +2139,13 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         }
         indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, fieldIndex, false)));
 
-        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getPointedType()->getLLVMType(*context->context), pointerToIndex->getValue(), indices, "memberstruct");
+        // std::cout << "DEBUG: GEP 3 \n";
+        // llvmStructType->print(llvm::outs(), true);
+        // std::cout << "\n";
+        // pointerToIndex->getValue()->print(llvm::outs(), true);
+        // std::cout << "\n";
+
+        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, "memberstruct");
         return new TypedValue(fieldPointer, structField->type->getUnmanagedPointerToType(structField->type->getTypeCode() != TypeCode::POINTER));
     }
     else
