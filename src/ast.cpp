@@ -1192,11 +1192,19 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         TypedValue *structPointer;
         if (managed)
         {
-            structPointer = new TypedValue(generateMalloc(context, structType->getManagedPointerToType()->getLLVMPointedType(*context->context)), new PointerType(structType, byValue, managed));
+            structPointer = new TypedValue(generateMalloc(context, structType->getManagedPointerToType()->getLLVMPointedType(*context->context), structType->getName()), new PointerType(structType, byValue, managed));
+
+            // Set initial ref count to 1
+            std::vector<llvm::Value *> indices;
+            indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), 0, false));
+            indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), 0, false));
+            PointerType *structPointerType = static_cast<PointerType *>(structPointer->getType());
+            llvm::Value *refCountFieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(*context->context), structPointer->getValue(), indices, structType->getName() + ".refcount.ptr");
+            context->irBuilder->CreateStore(llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), refCountFieldPointer, false);
         }
         else
         {
-            structPointer = new TypedValue(generateAllocaInCurrentFunction(context, structType->getLLVMType(*context->context), "allocstruct"), new PointerType(structType, byValue, managed));
+            structPointer = new TypedValue(generateAllocaInCurrentFunction(context, structType->getLLVMType(*context->context), structType->getName()), new PointerType(structType, byValue, managed));
         }
 
         for (auto &pair : fieldValues)
@@ -1207,19 +1215,19 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             auto fieldIndex = structType->getFieldIndex(fieldName);
 
             std::vector<llvm::Value *> indices;
-            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
+            indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), 0, false));
             if (managed)
             {
                 // If the pointer is managed, the actual struct is loaded under the second field (the first field is the reference count)
-                indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1, false)));
+                indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), 1, false));
             }
-            indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, fieldIndex, false)));
+            indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), fieldIndex, false));
 
             PointerType *structPointerType = static_cast<PointerType *>(structPointer->getType());
-            llvm::Value *fieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(*context->context), structPointer->getValue(), indices, "memberstruct");
+            llvm::Value *fieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(*context->context), structPointer->getValue(), indices, structType->getName() + "." + fieldName + ".ptr");
 
             // auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
-            TypedValue *structFieldPointerValue = new TypedValue(fieldPointer, fieldType->type->getUnmanagedPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER));
+            TypedValue *structFieldPointerValue = new TypedValue(fieldPointer, fieldType->type->getUnmanagedPointerToType(fieldType->type->getTypeCode() != TypeCode::POINTER), fieldName);
             bool isVolatile = false;
             if (!generateAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
             {
@@ -1682,14 +1690,14 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         PointerType *p = static_cast<PointerType *>(pointerType);
         if (p->isByValue())
         {
-            llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, p->getPointedType()->getLLVMType(*context->context), "allocavalue");
+            llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, p->getPointedType()->getLLVMType(*context->context), this->nameToken->value);
             pointer = new TypedValue(pointerValue, p->getPointedType()->getUnmanagedPointerToType(true));
         }
     }
 
     if (pointer == NULL)
     {
-        llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), "alloca");
+        llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, pointerType->getLLVMType(*context->context), this->nameToken->value);
         pointer = new TypedValue(pointerValue, pointerType->getUnmanagedPointerToType(false));
     }
 
@@ -1733,7 +1741,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
         PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
         if (storedPointerType->isManaged())
         {
-            llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), valuePointer->getValue(), "deref");
+            llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
             if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType)))
             {
                 std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
@@ -1916,7 +1924,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         PointerType *functionPointerType = static_cast<PointerType *>(newFunctionPointerType->getType());
         context->currentFunction = static_cast<FunctionType *>(functionPointerType->getPointedType());
         context->currentFunctionReturnBlock = llvm::BasicBlock::Create(*context->context, this->nameToken->value + ".return", function);
-        context->currentFunctionReturnValuePointer = returnType == NULL ? NULL : generateAllocaInCurrentFunction(context, returnType->getLLVMType(*context->context), "returnvalue");
+        context->currentFunctionReturnValuePointer = returnType == NULL ? NULL : generateAllocaInCurrentFunction(context, returnType->getLLVMType(*context->context), "return");
 
         for (int i = 0; i < this->parameters->size(); i++)
         {
@@ -1958,6 +1966,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
         for (auto &p : functionScope->namedValues)
         {
+            std::cout << "DEBUG: free " << p.first << "\n";
+
             if (p.second->isType())
             {
                 // std::map value could be null
@@ -1970,7 +1980,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
                 PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
                 if (storedPointerType->isManaged())
                 {
-                    llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), p.second->getValue(), "deref");
+                    llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), p.second->getValue(), p.second->getOriginVariable() + ".load");
                     if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType)))
                     {
                         std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
@@ -1982,7 +1992,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
         if (context->currentFunctionReturnValuePointer != NULL)
         {
-            auto returnValue = generateReferenceAwareLoad(context, new TypedValue(context->currentFunctionReturnValuePointer, returnType->getUnmanagedPointerToType(false)));
+            // auto returnValue = generateReferenceAwareLoad(context, new TypedValue(context->currentFunctionReturnValuePointer, returnType->getUnmanagedPointerToType(false)));
+            auto returnValue = generateLoad(context, new TypedValue(context->currentFunctionReturnValuePointer, returnType->getUnmanagedPointerToType(false)));
             context->irBuilder->CreateRet(returnValue->getValue());
         }
         else
@@ -2145,8 +2156,15 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         // pointerToIndex->getValue()->print(llvm::outs(), true);
         // std::cout << "\n";
 
-        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, "memberstruct");
-        return new TypedValue(fieldPointer, structField->type->getUnmanagedPointerToType(structField->type->getTypeCode() != TypeCode::POINTER));
+        std::string twine = pointerToIndex->getOriginVariable() + "." + this->nameToken->value + ".ptr";
+        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, twine);
+
+        if (!generateDecrementReferenceIfPointer(context, pointerToIndex))
+        {
+            return NULL;
+        }
+
+        return new TypedValue(fieldPointer, structField->type->getUnmanagedPointerToType(structField->type->getTypeCode() != TypeCode::POINTER), twine);
     }
     else
     {
@@ -2272,7 +2290,7 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
         parameterValues.push_back(convertedValue->getValue());
     }
 
-    auto callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : "call");
+    auto callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : (function->getName() + ".call"));
     return new TypedValue(callResult, functionType->getReturnType());
 }
 

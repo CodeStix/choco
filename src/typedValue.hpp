@@ -89,7 +89,7 @@ public:
 
     std::string getOriginVariable()
     {
-        return this->originVariableName;
+        return this->originVariableName == "" ? "unknown" : this->originVariableName;
     }
 
     bool operator==(TypedValue &b)
@@ -676,6 +676,11 @@ public:
     std::vector<StructTypeField> getFields()
     {
         return this->fields;
+    }
+
+    std::string getName()
+    {
+        return this->name;
     }
 
 private:

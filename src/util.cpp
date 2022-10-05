@@ -1,5 +1,19 @@
 #include "util.hpp"
 
+TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer)
+{
+    if (valuePointer->getTypeCode() != TypeCode::POINTER)
+    {
+        std::cout << "ERROR: generateReferenceAwareLoad(...) only accepts pointers\n";
+        return NULL;
+    }
+
+    std::string originVariable = valuePointer->getOriginVariable();
+    PointerType *pointerType = static_cast<PointerType *>(valuePointer->getType());
+    llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerType->getPointedType()->getLLVMType(*context->context), valuePointer->getValue(), originVariable + ".load");
+    return new TypedValue(derefValue, pointerType->getPointedType(), originVariable);
+}
+
 // Generates a single dereference, decreasing/increasing pointer reference counts if needed
 // T*** -> T**
 // T* -> T
@@ -12,24 +26,23 @@ TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *v
         return NULL;
     }
 
+    // Pointer 'valueToConvert' will be dereferenced, decrease ref count
     if (!generateDecrementReferenceIfPointer(context, valuePointer))
     {
         std::cout << "ERROR: generateReferenceAwareLoad(...) could not decrement pointer\n";
         return NULL;
     }
 
-    std::string originVariable = "load_" + ((valuePointer->getOriginVariable() == "") ? "unknown" : valuePointer->getOriginVariable());
-    PointerType *pointerType = static_cast<PointerType *>(valuePointer->getType());
-    llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerType->getPointedType()->getLLVMType(*context->context), valuePointer->getValue(), originVariable);
+    valuePointer = generateLoad(context, valuePointer);
 
-    // Pointer 'valueToConvert' just got loaded, increase reference
+    // Pointer 'valueToConvert' just got loaded, increase ref count
     if (!generateIncrementReferenceIfPointer(context, valuePointer))
     {
         std::cout << "ERROR: generateReferenceAwareLoad(...) could not increment pointer\n";
         return NULL;
     }
 
-    return new TypedValue(derefValue, pointerType->getPointedType(), originVariable);
+    return valuePointer;
 }
 
 // Generates code that converts a deeply nested pointer to a single-deep pointer
@@ -218,29 +231,31 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
         return false;
     }
 
+    std::string twine = managedPointer->getOriginVariable();
+
     std::vector<llvm::Value *> indices;
     // Get first pointer
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
     // Get first struct field
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, "geprefcount");
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
 
-    llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
+    llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Decrease refCount by 1
-    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), "increfcount", true, true);
+    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.dec", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
 
-    llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), "cmprefcountzero");
+    llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), twine + ".refcount.dec.cmp");
 
     llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
-    llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, "refcountfree", currentFunction);
-    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "refcountcontinue", currentFunction);
+    llvm::BasicBlock *freeBlock = llvm::BasicBlock::Create(*context->context, twine + ".free", currentFunction);
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, twine + ".nofree", currentFunction);
 
     context->irBuilder->CreateCondBr(isRefZero, freeBlock, continueBlock);
 
     // Free the block if refCount is zero
     context->irBuilder->SetInsertPoint(freeBlock);
-    generateFree(context, managedPointer->getValue());
+    generateFree(context, managedPointer->getValue(), twine + ".free");
     context->irBuilder->CreateBr(continueBlock);
 
     context->irBuilder->SetInsertPoint(continueBlock);
@@ -263,14 +278,16 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
         return false;
     }
 
+    std::string twine = managedPointer->getOriginVariable();
+
     std::vector<llvm::Value *> indices;
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, "geprefcount");
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
 
-    llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, "loadrefcount");
+    llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Increase refCount by 1
-    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), "increfcount", true, true);
+    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
     std::cout << "DEBUG: generateIncrementReference end\n";
     return true;
@@ -496,13 +513,13 @@ bool generateAssignment(GenerationContext *context, TypedValue *valuePointer, Ty
     return true;
 }
 
-llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type)
+llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type, std::string twine)
 {
-    auto fakePointer = context->irBuilder->CreateGEP(type, llvm::ConstantPointerNull::get(type->getPointerTo()), llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1)), "sizeof");
-    return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt64Ty(*context->context), "sizeoftoint");
+    auto fakePointer = context->irBuilder->CreateGEP(type, llvm::ConstantPointerNull::get(type->getPointerTo()), llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1)), twine + ".sizeof");
+    return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt64Ty(*context->context), twine + ".sizeof.int");
 }
 
-llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type)
+llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::string twine)
 {
     llvm::Function *mallocFunction = context->module->getFunction("malloc");
     if (mallocFunction == NULL)
@@ -518,13 +535,13 @@ llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type)
     }
 
     std::vector<llvm::Value *> parameters;
-    llvm::Value *sizeOf = generateSizeOf(context, type);
+    llvm::Value *sizeOf = generateSizeOf(context, type, twine);
     parameters.push_back(sizeOf);
-    auto opaquePointer = context->irBuilder->CreateCall(mallocFunction, parameters, "malloc");
-    return context->irBuilder->CreateBitCast(opaquePointer, llvm::PointerType::get(type, 0), "typedmalloc");
+    auto opaquePointer = context->irBuilder->CreateCall(mallocFunction, parameters, twine + ".malloc.ptr.opaque");
+    return context->irBuilder->CreateBitCast(opaquePointer, llvm::PointerType::get(type, 0), twine + ".malloc.ptr");
 }
 
-llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree)
+llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree, std::string twine)
 {
     llvm::Function *freeFunction = context->module->getFunction("free");
     if (freeFunction == NULL)
@@ -538,7 +555,7 @@ llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree)
         // return NULL;
     }
 
-    auto opaquePointer = context->irBuilder->CreateBitCast(toFree, llvm::PointerType::get(*context->context, 0), "opaquefree");
+    auto opaquePointer = context->irBuilder->CreateBitCast(toFree, llvm::PointerType::get(*context->context, 0), twine + ".opaque");
     std::vector<llvm::Value *> parameters;
     parameters.push_back(opaquePointer);
     return context->irBuilder->CreateCall(freeFunction, parameters);
@@ -548,5 +565,5 @@ llvm::AllocaInst *generateAllocaInCurrentFunction(GenerationContext *context, ll
 {
     llvm::Function *function = context->irBuilder->GetInsertBlock()->getParent();
     llvm::IRBuilder<> insertBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
-    return insertBuilder.CreateAlloca(type, NULL, twine);
+    return insertBuilder.CreateAlloca(type, NULL, twine + ".alloca.ptr");
 }

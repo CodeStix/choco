@@ -31,6 +31,7 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
 TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *valueToConvert, Type *targetType, bool allowLosePrecision);
 bool generateAssignment(GenerationContext *context, TypedValue *valuePointer, TypedValue *newValue, bool isVolatile);
 TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *valuePointer);
+TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer);
 bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer);
 bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer);
 bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *managedPointer);
@@ -38,7 +39,7 @@ bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue 
 
 llvm::Type *getRefCountType(llvm::LLVMContext &context);
 
-llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type);
-llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type);
-llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree);
+llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type, std::string twine);
+llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::string twine);
+llvm::Value *generateFree(GenerationContext *context, llvm::Value *toFree, std::string twine);
 llvm::AllocaInst *generateAllocaInCurrentFunction(GenerationContext *context, llvm::Type *type, llvm::StringRef twine);
