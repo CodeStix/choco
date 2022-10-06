@@ -1,4 +1,5 @@
 #include "ast.hpp"
+#define DEBUG
 
 ASTBlock *parseBlock(TokenStream *tokens)
 {
@@ -1055,6 +1056,9 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
         double floatingValue = strtod(cleaned.c_str(), NULL);
         auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), floatingValue);
 
+#ifdef DEBUG
+        std::cout << "debug: ASTLiteralNumber::generateLLVM float\n";
+#endif
         return new TypedValue(value, type);
     }
     else
@@ -1074,6 +1078,9 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 
         auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, type->getSigned());
 
+#ifdef DEBUG
+        std::cout << "debug: ASTLiteralNumber::generateLLVM integer\n";
+#endif
         return new TypedValue(value, type);
     }
 }
@@ -1811,11 +1818,20 @@ TypedValue *ASTBlock::generateLLVM(GenerationContext *context, FunctionScope *sc
         std::cout << "debug: ASTBlock::generateLLVM generate " << astNodeTypeToString(statement->type) << "\n";
 #endif
         TypedValue *value = statement->generateLLVM(context, scope, NULL);
+#ifdef DEBUG
+        std::cout << "debug: ASTBlock::generateLLVM generate " << astNodeTypeToString(statement->type) << "done \n";
+#endif
         if (value != NULL)
         {
+#ifdef DEBUG
+            std::cout << "debug: ASTBlock::generateLLVM generate " << value->getValue() << " " << value->getType()->toString() << " done2\n";
+#endif
             generateDecrementReferenceIfPointer(context, value, false);
         }
     }
+#ifdef DEBUG
+    std::cout << "debug: ASTBlock::generateLLVM cdone\n";
+#endif
     return NULL;
 }
 
@@ -2316,7 +2332,17 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
     }
 
     auto callResult = context->irBuilder->CreateCall(function, parameterValues, functionType->getReturnType() == NULL ? "" : (function->getName() + ".call"));
-    return new TypedValue(callResult, functionType->getReturnType());
+#ifdef DEBUG
+    std::cout << "debug: ASTInvocation::generateLLVM done\n";
+#endif
+    if (functionType->getReturnType() == NULL)
+    {
+        return NULL;
+    }
+    else
+    {
+        return new TypedValue(callResult, functionType->getReturnType());
+    }
 }
 
 TypedValue *ASTBrackets::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint)

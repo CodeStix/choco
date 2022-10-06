@@ -71,7 +71,13 @@ int main()
     context->globalModule.addValue("UInt64", new TypedValue(NULL, new IntegerType(64, false)));
     context->globalModule.addValue("Int32", new TypedValue(NULL, new IntegerType(32, true)));
     context->globalModule.addValue("UInt32", new TypedValue(NULL, new IntegerType(32, false)));
+    context->globalModule.addValue("Int16", new TypedValue(NULL, new IntegerType(16, true)));
+    context->globalModule.addValue("UInt16", new TypedValue(NULL, new IntegerType(16, false)));
+    context->globalModule.addValue("Int8", new TypedValue(NULL, new IntegerType(8, true)));
+    context->globalModule.addValue("UInt8", new TypedValue(NULL, new IntegerType(8, false)));
     context->globalModule.addValue("Bool", new TypedValue(NULL, new IntegerType(1, false)));
+
+    std::cout << context->globalModule.toString() << "\n";
 
     auto scope = new FunctionScope();
 

@@ -197,7 +197,21 @@ public:
     {
         std::string str = "module ";
         str += this->name;
-        str += " { ... }";
+        str += " { ";
+        bool first = true;
+        for (auto &p : this->lazyNamedStatics)
+        {
+            if (first)
+            {
+                first = false;
+            }
+            else
+            {
+                str += ", ";
+            }
+            str += p.first;
+        }
+        str += " } ";
         return str;
     }
 
