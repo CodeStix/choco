@@ -6,14 +6,14 @@ IntegerType CHAR_TYPE(8, false);
 IntegerType BOOL_TYPE(1, false);
 IntegerType UINT32_TYPE(32, false);
 
-PointerType *Type::getUnmanagedPointerToType(bool byValue)
+PointerType *Type::getUnmanagedPointerToType()
 {
-    return new PointerType(this, byValue, false);
+    return new PointerType(this, false);
 }
 
 PointerType *Type::getManagedPointerToType()
 {
-    return new PointerType(this, false, true);
+    return new PointerType(this, true);
 }
 
 TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, FunctionScope *scope)
@@ -31,7 +31,7 @@ TypedValue *ModuleType::getValue(std::string name, GenerationContext *context, F
             auto savedCurrentFunction = context->currentFunction;
             auto savedReturnValuePointer = context->currentFunctionReturnValuePointer;
             auto savedReturnBlock = context->currentFunctionReturnBlock;
-            auto value = lazyValue->generateLLVM(context, NULL, NULL);
+            auto value = lazyValue->generateLLVM(context, NULL, NULL, true);
             context->currentFunctionReturnBlock = savedReturnBlock;
             context->currentFunctionReturnValuePointer = savedReturnValuePointer;
             context->currentFunction = savedCurrentFunction;

@@ -50,7 +50,7 @@ public:
         return "<Unknown>";
     }
 
-    PointerType *getUnmanagedPointerToType(bool byValue);
+    PointerType *getUnmanagedPointerToType();
     PointerType *getManagedPointerToType();
 
 private:
@@ -359,9 +359,8 @@ class PointerType : public Type
 {
 public:
     // byValue contains whether the pointed value should be passed by value
-    PointerType(Type *pointedType, bool byValue, bool managed) : Type(TypeCode::POINTER), pointedType(pointedType), byValue(byValue), managed(managed)
+    PointerType(Type *pointedType, bool managed) : Type(TypeCode::POINTER), pointedType(pointedType), managed(managed)
     {
-        assert(!(byValue && managed));
     }
 
     Type *getPointedType()
@@ -403,14 +402,9 @@ public:
 
     std::string toString() override
     {
-        std::string str = this->managed ? "m&" : (this->byValue ? "#" : "&");
+        std::string str = this->managed ? "&" : "*";
         str += this->pointedType->toString();
         return str;
-    }
-
-    bool isByValue()
-    {
-        return this->byValue;
     }
 
     bool isManaged()
@@ -420,7 +414,6 @@ public:
 
 private:
     bool managed;
-    bool byValue;
     Type *pointedType;
 };
 

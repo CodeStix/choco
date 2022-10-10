@@ -31,6 +31,14 @@ export func getStruct(): Person {
     return p
 }
 
+export func createRegister(): Register {
+    return {
+        byte: 1,
+        more: 2,
+        moreMore: 3
+    }
+}
+
 export func duplicatePerson(person: Person): MultiplePeople {
     return MultiplePeople {
         person1: person
@@ -44,6 +52,7 @@ func setRegister(reg: Register, a: Int32) {
     printDouble(Float32 reg.byte)
     printDouble(Float32 reg.more)
     printDouble(Float32 (reg.moreMore + a))
+    reg.byte = 0
 }
 
 export func main() {
@@ -57,12 +66,9 @@ export func main() {
     printDouble(Float32 duplicate.person3.birthDate)
     printDouble(Float32 duplicate.person4.birthDate)
 
-    let register = Register {
-        byte: 10,
-        more: 20,
-        moreMore: 30
-    }
+    let register = createRegister()
 
+    setRegister(register, Int32 100)
     setRegister(register, Int32 100)
 }
 
