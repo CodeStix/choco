@@ -415,6 +415,96 @@ ASTNode *parseUnaryOperator(TokenStream *tokens)
     return new ASTUnaryOperator(operandToken, operand);
 }
 
+ASTNode *parseArray(TokenStream *tokens)
+{
+    int saved = tokens->getPosition();
+
+    bool managed = true, value = false;
+    bool readingModifiers = true;
+    while (readingModifiers)
+    {
+        const Token *tok = tokens->peek();
+        switch (tok->type)
+        {
+        case TokenType::VALUE_KEYWORD:
+            value = true;
+            managed = false;
+            tokens->next();
+            tokens->consume(TokenType::WHITESPACE);
+            break;
+        case TokenType::UNMANAGED_KEYWORD:
+            managed = false;
+            tokens->next();
+            tokens->consume(TokenType::WHITESPACE);
+            break;
+        default:
+            readingModifiers = false;
+            break;
+        }
+    }
+
+    const Token *tok = tokens->peek();
+    if (tok->type != TokenType::SQUARE_BRACKET_OPEN)
+    {
+        std::cout << "ERROR: Array value must start with [\n";
+        tokens->setPosition(saved);
+        return NULL;
+    }
+    tokens->next();
+    tokens->consume(TokenType::WHITESPACE);
+    tokens->consume(TokenType::NEWLINE);
+
+    std::vector<ASTArraySegment *> values;
+    while (1)
+    {
+        tok = tokens->peek();
+        if (tok->type == TokenType::SQUARE_BRACKET_CLOSE)
+        {
+            tokens->next();
+            break;
+        }
+
+        ASTNode *value = parseValueOrOperator(tokens);
+        if (value == NULL)
+        {
+            std::cout << "ERROR: Could not parse array value\n";
+            return NULL;
+        }
+
+        tokens->consume(TokenType::WHITESPACE);
+        tokens->consume(TokenType::NEWLINE);
+        tok = tokens->peek();
+
+        ASTNode *times = NULL;
+        if (tok->type == TokenType::OPERATOR_HASHTAG)
+        {
+            tokens->next();
+            tokens->consume(TokenType::WHITESPACE);
+            tokens->consume(TokenType::NEWLINE);
+
+            times = value;
+            value = NULL;
+            value = parseValueOrOperator(tokens);
+            if (value == NULL)
+            {
+                std::cout << "ERROR: Could not parse array times\n";
+                return NULL;
+            }
+
+            tokens->consume(TokenType::WHITESPACE);
+            tokens->consume(TokenType::NEWLINE);
+        }
+
+        tokens->consume(TokenType::COMMA);
+        tokens->consume(TokenType::WHITESPACE);
+        tokens->consume(TokenType::NEWLINE);
+
+        values.push_back(new ASTArraySegment(value, times));
+    }
+
+    return new ASTArray(values, managed, value);
+}
+
 ASTNode *parseStructDeclaration(TokenStream *tokens)
 {
     int saved = tokens->getPosition();
@@ -480,7 +570,6 @@ ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken)
 
     if (tok->type != TokenType::CURLY_BRACKET_OPEN)
     {
-        std::cout << "ERROR: Struct value must start with {\n";
         tokens->setPosition(saved);
         return NULL;
     }
@@ -545,8 +634,13 @@ ASTNode *parseInlineType(TokenStream *tokens)
     case TokenType::UNMANAGED_KEYWORD:
     case TokenType::VALUE_KEYWORD:
     case TokenType::CURLY_BRACKET_OPEN:
+    case TokenType::SQUARE_BRACKET_OPEN:
     {
         value = parseStruct(tokens, NULL);
+        if (value == NULL)
+        {
+            value = parseArray(tokens);
+        }
         break;
     }
 
@@ -602,8 +696,13 @@ ASTNode *parseValueOrType(TokenStream *tokens)
     case TokenType::UNMANAGED_KEYWORD:
     case TokenType::VALUE_KEYWORD:
     case TokenType::CURLY_BRACKET_OPEN:
+    case TokenType::SQUARE_BRACKET_OPEN:
     {
         value = parseStruct(tokens, NULL);
+        if (value == NULL)
+        {
+            value = parseArray(tokens);
+        }
         break;
     }
 
@@ -906,6 +1005,13 @@ ASTDeclaration *parseDeclaration(TokenStream *tokens)
         tokens->consume(TokenType::WHITESPACE);
 
         typeSpecifier = parseInlineType(tokens);
+        if (typeSpecifier == NULL)
+        {
+            std::cout << "ERROR: Invalid declaration type specifier\n";
+            return NULL;
+        }
+
+        tokens->consume(TokenType::WHITESPACE);
     }
     else
     {
@@ -1097,6 +1203,16 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 #endif
         return new TypedValue(value, type);
     }
+}
+
+TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
+{
+    return NULL;
+}
+
+TypedValue *ASTArraySegment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
+{
+    return NULL;
 }
 
 TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)

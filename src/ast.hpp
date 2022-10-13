@@ -103,6 +103,7 @@ public:
     llvm::BasicBlock *currentFunctionReturnBlock;
     llvm::Value *currentFunctionReturnValuePointer;
     std::map<llvm::Type *, llvm::Function *> freeFunctions;
+    std::map<llvm::Type *, llvm::Function *> mallocFunctions;
     ModuleType globalModule;
 };
 
@@ -131,6 +132,8 @@ enum class ASTNodeType
     DEREFERENCE_MEMBER,
     DEREFERENCE_INDEX,
     CAST,
+    ARRAY,
+    ARRAY_SEGMENT,
 };
 
 std::string astNodeTypeToString(ASTNodeType type);
@@ -309,6 +312,72 @@ private:
     bool packed = false;
     bool value = false;
     const Token *nameToken;
+};
+
+class ASTArraySegment : public ASTNode
+{
+public:
+    ASTArraySegment(ASTNode *value, ASTNode *times) : ASTNode(ASTNodeType::ARRAY_SEGMENT), value(value), times(times) {}
+
+    std::string toString() override
+    {
+        std::string str = "";
+        if (this->times != NULL)
+        {
+            str += this->times->toString();
+            str += " # ";
+        }
+        str += this->value->toString();
+        return str;
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer) override;
+
+private:
+    ASTNode *value;
+    ASTNode *times;
+};
+
+class ASTArray : public ASTNode
+{
+public:
+    ASTArray(std::vector<ASTArraySegment *> values, bool managed = true, bool value = false) : ASTNode(ASTNodeType::ARRAY), values(values), managed(managed), value(value) {}
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer) override;
+
+    std::string toString() override
+    {
+        std::string str = "";
+        if (!this->managed)
+        {
+            str += "unmanaged ";
+        }
+        if (this->value)
+        {
+            str += "value ";
+        }
+        str += "[";
+        bool first = true;
+        for (auto &value : this->values)
+        {
+            if (first)
+            {
+                first = false;
+            }
+            else
+            {
+                str += ", ";
+            }
+            str += value->toString();
+        }
+        str += "]";
+        return str;
+    }
+
+private:
+    std::vector<ASTArraySegment *> values;
+    bool managed;
+    bool value;
 };
 
 class ASTBrackets : public ASTNode

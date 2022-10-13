@@ -322,6 +322,11 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
                 tokenList.push_back(new Token(i, TokenType::OPERATOR_PERCENT, currentString));
                 state = TokenizeState::NONE;
             }
+            else if (firstChar == '#')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_HASHTAG, currentString));
+                state = TokenizeState::NONE;
+            }
             else
             {
                 state = TokenizeState::NONE;
@@ -409,6 +414,7 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
                 case '^':
                 case '~':
                 case '%':
+                case '#':
                     state = TokenizeState::PARSING_OPERATOR;
                     currentString = std::string(1, currentChar);
                     break;
@@ -551,6 +557,8 @@ const char *getTokenTypeName(TokenType type)
         return "WHITESPACE";
     case TokenType::NEWLINE:
         return "NEWLINE";
+    case TokenType::OPERATOR_HASHTAG:
+        return "OPERATOR_HASHTAG";
     default:
         return "Unknown";
     }

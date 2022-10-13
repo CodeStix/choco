@@ -1,4 +1,4 @@
-// #define DEBUG
+#define DEBUG
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -60,6 +60,7 @@ int main()
     // #ifdef DEBUG
     std::cout << file->toString() << "\n";
     // #endif
+    return 0;
 
     std::cout << "[3/4] Generating code...\n";
 

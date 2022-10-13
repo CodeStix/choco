@@ -61,6 +61,7 @@ enum class TokenType
     STRUCT_KEYWORD,
     WHITESPACE,
     NEWLINE,
+    OPERATOR_HASHTAG,
 };
 
 class Token

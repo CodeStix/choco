@@ -331,7 +331,7 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Decrease ref count by 1
-    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.dec");
+    refCount = context->irBuilder->CreateSub(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.dec", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
 
     // Free the block if refCount is zero
@@ -384,7 +384,7 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Increase refCount by 1
-    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc");
+    refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
     std::cout << "DEBUG: generateIncrementReference end\n";
     return true;
