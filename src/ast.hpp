@@ -134,6 +134,7 @@ enum class ASTNodeType
     CAST,
     ARRAY,
     ARRAY_SEGMENT,
+    NULL_COALESCE
 };
 
 std::string astNodeTypeToString(ASTNodeType type);
@@ -312,6 +313,24 @@ private:
     bool packed = false;
     bool value = false;
     const Token *nameToken;
+};
+
+class ASTNullCoalesce : public ASTNode
+{
+public:
+    ASTNullCoalesce(ASTNode *value) : ASTNode(ASTNodeType::NULL_COALESCE), value(value) {}
+
+    std::string toString() override
+    {
+        std::string str = this->value->toString();
+        str += "?";
+        return str;
+    }
+
+    TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer) override;
+
+private:
+    ASTNode *value;
 };
 
 class ASTArraySegment : public ASTNode
@@ -800,14 +819,14 @@ public:
 ASTNode *parseIfStatement(TokenStream *tokens);
 ASTNode *parseWhileStatement(TokenStream *tokens);
 ASTDeclaration *parseDeclaration(TokenStream *tokens);
-ASTNode *parseValueOrOperator(TokenStream *tokens);
-ASTNode *parseValueOrType(TokenStream *tokens);
+ASTNode *parseValueOrOperator(TokenStream *tokens, bool parseType);
+ASTNode *parseValueOrType(TokenStream *tokens, bool parseType);
 ASTFunction *parseFunction(TokenStream *tokens);
 ASTNode *parseSymbolOperation(TokenStream *tokens);
 ASTFile *parseFile(TokenStream *tokens);
 ASTReturn *parseReturn(TokenStream *tokens);
 ASTParameter *parseParameter(TokenStream *tokens);
-ASTNode *parseValueAndSuffix(TokenStream *tokens);
+ASTNode *parseValueAndSuffix(TokenStream *tokens, bool parseType);
 ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken);
 ASTNode *parseInlineType(TokenStream *tokens);
 ASTNode *parseStructDeclaration(TokenStream *tokens);

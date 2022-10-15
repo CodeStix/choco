@@ -51,7 +51,7 @@ ASTBlock *parseBlock(TokenStream *tokens)
             statement = parseReturn(tokens);
             break;
         case TokenType::SYMBOL:
-            statement = parseValueOrOperator(tokens);
+            statement = parseValueOrOperator(tokens, false);
             break;
         }
 
@@ -266,7 +266,7 @@ ASTNode *parseIfStatement(TokenStream *tokens)
     tokens->next();
     tokens->consume(TokenType::WHITESPACE);
 
-    ASTNode *condition = parseValueOrOperator(tokens);
+    ASTNode *condition = parseValueOrOperator(tokens, false);
     if (condition == NULL)
     {
         return NULL;
@@ -338,7 +338,7 @@ ASTNode *parseWhileStatement(TokenStream *tokens)
     tokens->next();
     tokens->consume(TokenType::WHITESPACE);
 
-    ASTNode *condition = parseValueOrOperator(tokens);
+    ASTNode *condition = parseValueOrOperator(tokens, false);
     if (condition == NULL)
     {
         return NULL;
@@ -404,7 +404,7 @@ ASTNode *parseUnaryOperator(TokenStream *tokens)
 
     tokens->next();
 
-    ASTNode *operand = parseValueAndSuffix(tokens);
+    ASTNode *operand = parseValueAndSuffix(tokens, false);
     if (operand == NULL)
     {
         // std::cout << "ERROR: Invalid unary operand at " << tok->position << " type " << getTokenTypeName(tok->type) << "\n";
@@ -464,7 +464,7 @@ ASTNode *parseArray(TokenStream *tokens)
             break;
         }
 
-        ASTNode *value = parseValueOrOperator(tokens);
+        ASTNode *value = parseValueOrOperator(tokens, false);
         if (value == NULL)
         {
             std::cout << "ERROR: Could not parse array value\n";
@@ -484,7 +484,7 @@ ASTNode *parseArray(TokenStream *tokens)
 
             times = value;
             value = NULL;
-            value = parseValueOrOperator(tokens);
+            value = parseValueOrOperator(tokens, false);
             if (value == NULL)
             {
                 std::cout << "ERROR: Could not parse array times\n";
@@ -607,7 +607,7 @@ ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken)
         tokens->next();
         tokens->consume(TokenType::WHITESPACE);
 
-        ASTNode *fieldValue = parseValueOrOperator(tokens);
+        ASTNode *fieldValue = parseValueOrOperator(tokens, false);
         fields.push_back(new ASTStructField(fieldNameToken, fieldValue));
 
         tok = tokens->peek();
@@ -624,67 +624,10 @@ ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken)
 
 ASTNode *parseInlineType(TokenStream *tokens)
 {
-    int saved = tokens->getPosition();
-    const Token *tok = tokens->peek();
-
-    ASTNode *value;
-    switch (tok->type)
-    {
-    case TokenType::PACKED_KEYWORD:
-    case TokenType::UNMANAGED_KEYWORD:
-    case TokenType::VALUE_KEYWORD:
-    case TokenType::CURLY_BRACKET_OPEN:
-    case TokenType::SQUARE_BRACKET_OPEN:
-    {
-        value = parseStruct(tokens, NULL);
-        if (value == NULL)
-        {
-            value = parseArray(tokens);
-        }
-        break;
-    }
-
-    case TokenType::BRACKET_OPEN:
-    {
-        tokens->next();
-        tokens->consume(TokenType::WHITESPACE);
-
-        ASTNode *innerValue = parseInlineType(tokens);
-        if (innerValue == NULL)
-        {
-            std::cout << "ERROR: Invalid type brackets content \n";
-            return NULL;
-        }
-
-        tok = tokens->peek();
-        if (tok->type != TokenType::BRACKET_CLOSE)
-        {
-            std::cout << "ERROR: Brackets must be closed\n";
-        }
-        else
-        {
-            tokens->next();
-        }
-
-        value = new ASTBrackets(innerValue);
-        break;
-    }
-
-    case TokenType::SYMBOL:
-    {
-        tokens->next();
-        value = new ASTSymbol(tok);
-        break;
-    }
-
-    default:
-        return NULL;
-    }
-
-    return value;
+    return parseValueAndSuffix(tokens, true);
 }
 
-ASTNode *parseValueOrType(TokenStream *tokens)
+ASTNode *parseValueOrType(TokenStream *tokens, bool parseType)
 {
     int saved = tokens->getPosition();
     const Token *tok = tokens->peek();
@@ -727,7 +670,7 @@ ASTNode *parseValueOrType(TokenStream *tokens)
         tokens->next();
         tokens->consume(TokenType::WHITESPACE);
 
-        ASTNode *innerValue = parseValueOrOperator(tokens);
+        ASTNode *innerValue = parseValueOrOperator(tokens, parseType);
         if (innerValue == NULL)
         {
             std::cout << "ERROR: Invalid brackets content at " << tok->position << " \n";
@@ -748,16 +691,16 @@ ASTNode *parseValueOrType(TokenStream *tokens)
         break;
     }
 
-    case TokenType::LET_KEYWORD:
-    {
-        value = parseDeclaration(tokens);
-        if (value == NULL)
-        {
-            std::cout << "ERROR: Unexpected let \n";
-            return NULL;
-        }
-        break;
-    }
+        // case TokenType::LET_KEYWORD:
+        // {
+        //     value = parseDeclaration(tokens);
+        //     if (value == NULL)
+        //     {
+        //         std::cout << "ERROR: Unexpected let \n";
+        //         return NULL;
+        //     }
+        //     break;
+        // }
 
     case TokenType::SYMBOL:
     {
@@ -773,10 +716,10 @@ ASTNode *parseValueOrType(TokenStream *tokens)
     return value;
 }
 
-ASTNode *parseValueAndSuffix(TokenStream *tokens)
+ASTNode *parseValueAndSuffix(TokenStream *tokens, bool parseType)
 {
     int saved = tokens->getPosition();
-    ASTNode *value = parseValueOrType(tokens);
+    ASTNode *value = parseValueOrType(tokens, parseType);
     if (value == NULL)
     {
         return value;
@@ -785,7 +728,7 @@ ASTNode *parseValueAndSuffix(TokenStream *tokens)
     while (1)
     {
         const Token *tok = tokens->peek();
-        if (tok->type == TokenType::BRACKET_OPEN)
+        if (!parseType && tok->type == TokenType::BRACKET_OPEN)
         {
             // Invocation
             tokens->next();
@@ -803,7 +746,7 @@ ASTNode *parseValueAndSuffix(TokenStream *tokens)
                     break;
                 }
 
-                ASTNode *value = parseValueOrOperator(tokens);
+                ASTNode *value = parseValueOrOperator(tokens, false);
                 parameterValues->push_back(value);
 
                 tok = tokens->peek();
@@ -845,7 +788,7 @@ ASTNode *parseValueAndSuffix(TokenStream *tokens)
             tokens->next();
             tokens->consume(TokenType::WHITESPACE);
 
-            ASTNode *indexValue = parseValueOrOperator(tokens);
+            ASTNode *indexValue = parseValueOrOperator(tokens, parseType);
             if (indexValue == NULL)
             {
                 return NULL;
@@ -861,15 +804,21 @@ ASTNode *parseValueAndSuffix(TokenStream *tokens)
 
             value = new ASTIndexDereference(value, indexValue);
         }
+        else if (tok->type == TokenType::OPERATOR_QUESTION_MARK)
+        {
+            tokens->next();
+            tokens->consume(TokenType::WHITESPACE);
+            return new ASTNullCoalesce(value);
+        }
         else if (tok->type == TokenType::OPERATOR_EXCLAMATION)
         {
             std::cout << "ERROR: ! suffix not implemented\n";
             return NULL;
         }
-        else if (tok->type == TokenType::WHITESPACE)
+        else if (!parseType && tok->type == TokenType::WHITESPACE)
         {
             tokens->next();
-            ASTNode *castedValue = parseValueAndSuffix(tokens);
+            ASTNode *castedValue = parseValueAndSuffix(tokens, false);
             if (castedValue != NULL)
             {
                 value = new ASTCast(value, castedValue);
@@ -884,10 +833,10 @@ ASTNode *parseValueAndSuffix(TokenStream *tokens)
     return value;
 }
 
-ASTNode *parseValueOrOperator(TokenStream *tokens)
+ASTNode *parseValueOrOperator(TokenStream *tokens, bool parseType)
 {
     int saved = tokens->getPosition();
-    ASTNode *top = parseValueAndSuffix(tokens);
+    ASTNode *top = parseValueAndSuffix(tokens, parseType);
     if (top == NULL)
     {
         return NULL;
@@ -906,7 +855,7 @@ ASTNode *parseValueOrOperator(TokenStream *tokens)
             tokens->next();
             tokens->consume(TokenType::WHITESPACE);
 
-            ASTNode *right = parseValueOrOperator(tokens);
+            ASTNode *right = parseValueOrOperator(tokens, false);
             if (right == NULL)
             {
                 std::cout << "ERROR: could not parse assignment value\n";
@@ -925,7 +874,7 @@ ASTNode *parseValueOrOperator(TokenStream *tokens)
         tokens->next();
         tokens->consume(TokenType::WHITESPACE);
 
-        ASTNode *right = parseValueAndSuffix(tokens);
+        ASTNode *right = parseValueAndSuffix(tokens, parseType);
         if (right == NULL)
         {
             std::cout << "ERROR: Right side of operator must be specified\n";
@@ -968,7 +917,7 @@ ASTReturn *parseReturn(TokenStream *tokens)
     tokens->next();
     tokens->consume(TokenType::WHITESPACE);
 
-    ASTNode *value = parseValueOrOperator(tokens);
+    ASTNode *value = parseValueOrOperator(tokens, false);
     return new ASTReturn(value);
 }
 
@@ -1026,7 +975,7 @@ ASTDeclaration *parseDeclaration(TokenStream *tokens)
         tokens->next();
         tokens->consume(TokenType::WHITESPACE);
 
-        ASTNode *value = parseValueOrOperator(tokens);
+        ASTNode *value = parseValueOrOperator(tokens, false);
         if (value == NULL)
         {
             std::cout << "ERROR: Invalid assignment value\n";
@@ -1211,6 +1160,11 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
 }
 
 TypedValue *ASTArraySegment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
+{
+    return NULL;
+}
+
+TypedValue *ASTNullCoalesce::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
     return NULL;
 }

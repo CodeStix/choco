@@ -32,7 +32,7 @@ int main()
     llvm::InitializeAllAsmPrinters();
 
     std::string fileContent;
-    std::getline(std::ifstream("test.ch"), fileContent, '\0');
+    std::getline(std::ifstream("test copy 4.ch"), fileContent, '\0');
 
     std::cout << "[1/4] Tokenizing...\n";
 
@@ -60,7 +60,7 @@ int main()
     // #ifdef DEBUG
     std::cout << file->toString() << "\n";
     // #endif
-    return 0;
+    // return 0;
 
     std::cout << "[3/4] Generating code...\n";
 

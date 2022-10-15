@@ -327,6 +327,11 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
                 tokenList.push_back(new Token(i, TokenType::OPERATOR_HASHTAG, currentString));
                 state = TokenizeState::NONE;
             }
+            else if (firstChar == '?')
+            {
+                tokenList.push_back(new Token(i, TokenType::OPERATOR_QUESTION_MARK, currentString));
+                state = TokenizeState::NONE;
+            }
             else
             {
                 state = TokenizeState::NONE;
@@ -414,6 +419,7 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
                 case '^':
                 case '~':
                 case '%':
+                case '?':
                 case '#':
                     state = TokenizeState::PARSING_OPERATOR;
                     currentString = std::string(1, currentChar);
@@ -559,6 +565,8 @@ const char *getTokenTypeName(TokenType type)
         return "NEWLINE";
     case TokenType::OPERATOR_HASHTAG:
         return "OPERATOR_HASHTAG";
+    case TokenType::OPERATOR_QUESTION_MARK:
+        return "OPERATOR_QUESTION_MARK";
     default:
         return "Unknown";
     }

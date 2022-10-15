@@ -62,6 +62,7 @@ enum class TokenType
     WHITESPACE,
     NEWLINE,
     OPERATOR_HASHTAG,
+    OPERATOR_QUESTION_MARK,
 };
 
 class Token
