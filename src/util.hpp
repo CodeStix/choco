@@ -38,6 +38,7 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
 bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree);
 bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *managedPointer);
 bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree);
+bool generatePanic(GenerationContext *context, std::string reason);
 
 llvm::Type *getRefCountType(llvm::LLVMContext &context);
 llvm::Type *getUnionIdType(llvm::LLVMContext &context);

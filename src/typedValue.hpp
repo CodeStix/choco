@@ -223,7 +223,26 @@ public:
 
     std::string toString() override
     {
-        return "TODO";
+        std::string str = "";
+        if (!this->managed)
+        {
+            str += "unmanaged ";
+        }
+
+        bool isFirst = true;
+        for (auto t : this->types)
+        {
+            if (isFirst)
+            {
+                isFirst = false;
+            }
+            else
+            {
+                str += "|";
+            }
+            str += t->toString();
+        }
+        return str;
     }
 
     bool containsType(Type *type) const

@@ -229,7 +229,16 @@ llvm::Value *UnionType::createValue(GenerationContext *context, TypedValue *valu
     indices[0] = 0;
     llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvm::ConstantInt::get(getUnionIdType(*context->context), typeId, false), indices, "union.novalue");
 
-    auto llvmBitCastedValue = context->irBuilder->CreateBitCast(value->getValue(), this->getLLVMDataType(context), "union.value.bitcasted");
+    auto llvmDataType = this->getLLVMDataType(context);
+    llvm::Value *llvmBitCastedValue;
+    if (value->getValue()->getType()->isPointerTy())
+    {
+        llvmBitCastedValue = context->irBuilder->CreatePtrToInt(value->getValue(), llvmDataType, "union.value.casted");
+    }
+    else
+    {
+        llvmBitCastedValue = context->irBuilder->CreateBitCast(value->getValue(), llvmDataType, "union.value.casted");
+    }
 
     indices[0] = 1;
     llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvmBitCastedValue, indices, "union");
@@ -523,6 +532,11 @@ int StructType::getMaxIndex()
 
 std::string StructType::toString()
 {
+    if (this->name != "")
+    {
+        return this->name;
+    }
+
     std::string str = "";
     if (this->packed)
     {

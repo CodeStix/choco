@@ -4,6 +4,7 @@
 
 const char *mallocName = "chocoAlloc";
 const char *freeName = "chocoFree";
+const char *panicName = "chocoPanic";
 
 TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer)
 {
@@ -425,12 +426,106 @@ bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue 
     return true;
 }
 
+TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
+{
+    assert(unionToConvert->getTypeCode() == TypeCode::UNION);
+
+    llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
+
+    std::vector<unsigned int> indices;
+    indices.push_back(0);
+
+    indices[0] = 0;
+    llvm::Value *llvmTypeIdValue = context->irBuilder->CreateExtractValue(unionToConvert->getValue(), indices, "union.typeid");
+
+    std::vector<uint64_t> allowedTypeIds;
+    if (targetType->getTypeCode() == TypeCode::UNION)
+    {
+        UnionType *targetUnionType = static_cast<UnionType *>(targetType);
+        for (auto type : targetUnionType->getTypes())
+        {
+            allowedTypeIds.push_back(context->getTypeId(type));
+        }
+    }
+    else
+    {
+        allowedTypeIds.push_back(context->getTypeId(targetType));
+    }
+    assert(allowedTypeIds.size() > 0);
+
+    llvm::BasicBlock *okBlock = llvm::BasicBlock::Create(*context->context, "union.match", currentFunction);
+
+    llvm::BasicBlock *nextBlock;
+    for (int i = 0; i < allowedTypeIds.size(); i++)
+    {
+        uint64_t typeId = allowedTypeIds[i];
+
+        auto llvmMatchesValue = context->irBuilder->CreateICmpEQ(llvm::ConstantInt::get(getUnionIdType(*context->context), typeId, false), llvmTypeIdValue, "union.cmp." + std::to_string(i));
+
+        nextBlock = llvm::BasicBlock::Create(*context->context, "union.check", currentFunction);
+        context->irBuilder->CreateCondBr(llvmMatchesValue, okBlock, nextBlock);
+        context->irBuilder->SetInsertPoint(nextBlock);
+    }
+
+    // After the last block is reached, the value does not match the union, panic
+    if (!generatePanic(context, "Cannot cast " + unionToConvert->getType()->toString() + " to " + targetType->toString()))
+    {
+        return NULL;
+    }
+
+    context->irBuilder->SetInsertPoint(okBlock);
+
+    if (targetType->getTypeCode() == TypeCode::UNION)
+    {
+        auto llvmBitCastedValue = context->irBuilder->CreateBitCast(unionToConvert->getValue(), targetType->getLLVMType(context));
+        return new TypedValue(llvmBitCastedValue, targetType);
+    }
+    else
+    {
+        indices[0] = 1;
+        llvm::Value *llvmUnionData = context->irBuilder->CreateExtractValue(unionToConvert->getValue(), indices, "union.data");
+        auto llvmTargetType = targetType->getLLVMType(context);
+        llvm::Value *llvmCastedValue;
+        if (llvmTargetType->isPointerTy())
+        {
+            llvmCastedValue = context->irBuilder->CreateIntToPtr(llvmUnionData, llvmTargetType);
+        }
+        else
+        {
+            llvmCastedValue = context->irBuilder->CreateBitCast(llvmUnionData, llvmTargetType);
+        }
+        return new TypedValue(llvmCastedValue, targetType);
+    }
+}
+
 // Try to cast a value to a specific type
 TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *valueToConvert, Type *targetType, bool allowLosePrecision)
 {
     if (*valueToConvert->getType() == *targetType)
     {
         return valueToConvert;
+    }
+
+    if (valueToConvert->getTypeCode() == TypeCode::UNION)
+    {
+        UnionType *unionType = static_cast<UnionType *>(valueToConvert->getType());
+        if (!unionType->containsType(targetType))
+        {
+            std::cout << "ERROR: Cannot convert union " << valueToConvert->getType()->toString() << " to " << targetType->toString() << " (not included in union)\n";
+            return NULL;
+        }
+
+        return generateUnionConversion(context, valueToConvert, targetType);
+    }
+    else if (targetType->getTypeCode() == TypeCode::UNION)
+    {
+        UnionType *unionType = static_cast<UnionType *>(targetType);
+        if (!unionType->containsType(valueToConvert->getType()))
+        {
+            std::cout << "ERROR: Cannot convert " << valueToConvert->getType()->toString() << " to union " << targetType->toString() << " (not included in union)\n";
+            return NULL;
+        }
+        return new TypedValue(unionType->createValue(context, valueToConvert), targetType);
     }
 
     if (targetType->getTypeCode() == TypeCode::POINTER)
@@ -613,6 +708,24 @@ llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type, std::s
 {
     auto fakePointer = context->irBuilder->CreateGEP(type, llvm::ConstantPointerNull::get(type->getPointerTo()), llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 1)), twine + ".sizeof");
     return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt64Ty(*context->context), twine + ".sizeof.int");
+}
+
+bool generatePanic(GenerationContext *context, std::string reason)
+{
+    llvm::Function *panicFunction = context->module->getFunction(panicName);
+    if (panicFunction == NULL)
+    {
+        std::vector<llvm::Type *> panicParams;
+        panicParams.push_back(llvm::Type::getInt8PtrTy(*context->context));
+        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getVoidTy(*context->context), panicParams, false);
+        panicFunction = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, panicName, *context->module);
+    }
+
+    std::vector<llvm::Value *> parameters;
+    parameters.push_back(context->irBuilder->CreateGlobalStringPtr(reason));
+    context->irBuilder->CreateCall(panicFunction, parameters);
+    context->irBuilder->CreateUnreachable();
+    return true;
 }
 
 llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::string twine)
