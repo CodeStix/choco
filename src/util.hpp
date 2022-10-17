@@ -3,7 +3,6 @@
 #include <iostream>
 #include <list>
 #include <map>
-#include "token.hpp"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -23,7 +22,10 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 #include "llvm/Transforms/Utils.h"
-#include "ast.hpp"
+
+class TypedValue;
+class GenerationContext;
+class Type;
 
 TypedValue *generateDereferenceToPointer(GenerationContext *context, TypedValue *currentValue);
 TypedValue *generateDereferenceToValue(GenerationContext *context, TypedValue *currentValue);
@@ -38,6 +40,7 @@ bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue 
 bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree);
 
 llvm::Type *getRefCountType(llvm::LLVMContext &context);
+llvm::Type *getUnionIdType(llvm::LLVMContext &context);
 
 llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type, std::string twine);
 llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::string twine);

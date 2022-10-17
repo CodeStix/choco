@@ -3,7 +3,9 @@
 #include <string>
 #include <fstream>
 #include <list>
+#include "context.hpp"
 #include "token.hpp"
+#include "typedValue.hpp"
 #include "ast.hpp"
 #include "jit.hpp"
 #include "llvm/Support/TargetSelect.h"
@@ -65,25 +67,25 @@ int main()
     std::cout << "[3/4] Generating code...\n";
 
     auto context = new GenerationContext();
-    file->declareStaticNames(&context->globalModule);
-    context->globalModule.addValue("Float32", new TypedValue(NULL, new FloatType(32)));
-    context->globalModule.addValue("Float64", new TypedValue(NULL, new FloatType(64)));
-    context->globalModule.addValue("Int64", new TypedValue(NULL, new IntegerType(64, true)));
-    context->globalModule.addValue("UInt64", new TypedValue(NULL, new IntegerType(64, false)));
-    context->globalModule.addValue("Int32", new TypedValue(NULL, new IntegerType(32, true)));
-    context->globalModule.addValue("UInt32", new TypedValue(NULL, new IntegerType(32, false)));
-    context->globalModule.addValue("Int16", new TypedValue(NULL, new IntegerType(16, true)));
-    context->globalModule.addValue("UInt16", new TypedValue(NULL, new IntegerType(16, false)));
-    context->globalModule.addValue("Int8", new TypedValue(NULL, new IntegerType(8, true)));
-    context->globalModule.addValue("UInt8", new TypedValue(NULL, new IntegerType(8, false)));
-    context->globalModule.addValue("Bool", new TypedValue(NULL, new IntegerType(1, false)));
+    file->declareStaticNames(context->globalModule);
+    context->globalModule->addValue("Float32", new TypedValue(NULL, new FloatType(32)));
+    context->globalModule->addValue("Float64", new TypedValue(NULL, new FloatType(64)));
+    context->globalModule->addValue("Int64", new TypedValue(NULL, new IntegerType(64, true)));
+    context->globalModule->addValue("UInt64", new TypedValue(NULL, new IntegerType(64, false)));
+    context->globalModule->addValue("Int32", new TypedValue(NULL, new IntegerType(32, true)));
+    context->globalModule->addValue("UInt32", new TypedValue(NULL, new IntegerType(32, false)));
+    context->globalModule->addValue("Int16", new TypedValue(NULL, new IntegerType(16, true)));
+    context->globalModule->addValue("UInt16", new TypedValue(NULL, new IntegerType(16, false)));
+    context->globalModule->addValue("Int8", new TypedValue(NULL, new IntegerType(8, true)));
+    context->globalModule->addValue("UInt8", new TypedValue(NULL, new IntegerType(8, false)));
+    context->globalModule->addValue("Bool", new TypedValue(NULL, new IntegerType(1, false)));
 
-    std::cout << context->globalModule.toString() << "\n";
+    std::cout << context->globalModule->toString() << "\n";
 
     auto scope = new FunctionScope();
 
     // Trigger compilation by getting the main function value lazily
-    TypedValue *mainFunction = context->globalModule.getValue("main", context, scope);
+    TypedValue *mainFunction = context->globalModule->getValue("main", context, scope);
     if (mainFunction == NULL)
     {
         std::cout << "ERROR: Could not find main function (probably wasn't generated because of other problems)\n";

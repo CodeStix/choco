@@ -1,4 +1,6 @@
 #include "util.hpp"
+#include "typedValue.hpp"
+#include "context.hpp"
 
 const char *mallocName = "chocoAlloc";
 const char *freeName = "chocoFree";
@@ -13,7 +15,7 @@ TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer)
 
     std::string originVariable = valuePointer->getOriginVariable();
     PointerType *pointerType = static_cast<PointerType *>(valuePointer->getType());
-    llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerType->getPointedType()->getLLVMType(*context->context), valuePointer->getValue(), originVariable + ".load");
+    llvm::Value *derefValue = context->irBuilder->CreateLoad(pointerType->getPointedType()->getLLVMType(context), valuePointer->getValue(), originVariable + ".load");
 
     return new TypedValue(derefValue, pointerType->getPointedType(), originVariable);
 }
@@ -128,11 +130,11 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
             // Right must be converted to match left int size
             if (leftIntType->getSigned() && rightIntType->getSigned())
             {
-                rightValue = context->irBuilder->CreateSExt(rightValue, leftIntType->getLLVMType(*context->context), "jugglesext");
+                rightValue = context->irBuilder->CreateSExt(rightValue, leftIntType->getLLVMType(context), "jugglesext");
             }
             else
             {
-                rightValue = context->irBuilder->CreateZExt(rightValue, leftIntType->getLLVMType(*context->context), "jugglezext");
+                rightValue = context->irBuilder->CreateZExt(rightValue, leftIntType->getLLVMType(context), "jugglezext");
             }
             *rightInOut = new TypedValue(rightValue, leftIntType);
         }
@@ -141,11 +143,11 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
             // Left must be converted to match right int size
             if (leftIntType->getSigned() && rightIntType->getSigned())
             {
-                leftValue = context->irBuilder->CreateSExt(leftValue, rightIntType->getLLVMType(*context->context), "jugglesext");
+                leftValue = context->irBuilder->CreateSExt(leftValue, rightIntType->getLLVMType(context), "jugglesext");
             }
             else
             {
-                leftValue = context->irBuilder->CreateZExt(leftValue, rightIntType->getLLVMType(*context->context), "jugglezext");
+                leftValue = context->irBuilder->CreateZExt(leftValue, rightIntType->getLLVMType(context), "jugglezext");
             }
             *leftInOut = new TypedValue(leftValue, rightIntType);
         }
@@ -161,11 +163,11 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
 
         if (leftIntType->getSigned())
         {
-            leftValue = context->irBuilder->CreateSIToFP(leftValue, rightFloatType->getLLVMType(*context->context), "jugglefp");
+            leftValue = context->irBuilder->CreateSIToFP(leftValue, rightFloatType->getLLVMType(context), "jugglefp");
         }
         else
         {
-            leftValue = context->irBuilder->CreateUIToFP(leftValue, rightFloatType->getLLVMType(*context->context), "jugglefp");
+            leftValue = context->irBuilder->CreateUIToFP(leftValue, rightFloatType->getLLVMType(context), "jugglefp");
         }
 
         *leftInOut = new TypedValue(leftValue, rightFloatType);
@@ -180,11 +182,11 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
 
         if (rightIntType->getSigned())
         {
-            rightValue = context->irBuilder->CreateSIToFP(rightValue, leftFloatType->getLLVMType(*context->context), "jugglefp");
+            rightValue = context->irBuilder->CreateSIToFP(rightValue, leftFloatType->getLLVMType(context), "jugglefp");
         }
         else
         {
-            rightValue = context->irBuilder->CreateUIToFP(rightValue, leftFloatType->getLLVMType(*context->context), "jugglefp");
+            rightValue = context->irBuilder->CreateUIToFP(rightValue, leftFloatType->getLLVMType(context), "jugglefp");
         }
 
         *rightInOut = new TypedValue(rightValue, leftFloatType);
@@ -197,12 +199,12 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
 
         if (leftFloatType->getBitSize() > rightFloatType->getBitSize())
         {
-            rightValue = context->irBuilder->CreateFPExt(rightValue, leftFloatType->getLLVMType(*context->context), "jugglefpext");
+            rightValue = context->irBuilder->CreateFPExt(rightValue, leftFloatType->getLLVMType(context), "jugglefpext");
             *rightInOut = new TypedValue(rightValue, leftFloatType);
         }
         else if (leftFloatType->getBitSize() < rightFloatType->getBitSize())
         {
-            leftValue = context->irBuilder->CreateFPExt(leftValue, rightFloatType->getLLVMType(*context->context), "jugglefpext");
+            leftValue = context->irBuilder->CreateFPExt(leftValue, rightFloatType->getLLVMType(context), "jugglefpext");
             *leftInOut = new TypedValue(leftValue, rightFloatType);
         }
 
@@ -215,6 +217,11 @@ bool generateTypeJugging(GenerationContext *context, TypedValue **leftInOut, Typ
 }
 
 llvm::Type *getRefCountType(llvm::LLVMContext &context)
+{
+    return llvm::IntegerType::getInt64Ty(context);
+}
+
+llvm::Type *getUnionIdType(llvm::LLVMContext &context)
 {
     return llvm::IntegerType::getInt64Ty(context);
 }
@@ -236,7 +243,7 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
     std::cout << "INFO: Generate free\n";
 
     llvm::Function *freeFunction;
-    llvm::Type *llvmTypeToFree = pointerType->getLLVMPointedType(*context->context);
+    llvm::Type *llvmTypeToFree = pointerType->getLLVMPointedType(context);
     if (context->freeFunctions.count(llvmTypeToFree) > 0)
     {
         // Free function already generated
@@ -246,7 +253,7 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
     {
         // Need to generate function
         std::vector<llvm::Type *> freeParams;
-        freeParams.push_back(pointerType->getLLVMType(*context->context));
+        freeParams.push_back(pointerType->getLLVMType(context));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getVoidTy(*context->context), freeParams, false);
         freeFunction = llvm::Function::Create(functionType, llvm::Function::InternalLinkage, std::to_string(context->freeFunctions.size()) + ".free", *context->module);
 
@@ -275,8 +282,8 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
                         indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0));
                         indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1));
                         indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), fieldIndex));
-                        auto fieldPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), pointerArg, indices, "member.free");
-                        auto fieldValue = context->irBuilder->CreateLoad(structFieldType->getLLVMType(*context->context), fieldPointer, "member.free.load");
+                        auto fieldPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(context), pointerArg, indices, "member.free");
+                        auto fieldValue = context->irBuilder->CreateLoad(structFieldType->getLLVMType(context), fieldPointer, "member.free.load");
 
                         if (!generateDecrementReference(context, new TypedValue(fieldValue, structFieldType, field.name), true))
                         {
@@ -327,7 +334,7 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
     std::vector<llvm::Value *> indices;
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Decrease ref count by 1
@@ -380,7 +387,7 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
     std::vector<llvm::Value *> indices;
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
-    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(*context->context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
+    llvm::Value *refCountPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(context), managedPointer->getValue(), indices, twine + ".refcount.ptr");
 
     llvm::Value *refCount = context->irBuilder->CreateLoad(getRefCountType(*context->context), refCountPointer, twine + ".refcount");
     // Increase refCount by 1
@@ -482,11 +489,11 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
                 // Target type has the same signedness, this cast may be implicit
                 if (targetIntType->getSigned())
                 {
-                    currentValue = context->irBuilder->CreateZExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                    currentValue = context->irBuilder->CreateZExt(currentValue, targetIntType->getLLVMType(context), "convzextint");
                 }
                 else
                 {
-                    currentValue = context->irBuilder->CreateSExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                    currentValue = context->irBuilder->CreateSExt(currentValue, targetIntType->getLLVMType(context), "convzextint");
                 }
             }
             else
@@ -500,11 +507,11 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
                 // TODO: is this the right was to convert
                 if (targetIntType->getSigned())
                 {
-                    currentValue = context->irBuilder->CreateZExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                    currentValue = context->irBuilder->CreateZExt(currentValue, targetIntType->getLLVMType(context), "convzextint");
                 }
                 else
                 {
-                    currentValue = context->irBuilder->CreateSExt(currentValue, targetIntType->getLLVMType(*context->context), "convzextint");
+                    currentValue = context->irBuilder->CreateSExt(currentValue, targetIntType->getLLVMType(context), "convzextint");
                 }
             }
         }
@@ -516,7 +523,7 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
                 return NULL;
             }
 
-            currentValue = context->irBuilder->CreateTrunc(currentValue, targetIntType->getLLVMType(*context->context), "convtruncint");
+            currentValue = context->irBuilder->CreateTrunc(currentValue, targetIntType->getLLVMType(context), "convtruncint");
         }
     }
     else if (targetType->getTypeCode() == TypeCode::FLOAT && currentType->getTypeCode() == TypeCode::FLOAT)
@@ -526,7 +533,7 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
         if (targetFloatType->getBitSize() > currentFloatType->getBitSize())
         {
-            currentValue = context->irBuilder->CreateFPExt(currentValue, targetFloatType->getLLVMType(*context->context), "convfpext");
+            currentValue = context->irBuilder->CreateFPExt(currentValue, targetFloatType->getLLVMType(context), "convfpext");
         }
         else if (targetFloatType->getBitSize() < currentFloatType->getBitSize())
         {
@@ -536,7 +543,7 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
                 return NULL;
             }
 
-            currentValue = context->irBuilder->CreateFPTrunc(currentValue, targetFloatType->getLLVMType(*context->context), "convtruncfp");
+            currentValue = context->irBuilder->CreateFPTrunc(currentValue, targetFloatType->getLLVMType(context), "convtruncfp");
         }
     }
     else if (targetType->getTypeCode() == TypeCode::FLOAT && currentType->getTypeCode() == TypeCode::INTEGER)
@@ -552,11 +559,11 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
         FloatType *targetFloatType = static_cast<FloatType *>(targetType);
         if (currentIntType->getSigned())
         {
-            currentValue = context->irBuilder->CreateSIToFP(currentValue, targetFloatType->getLLVMType(*context->context), "convsitofp");
+            currentValue = context->irBuilder->CreateSIToFP(currentValue, targetFloatType->getLLVMType(context), "convsitofp");
         }
         else
         {
-            currentValue = context->irBuilder->CreateUIToFP(currentValue, targetFloatType->getLLVMType(*context->context), "convuitofp");
+            currentValue = context->irBuilder->CreateUIToFP(currentValue, targetFloatType->getLLVMType(context), "convuitofp");
         }
     }
     else if (targetType->getTypeCode() == TypeCode::INTEGER && currentType->getTypeCode() == TypeCode::FLOAT)
@@ -572,11 +579,11 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 
         if (targetIntType->getSigned())
         {
-            currentValue = context->irBuilder->CreateFPToSI(currentValue, targetIntType->getLLVMType(*context->context), "convfptosi");
+            currentValue = context->irBuilder->CreateFPToSI(currentValue, targetIntType->getLLVMType(context), "convfptosi");
         }
         else
         {
-            currentValue = context->irBuilder->CreateFPToUI(currentValue, targetIntType->getLLVMType(*context->context), "convfptoui");
+            currentValue = context->irBuilder->CreateFPToUI(currentValue, targetIntType->getLLVMType(context), "convfptoui");
         }
     }
     else

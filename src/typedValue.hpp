@@ -5,9 +5,8 @@
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Constants.h"
 
-llvm::Type *getRefCountType(llvm::LLVMContext &context);
-class GenerationContext;
 class FunctionScope;
+class GenerationContext;
 class ASTNode;
 class PointerType;
 
@@ -25,6 +24,7 @@ enum class TypeCode
     FUNCTION,
     POINTER,
     MODULE,
+    NULLT,
 };
 
 class Type
@@ -37,7 +37,7 @@ public:
         return this->typeCode;
     }
 
-    virtual llvm::Type *getLLVMType(llvm::LLVMContext &context) const = 0;
+    virtual llvm::Type *getLLVMType(GenerationContext *context) const = 0;
     virtual bool operator==(const Type &b) const = 0;
 
     bool operator!=(const Type &b)
@@ -113,60 +113,13 @@ class ModuleType : public Type
 public:
     ModuleType(std::string name, ModuleType *parent = NULL) : Type(TypeCode::MODULE), name(name), parent(parent) {}
 
-    bool addLazyValue(std::string name, ASTNode *node)
-    {
-        if (this->lazyNamedStatics.count(name) > 0)
-        {
-            return false;
-        }
-        else
-        {
-            this->lazyNamedStatics[name] = node;
-            return true;
-        }
-    }
-
-    bool addValue(std::string name, TypedValue *value)
-    {
-        if (this->namedStatics.count(name) > 0)
-        {
-            return false;
-        }
-        else
-        {
-            this->namedStatics[name] = value;
-            return true;
-        }
-    }
-
-    bool hasValue(std::string name)
-    {
-        return this->namedStatics.count(name) > 0 || this->lazyNamedStatics.count(name) > 0;
-    }
-
+    bool addLazyValue(std::string name, ASTNode *node);
+    bool addValue(std::string name, TypedValue *value);
+    bool hasValue(std::string name);
     TypedValue *getValue(std::string name, GenerationContext *context, FunctionScope *scope);
+    TypedValue *getValueCascade(std::string name, GenerationContext *context, FunctionScope *scope);
 
-    TypedValue *getValueCascade(std::string name, GenerationContext *context, FunctionScope *scope)
-    {
-        TypedValue *value = this->getValue(name, context, scope);
-        if (value != NULL)
-        {
-            return value;
-        }
-        else
-        {
-            if (parent != NULL)
-            {
-                return parent->getValueCascade(name, context, scope);
-            }
-            else
-            {
-                return NULL;
-            }
-        }
-    }
-
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
+    llvm::Type *getLLVMType(GenerationContext *context) const override
     {
         return NULL;
     }
@@ -193,27 +146,7 @@ public:
         }
     }
 
-    std::string toString() override
-    {
-        std::string str = "module ";
-        str += this->name;
-        str += " { ";
-        bool first = true;
-        for (auto &p : this->lazyNamedStatics)
-        {
-            if (first)
-            {
-                first = false;
-            }
-            else
-            {
-                str += ", ";
-            }
-            str += p.first;
-        }
-        str += " } ";
-        return str;
-    }
+    std::string toString() override;
 
 private:
     std::string name;
@@ -222,52 +155,93 @@ private:
     std::map<std::string, TypedValue *> namedStatics;
 };
 
+class NullType : public Type
+{
+public:
+    NullType() : Type(TypeCode::NULLT) {}
+
+    bool operator==(const Type &b) const override
+    {
+        return b.getTypeCode() == TypeCode::NULLT;
+    }
+
+    llvm::Type *getLLVMType(GenerationContext *context) const override
+    {
+        assert(false && "Null has no getLLVMType");
+    }
+
+    std::string toString() override
+    {
+        return "null";
+    }
+};
+
+class UnionType : public Type
+{
+public:
+    UnionType() : Type(TypeCode::UNION), managed(true) {}
+    UnionType(std::vector<Type *> types) : Type(TypeCode::UNION), types(types), managed(true) {}
+
+    bool getIsManaged()
+    {
+        return this->managed;
+    }
+
+    bool operator==(const Type &b) const override;
+
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
+
+    void addTypes(std::vector<Type *> types)
+    {
+        for (auto t : types)
+        {
+            this->addType(t);
+        }
+    }
+
+    void addType(Type *type)
+    {
+        for (auto t : this->types)
+        {
+            if (*t == *type)
+            {
+                return;
+            }
+        }
+
+        this->types.push_back(type);
+    }
+
+    std::vector<Type *> getTypes()
+    {
+        return this->types;
+    }
+
+    std::string toString() override
+    {
+        return "TODO";
+    }
+
+private:
+    std::vector<Type *> types;
+    bool managed;
+};
+
 class FloatType : public Type
 {
 public:
     FloatType(int bitSize) : Type(TypeCode::FLOAT), bitSize(bitSize) {}
 
-    bool operator==(const Type &b) const override
-    {
-        if (b.getTypeCode() == TypeCode::FLOAT)
-        {
-            auto f = static_cast<const FloatType &>(b);
-            return f.bitSize == this->bitSize;
-        }
-        else
-        {
-            return false;
-        }
-    }
+    bool operator==(const Type &b) const override;
 
     int getBitSize() const
     {
         return this->bitSize;
     }
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        switch (this->bitSize)
-        {
-        case 32:
-            return llvm::Type::getFloatTy(context);
-        case 64:
-            return llvm::Type::getDoubleTy(context);
-        case 128:
-            return llvm::Type::getFP128Ty(context);
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
-        default:
-            std::cout << "ERROR: FloatType.getLLVMType() cannot create LLVM type with given bit size " << this->bitSize << "\n";
-            return NULL;
-        }
-    }
-
-    std::string toString() override
-    {
-        std::string str = "Float";
-        str += std::to_string(this->bitSize);
-        return str;
-    }
+    std::string toString() override;
 
 private:
     int bitSize;
@@ -278,18 +252,7 @@ class IntegerType : public Type
 public:
     IntegerType(int bitSize, bool isSigned) : Type(TypeCode::INTEGER), bitSize(bitSize), isSigned(isSigned) {}
 
-    bool operator==(const Type &b) const override
-    {
-        if (b.getTypeCode() == TypeCode::INTEGER)
-        {
-            auto i = static_cast<const IntegerType &>(b);
-            return i.isSigned == this->isSigned && i.bitSize == this->bitSize;
-        }
-        else
-        {
-            return false;
-        }
-    }
+    bool operator==(const Type &b) const override;
 
     int getBitSize() const
     {
@@ -301,17 +264,9 @@ public:
         return this->isSigned;
     }
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        return llvm::Type::getIntNTy(context, this->bitSize);
-    }
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
-    std::string toString() override
-    {
-        std::string str = this->isSigned ? "Int" : "UInt";
-        str += std::to_string(this->bitSize);
-        return str;
-    }
+    std::string toString() override;
 
 private:
     bool isSigned;
@@ -323,32 +278,11 @@ class RangeType : public Type
 public:
     RangeType(int startInclusive, int endExclusive) : Type(TypeCode::RANGE), startInclusive(startInclusive), endExclusive(endExclusive) {}
 
-    bool operator==(const Type &b) const override
-    {
-        if (b.getTypeCode() == TypeCode::RANGE)
-        {
-            auto range = static_cast<const RangeType &>(b);
-            return range.endExclusive == this->endExclusive && range.startInclusive == this->startInclusive;
-        }
-        else
-        {
-            return false;
-        }
-    }
+    bool operator==(const Type &b) const override;
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        return llvm::Type::getIntNTy(context, 32);
-    }
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
-    std::string toString() override
-    {
-        std::string str = "";
-        str += this->startInclusive;
-        str += "..";
-        str += this->endExclusive;
-        return str;
-    }
+    std::string toString() override;
 
 private:
     int startInclusive;
@@ -368,44 +302,13 @@ public:
         return this->pointedType;
     }
 
-    bool operator==(const Type &b) const override
-    {
-        if (b.getTypeCode() == TypeCode::POINTER)
-        {
-            const PointerType &pointerType = static_cast<const PointerType &>(b);
-            return pointerType.managed == this->managed && *pointerType.pointedType == *this->pointedType;
-        }
-        else
-        {
-            return false;
-        }
-    }
+    bool operator==(const Type &b) const override;
 
-    llvm::Type *getLLVMPointedType(llvm::LLVMContext &context) const
-    {
-        llvm::Type *pointedType = this->pointedType->getLLVMType(context);
-        if (this->managed)
-        {
-            // Wrap containing value in a struct where the first value contains the reference count
-            std::vector<llvm::Type *> fields;
-            fields.push_back(getRefCountType(context));
-            fields.push_back(pointedType);
-            pointedType = llvm::StructType::get(context, fields, false);
-        }
-        return pointedType;
-    }
+    llvm::Type *getLLVMPointedType(GenerationContext *context) const;
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        return llvm::PointerType::get(getLLVMPointedType(context), 0);
-    }
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
-    std::string toString() override
-    {
-        std::string str = this->managed ? "&" : "*";
-        str += this->pointedType->toString();
-        return str;
-    }
+    std::string toString() override;
 
     bool isManaged()
     {
@@ -439,27 +342,7 @@ public:
         return false;
     }
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        std::vector<llvm::Type *> parameters;
-
-        llvm::Type *returnType;
-        if (this->returnType == NULL)
-        {
-            returnType = llvm::Type::getVoidTy(context);
-        }
-        else
-        {
-            returnType = this->returnType->getLLVMType(context);
-        }
-
-        for (auto &param : this->parameters)
-        {
-            parameters.push_back(param.type->getLLVMType(context));
-        }
-
-        return llvm::FunctionType::get(returnType, parameters, this->isVarArg);
-    }
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
     Type *getReturnType()
     {
@@ -476,37 +359,7 @@ public:
         return this->isVarArg;
     }
 
-    std::string toString() override
-    {
-        std::string str = "func(";
-
-        bool first = true;
-        for (auto &param : this->parameters)
-        {
-            if (first)
-            {
-                first = false;
-            }
-            else
-            {
-                str += ", ";
-            }
-
-            str += param.name;
-            str += ": ";
-            str += param.type->toString();
-        }
-
-        str += ")";
-
-        if (this->returnType != NULL)
-        {
-            str += " ";
-            str += this->returnType->toString();
-        }
-
-        return str;
-    }
+    std::string toString() override;
 
 private:
     bool isVarArg;
@@ -524,23 +377,9 @@ public:
         return false;
     }
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
-    }
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
-    std::string toString() override
-    {
-        std::string str = "[";
-        str += this->innerType->toString();
-        if (this->knownCount)
-        {
-            str += " # ";
-            str += std::to_string(this->count);
-        }
-        str += "]";
-        return str;
-    }
+    std::string toString() override;
 
 private:
     bool knownCount;
@@ -564,121 +403,17 @@ class StructType : public Type
 public:
     StructType(std::string name, std::vector<StructTypeField> fields, bool packed) : Type(TypeCode::STRUCT), name(name), fields(fields), packed(packed) {}
 
-    bool operator==(const Type &b) const override
-    {
-        if (b.getTypeCode() == TypeCode::STRUCT)
-        {
-            auto other = static_cast<const StructType &>(b);
-            if (other.fields.size() != this->fields.size())
-            {
-                return false;
-            }
+    bool operator==(const Type &b) const override;
 
-            if (other.packed != this->packed)
-            {
-                return false;
-            }
+    llvm::Type *getLLVMType(GenerationContext *context) const override;
 
-            for (int i = 0; i < this->fields.size(); i++)
-            {
-                if (*this->fields[i].type != *other.fields[i].type)
-                {
-                    return false;
-                }
-            }
+    StructTypeField *getField(std::string name);
 
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
+    int getFieldIndex(std::string name);
 
-    llvm::Type *getLLVMType(llvm::LLVMContext &context) const override
-    {
-        std::vector<llvm::Type *> fieldTypes;
-        for (auto &field : this->fields)
-        {
-            fieldTypes.push_back(field.type->getLLVMType(context));
-        }
-        if (this->name != "")
-        {
-            auto type = llvm::StructType::getTypeByName(context, this->name);
-            if (type == NULL)
-            {
-                type = llvm::StructType::create(fieldTypes, this->name, this->packed);
-            }
-            return type;
-        }
-        else
-        {
-            return llvm::StructType::get(context, fieldTypes, this->packed);
-        }
-    }
+    int getMaxIndex();
 
-    StructTypeField *getField(std::string name)
-    {
-        for (auto &field : this->fields)
-        {
-            if (field.name == name)
-            {
-                return &field;
-            }
-        }
-        return NULL;
-    }
-
-    int getFieldIndex(std::string name)
-    {
-        int index = 0;
-        for (auto &field : this->fields)
-        {
-            if (field.name == name)
-            {
-                return index;
-            }
-            index++;
-        }
-        return -1;
-    }
-
-    int getMaxIndex()
-    {
-        return this->fields.size();
-    }
-
-    std::string toString() override
-    {
-        std::string str = "";
-        if (this->packed)
-        {
-            str += "packed ";
-        }
-        if (this->name != "")
-        {
-            str += this->name;
-            str += " ";
-        }
-        str += "{";
-        bool first = true;
-        for (auto &field : this->fields)
-        {
-            if (first)
-            {
-                first = false;
-            }
-            else
-            {
-                str += ", ";
-            }
-            str += field.name;
-            str += ": ";
-            str += field.type->toString();
-        }
-        str += "}";
-        return str;
-    }
+    std::string toString() override;
 
     std::vector<StructTypeField> getFields()
     {

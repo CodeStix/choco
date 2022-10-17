@@ -1,5 +1,6 @@
 #include "ast.hpp"
-#define DEBUG
+#include "context.hpp"
+#include "util.hpp"
 
 ASTBlock *parseBlock(TokenStream *tokens)
 {
@@ -1043,10 +1044,29 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
 #ifdef DEBUG
     std::cout << "debug: ASTSymbol::generateLLVM " << this->nameToken->value << "\n";
 #endif
+
+    if (this->nameToken->value == "null")
+    {
+        if (typeHint == NULL)
+        {
+            return new TypedValue(NULL, new NullType());
+        }
+        else if (typeHint->getTypeCode() == TypeCode::POINTER)
+        {
+            auto llvmPointerType = static_cast<llvm::PointerType *>(typeHint->getLLVMType(context));
+            return new TypedValue(llvm::ConstantPointerNull::get(llvmPointerType), typeHint);
+        }
+        else
+        {
+            std::cout << "ERROR: null can only be used for pointers\n";
+            return NULL;
+        }
+    }
+
     auto valuePointer = scope == NULL ? NULL : scope->getValue(this->nameToken->value);
     if (valuePointer == NULL)
     {
-        valuePointer = context->globalModule.getValueCascade(this->nameToken->value, context, scope);
+        valuePointer = context->globalModule->getValueCascade(this->nameToken->value, context, scope);
         if (!valuePointer)
         {
             std::cout << "ERROR: Could not find '" << this->nameToken->value << "'\n";
@@ -1123,7 +1143,7 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
         }
 
         double floatingValue = strtod(cleaned.c_str(), NULL);
-        auto value = llvm::ConstantFP::get(type->getLLVMType(*context->context), floatingValue);
+        auto value = llvm::ConstantFP::get(type->getLLVMType(context), floatingValue);
 
 #ifdef DEBUG
         std::cout << "debug: ASTLiteralNumber::generateLLVM float\n";
@@ -1145,7 +1165,7 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
             type = new IntegerType(64, isSigned);
         }
 
-        auto value = llvm::ConstantInt::get(type->getLLVMType(*context->context), integerValue, type->getSigned());
+        auto value = llvm::ConstantInt::get(type->getLLVMType(context), integerValue, type->getSigned());
 
 #ifdef DEBUG
         std::cout << "debug: ASTLiteralNumber::generateLLVM integer\n";
@@ -1268,7 +1288,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         if (byValue)
         {
             // Allocate struct in registers
-            llvm::Value *structValue = llvm::UndefValue::get(structType->getLLVMType(*context->context));
+            llvm::Value *structValue = llvm::UndefValue::get(structType->getLLVMType(context));
 
             for (auto &pair : fieldValues)
             {
@@ -1297,19 +1317,19 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
 
             if (managed)
             {
-                result = new TypedValue(generateMalloc(context, structType->getManagedPointerToType()->getLLVMPointedType(*context->context), structType->getName()), new PointerType(structType, managed));
+                result = new TypedValue(generateMalloc(context, structType->getManagedPointerToType()->getLLVMPointedType(context), structType->getName()), new PointerType(structType, managed));
 
                 // Set initial ref count to 1
                 std::vector<llvm::Value *> indices;
                 indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), 0, false));
                 indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), 0, false));
                 PointerType *structPointerType = static_cast<PointerType *>(result->getType());
-                llvm::Value *refCountFieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(*context->context), result->getValue(), indices, structType->getName() + ".refcount.ptr");
+                llvm::Value *refCountFieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(context), result->getValue(), indices, structType->getName() + ".refcount.ptr");
                 context->irBuilder->CreateStore(llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), refCountFieldPointer, false);
             }
             else
             {
-                result = new TypedValue(generateAllocaInCurrentFunction(context, structType->getLLVMType(*context->context), structType->getName()), new PointerType(structType, managed));
+                result = new TypedValue(generateAllocaInCurrentFunction(context, structType->getLLVMType(context), structType->getName()), new PointerType(structType, managed));
             }
 
             for (auto &pair : fieldValues)
@@ -1329,7 +1349,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
                 indices.push_back(llvm::ConstantInt::get(llvm::IntegerType::getInt32Ty(*context->context), fieldIndex, false));
 
                 PointerType *structPointerType = static_cast<PointerType *>(result->getType());
-                llvm::Value *fieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(*context->context), result->getValue(), indices, structType->getName() + "." + fieldName + ".ptr");
+                llvm::Value *fieldPointer = context->irBuilder->CreateGEP(structPointerType->getLLVMPointedType(context), result->getValue(), indices, structType->getName() + "." + fieldName + ".ptr");
 
                 // auto structFieldPointer = context->irBuilder->CreateStructGEP(llvmStructType, structPointer, fieldIndex, "structgep");
                 TypedValue *structFieldPointerValue = new TypedValue(fieldPointer, fieldType->type->getUnmanagedPointerToType(), fieldName);
@@ -1368,7 +1388,7 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
 
         if (this->nameToken != NULL)
         {
-            if (!context->globalModule.addValue(this->nameToken->value, type))
+            if (!context->globalModule->addValue(this->nameToken->value, type))
             {
                 std::cout << "ERROR: The struct '" << this->nameToken->value << "' has already been declared";
                 return NULL;
@@ -1480,6 +1500,61 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
     if (!left || !right)
     {
+        return NULL;
+    }
+
+    if (left->isType() || right->isType())
+    {
+        if (!(left->isType() && right->isType()))
+        {
+            std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+            return NULL;
+        }
+
+        if (operatorType == TokenType::OPERATOR_OR)
+        {
+            Type *newType = NULL;
+            if (left->getTypeCode() == TypeCode::UNION && right->getTypeCode() == TypeCode::UNION)
+            {
+                UnionType *leftUnion = static_cast<UnionType *>(left->getType());
+                UnionType *rightUnion = static_cast<UnionType *>(right->getType());
+                leftUnion->addTypes(rightUnion->getTypes());
+                newType = leftUnion;
+            }
+            else if (left->getTypeCode() == TypeCode::UNION)
+            {
+                UnionType *leftUnion = static_cast<UnionType *>(left->getType());
+                leftUnion->addType(right->getType());
+                newType = leftUnion;
+            }
+            else if (right->getTypeCode() == TypeCode::UNION)
+            {
+                UnionType *rightUnion = static_cast<UnionType *>(right->getType());
+                rightUnion->addType(left->getType());
+                newType = rightUnion;
+            }
+            else
+            {
+                if (*right->getType() == *left->getType())
+                {
+                    newType = right->getType();
+                }
+                else
+                {
+                    auto t = new UnionType();
+                    t->addType(right->getType());
+                    t->addType(left->getType());
+                    newType = t;
+                }
+            }
+            return new TypedValue(NULL, newType);
+        }
+        else
+        {
+            std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on types\n";
+            return NULL;
+        }
+
         return NULL;
     }
 
@@ -1797,7 +1872,7 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         }
     }
 
-    llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, storedType->getLLVMType(*context->context), this->nameToken->value);
+    llvm::Value *pointerValue = generateAllocaInCurrentFunction(context, storedType->getLLVMType(context), this->nameToken->value);
     TypedValue *valuePointer = new TypedValue(pointerValue, storedType->getUnmanagedPointerToType());
 
     if (!scope->addValue(this->nameToken->value, valuePointer))
@@ -1844,7 +1919,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
         PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
         if (storedPointerType->isManaged())
         {
-            llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
+            llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
             if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), false))
             {
                 std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
@@ -1977,7 +2052,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
     bool isVarArg = false;
     llvm::GlobalValue::LinkageTypes linkage = this->exported ? llvm::Function::ExternalLinkage : llvm::Function::PrivateLinkage;
-    llvm::FunctionType *functionType = static_cast<llvm::FunctionType *>(newFunctionType->getLLVMType(*context->context));
+    llvm::FunctionType *functionType = static_cast<llvm::FunctionType *>(newFunctionType->getLLVMType(context));
     llvm::Function *function = llvm::Function::Create(functionType, linkage, this->nameToken->value, *context->module);
     if (function == NULL)
     {
@@ -2009,7 +2084,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         //     {
         //         // Add ByVal attribute to pointers that should be passed by value
         //         auto attributeBuilder = llvm::AttrBuilder(*context->context);
-        //         attributeBuilder.addByValAttr(parameterPointerType->getPointedType()->getLLVMType(*context->context));
+        //         attributeBuilder.addByValAttr(parameterPointerType->getPointedType()->getLLVMType(context));
         //         parameterValue->addAttrs(attributeBuilder);
         //     }
         // }
@@ -2017,7 +2092,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
 
     TypedValue *newFunctionPointerType = new TypedValue(function, newFunctionType->getUnmanagedPointerToType());
 
-    if (!context->globalModule.addValue(this->nameToken->value, newFunctionPointerType))
+    if (!context->globalModule->addValue(this->nameToken->value, newFunctionPointerType))
     {
         std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
         return NULL;
@@ -2039,7 +2114,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         PointerType *functionPointerType = static_cast<PointerType *>(newFunctionPointerType->getType());
         context->currentFunction = static_cast<FunctionType *>(functionPointerType->getPointedType());
         context->currentFunctionReturnBlock = llvm::BasicBlock::Create(*context->context, this->nameToken->value + ".return", function);
-        context->currentFunctionReturnValuePointer = returnType == NULL ? NULL : generateAllocaInCurrentFunction(context, returnType->getLLVMType(*context->context), "return");
+        context->currentFunctionReturnValuePointer = returnType == NULL ? NULL : generateAllocaInCurrentFunction(context, returnType->getLLVMType(context), "return");
 
         for (int i = 0; i < this->parameters->size(); i++)
         {
@@ -2054,7 +2129,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             }
             Type *parameterType = parameterTypeValue->getType();
 
-            auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(*context->context), NULL, "loadarg");
+            auto parameterPointer = context->irBuilder->CreateAlloca(parameterType->getLLVMType(context), NULL, "loadarg");
             context->irBuilder->CreateStore(parameterValue, parameterPointer, false);
             functionScope->addValue(parameter->getParameterName(), new TypedValue(parameterPointer, parameterType->getUnmanagedPointerToType()));
         }
@@ -2093,7 +2168,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
                 PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
                 if (storedPointerType->isManaged())
                 {
-                    llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(*context->context), p.second->getValue(), p.second->getOriginVariable() + ".load");
+                    llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(context), p.second->getValue(), p.second->getOriginVariable() + ".load");
                     if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), true))
                     {
                         std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
@@ -2259,7 +2334,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
             indices.push_back(llvm::Constant::getIntegerValue(llvm::IntegerType::getInt32Ty(*context->context), llvm::APInt(32, 0, false)));
 
             std::string twine = pointerToIndex->getOriginVariable() + ".refs";
-            llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, twine);
+            llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(context), pointerToIndex->getValue(), indices, twine);
 
             if (!generateDecrementReferenceIfPointer(context, pointerToIndex, false))
             {
@@ -2294,7 +2369,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         // std::cout << "\n";
 
         std::string twine = pointerToIndex->getOriginVariable() + "." + this->nameToken->value + ".ptr";
-        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(*context->context), pointerToIndex->getValue(), indices, twine);
+        llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(context), pointerToIndex->getValue(), indices, twine);
 
         if (!generateDecrementReferenceIfPointer(context, pointerToIndex, false))
         {

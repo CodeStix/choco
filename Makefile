@@ -7,6 +7,7 @@ all: src/main.cpp src/token.cpp src/ast.cpp
 	clang++ -g -O0 -c `llvm-config-14 --cxxflags` -I/usr/lib/llvm-10/include src/ast.cpp -o build/ast.o
 	clang++ -g -O0 -c `llvm-config-14 --cxxflags` -I/usr/lib/llvm-10/include src/typedValue.cpp -o build/typedValue.o
 	clang++ -g -O0 -c `llvm-config-14 --cxxflags` -I/usr/lib/llvm-10/include src/util.cpp -o build/util.o
+	clang++ -g -O0 -c `llvm-config-14 --cxxflags` -I/usr/lib/llvm-10/include src/context.cpp -o build/context.o
 	clang++ -g -O0 build/*.o `llvm-config-14 --ldflags --libs` -lpthread -lncurses -o build/output
 
 run: all
