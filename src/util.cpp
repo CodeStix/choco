@@ -240,8 +240,6 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
         return false;
     }
 
-    std::cout << "INFO: Generate free\n";
-
     llvm::Function *freeFunction;
     llvm::Type *llvmTypeToFree = pointerType->getLLVMPointedType(context);
     if (context->freeFunctions.count(llvmTypeToFree) > 0)
@@ -315,8 +313,6 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
 
 bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree)
 {
-    std::cout << "DEBUG: generateDecrementReference\n";
-
     if (managedPointer->getTypeCode() != TypeCode::POINTER)
     {
         std::cout << "WARNING: Cannot generateDecrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
@@ -344,7 +340,6 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
     // Free the block if refCount is zero
     if (checkFree)
     {
-        std::cout << "DEBUG: generate free\n";
         llvm::Value *isRefZero = context->irBuilder->CreateICmpEQ(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 0, false), twine + ".refcount.dec.cmp");
 
         llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
@@ -363,13 +358,11 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
         context->irBuilder->SetInsertPoint(continueBlock);
     }
 
-    std::cout << "DEBUG: generateDecrementReference end\n";
     return true;
 }
 
 bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer)
 {
-    std::cout << "DEBUG: generateIncrementReference\n";
     if (managedPointer->getTypeCode() != TypeCode::POINTER)
     {
         std::cout << "WARNING: Cannot generateIncrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
@@ -393,7 +386,6 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
     // Increase refCount by 1
     refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
-    std::cout << "DEBUG: generateIncrementReference end\n";
     return true;
 }
 
@@ -628,7 +620,6 @@ llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::s
     llvm::Function *mallocFunction = context->module->getFunction(mallocName);
     if (mallocFunction == NULL)
     {
-        std::cout << "INFO: Declare malloc\n";
         std::vector<llvm::Type *> mallocParams;
         mallocParams.push_back(llvm::Type::getInt64Ty(*context->context));
         llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::PointerType::get(*context->context, 0), mallocParams, false);

@@ -181,6 +181,14 @@ bool UnionType::operator==(const Type &b) const
 
 llvm::Type *UnionType::getLLVMType(GenerationContext *context) const
 {
+    std::vector<llvm::Type *> fields;
+    fields.push_back(getUnionIdType(*context->context));
+    fields.push_back(this->getLLVMDataType(context));
+    return llvm::StructType::get(*context->context, fields, false);
+}
+
+llvm::Type *UnionType::getLLVMDataType(GenerationContext *context) const
+{
     assert(this->types.size() >= 2);
 
     // Find max size of all type
@@ -188,6 +196,8 @@ llvm::Type *UnionType::getLLVMType(GenerationContext *context) const
     Type *largestType = NULL;
     for (auto type : this->types)
     {
+        if (type->getTypeCode() == TypeCode::NULLT)
+            continue;
         auto llvmType = type->getLLVMType(context);
         int size = context->module->getDataLayout().getTypeStoreSizeInBits(llvmType);
         if (size > largestSizeBits)
@@ -200,10 +210,31 @@ llvm::Type *UnionType::getLLVMType(GenerationContext *context) const
     assert(largestType != NULL);
     assert(largestSizeBits > 0);
 
-    std::vector<llvm::Type *> fields;
-    fields.push_back(getUnionIdType(*context->context));
-    fields.push_back(llvm::Type::getIntNTy(*context->context, largestSizeBits));
-    return llvm::StructType::get(*context->context, fields, false);
+    return llvm::Type::getIntNTy(*context->context, largestSizeBits);
+}
+
+llvm::Value *UnionType::createValue(GenerationContext *context, TypedValue *value) const
+{
+    assert(this->managed && "Unmanaged not supported");
+    assert(this->containsType(value->getType()));
+
+    uint64_t typeId = context->getTypeId(value->getType());
+
+    std::vector<unsigned int> indices;
+    indices.push_back(0);
+
+    auto llvmType = this->getLLVMType(context);
+    llvm::Value *llvmUnionValue = llvm::UndefValue::get(llvmType);
+
+    indices[0] = 0;
+    llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvm::ConstantInt::get(getUnionIdType(*context->context), typeId, false), indices, "union.novalue");
+
+    auto llvmBitCastedValue = context->irBuilder->CreateBitCast(value->getValue(), this->getLLVMDataType(context), "union.value.bitcasted");
+
+    indices[0] = 1;
+    llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvmBitCastedValue, indices, "union");
+
+    return llvmUnionValue;
 }
 
 bool FloatType::operator==(const Type &b) const

@@ -23,6 +23,7 @@
 class TypedValue;
 class ModuleType;
 class FunctionType;
+class Type;
 
 class FunctionScope
 {
@@ -46,6 +47,8 @@ class GenerationContext
 public:
     GenerationContext();
 
+    uint64_t getTypeId(Type *type);
+
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::IRBuilder<>> irBuilder;
     std::unique_ptr<llvm::Module> module;
@@ -55,5 +58,6 @@ public:
     llvm::Value *currentFunctionReturnValuePointer;
     std::map<llvm::Type *, llvm::Function *> freeFunctions;
     std::map<llvm::Type *, llvm::Function *> mallocFunctions;
+    std::vector<Type *> unionTypeIds;
     ModuleType *globalModule;
 };

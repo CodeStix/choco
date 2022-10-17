@@ -7,6 +7,7 @@ GenerationContext::GenerationContext() : context(std::make_unique<llvm::LLVMCont
                                          passManager(std::make_unique<llvm::legacy::FunctionPassManager>(module.get())),
                                          globalModule(new ModuleType("Global"))
 {
+    this->unionTypeIds.push_back(new NullType());
 #ifndef DEBUG
     passManager->add(llvm::createMemCpyOptPass());
     passManager->add(llvm::createPromoteMemoryToRegisterPass());
@@ -17,6 +18,19 @@ GenerationContext::GenerationContext() : context(std::make_unique<llvm::LLVMCont
     passManager->add(llvm::createDeadCodeEliminationPass());
 #endif
     passManager->doInitialization();
+}
+
+uint64_t GenerationContext::getTypeId(Type *type)
+{
+    for (uint64_t i = 0; i < this->unionTypeIds.size(); i++)
+    {
+        if (*this->unionTypeIds[i] == *type)
+        {
+            return i;
+        }
+    }
+    this->unionTypeIds.push_back(type);
+    return this->unionTypeIds.size() - 1;
 }
 
 FunctionScope::FunctionScope(const FunctionScope &copyFrom)

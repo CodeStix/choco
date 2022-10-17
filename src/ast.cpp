@@ -625,7 +625,7 @@ ASTStruct *parseStruct(TokenStream *tokens, const Token *structNameToken)
 
 ASTNode *parseInlineType(TokenStream *tokens)
 {
-    return parseValueAndSuffix(tokens, true);
+    return parseValueOrOperator(tokens, true);
 }
 
 ASTNode *parseValueOrType(TokenStream *tokens, bool parseType)
@@ -1053,12 +1053,26 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
         }
         else if (typeHint->getTypeCode() == TypeCode::POINTER)
         {
-            auto llvmPointerType = static_cast<llvm::PointerType *>(typeHint->getLLVMType(context));
-            return new TypedValue(llvm::ConstantPointerNull::get(llvmPointerType), typeHint);
+            std::cout << "ERROR: null can only be assigned to a nullable pointer (please union it with null)\n";
+            return NULL;
+        }
+        else if (typeHint->getTypeCode() == TypeCode::UNION)
+        {
+            UnionType *unionType = static_cast<UnionType *>(typeHint);
+            if (unionType->containsNullType())
+            {
+                auto llvmPointerType = static_cast<llvm::PointerType *>(typeHint->getLLVMType(context));
+                return new TypedValue(llvm::ConstantPointerNull::get(llvmPointerType), typeHint);
+            }
+            else
+            {
+                std::cout << "ERROR: null not assignable to union " << typeHint->toString() << " (please add it)\n";
+                return NULL;
+            }
         }
         else
         {
-            std::cout << "ERROR: null can only be used for pointers\n";
+            std::cout << "ERROR: null is not assignable to " << typeHint->toString() << "\n";
             return NULL;
         }
     }
@@ -1176,16 +1190,19 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
+    assert(false && "Unimplemented");
     return NULL;
 }
 
 TypedValue *ASTArraySegment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
+    assert(false && "Unimplemented");
     return NULL;
 }
 
 TypedValue *ASTNullCoalesce::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
+    assert(false && "Null coalesce isn't used");
     return NULL;
 }
 
@@ -1954,6 +1971,11 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         }
 
         auto value = this->value->generateLLVM(context, scope, returnType, false);
+        if (value == NULL)
+        {
+            std::cout << "ERROR: Could not generate return value\n";
+            return NULL;
+        }
 
         TypedValue *newValue = generateTypeConversion(context, value, returnType, true); // TODO: remove allowLosePrecision when casts are supported
         if (newValue == NULL)

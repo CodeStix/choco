@@ -167,7 +167,7 @@ public:
 
     llvm::Type *getLLVMType(GenerationContext *context) const override
     {
-        assert(false && "Null has no getLLVMType");
+        assert(false && "NullType has no getLLVMType");
     }
 
     std::string toString() override
@@ -190,6 +190,10 @@ public:
     bool operator==(const Type &b) const override;
 
     llvm::Type *getLLVMType(GenerationContext *context) const override;
+
+    llvm::Type *getLLVMDataType(GenerationContext *context) const;
+
+    llvm::Value *createValue(GenerationContext *context, TypedValue *value) const;
 
     void addTypes(std::vector<Type *> types)
     {
@@ -220,6 +224,30 @@ public:
     std::string toString() override
     {
         return "TODO";
+    }
+
+    bool containsType(Type *type) const
+    {
+        for (auto t : this->types)
+        {
+            if (*t == *type)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool containsNullType() const
+    {
+        for (auto t : this->types)
+        {
+            if (t->getTypeCode() == TypeCode::NULLT)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
 private:
