@@ -215,6 +215,12 @@ llvm::Type *UnionType::getLLVMDataType(GenerationContext *context) const
 
 llvm::Value *UnionType::createValue(GenerationContext *context, TypedValue *value) const
 {
+    // if (value->getTypeCode() == TypeCode::UNION)
+    // {
+    //     UnionType *valueUnionType = static_cast<UnionType *>(value->getType());
+
+    // }
+
     assert(this->managed && "Unmanaged not supported");
     assert(this->containsType(value->getType()));
 

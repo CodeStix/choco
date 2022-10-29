@@ -63,6 +63,7 @@ enum class TokenType
     NEWLINE,
     OPERATOR_HASHTAG,
     OPERATOR_QUESTION_MARK,
+    IS_KEYWORD,
 };
 
 class Token

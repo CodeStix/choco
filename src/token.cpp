@@ -161,6 +161,10 @@ void parseString(std::string &input, std::vector<const Token *> &tokenList)
                 {
                     type = TokenType::STRUCT_KEYWORD;
                 }
+                else if (currentString == "is")
+                {
+                    type = TokenType::IS_KEYWORD;
+                }
                 else
                 {
                     type = TokenType::SYMBOL;
@@ -567,6 +571,8 @@ const char *getTokenTypeName(TokenType type)
         return "OPERATOR_HASHTAG";
     case TokenType::OPERATOR_QUESTION_MARK:
         return "OPERATOR_QUESTION_MARK";
+    case TokenType::IS_KEYWORD:
+        return "IS_KEYWORD";
     default:
         return "Unknown";
     }
@@ -591,17 +597,19 @@ int getTokenOperatorImportance(TokenType type)
     case TokenType::OPERATOR_LT:
     case TokenType::OPERATOR_GT:
         return 3;
+    case TokenType::IS_KEYWORD:
+        return 4;
     case TokenType::OPERATOR_DOUBLE_LT:
     case TokenType::OPERATOR_DOUBLE_GT:
-        return 4;
+        return 5;
     case TokenType::OPERATOR_ADDITION:
     case TokenType::OPERATOR_SUBSTRACTION:
-        return 5;
+        return 6;
     case TokenType::OPERATOR_MULTIPLICATION:
     case TokenType::OPERATOR_DIVISION:
-        return 6;
-    case TokenType::COLON:
         return 7;
+    case TokenType::COLON:
+        return 8;
 
     default:
         return -1;

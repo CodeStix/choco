@@ -39,6 +39,8 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
 bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *managedPointer);
 bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree);
 bool generatePanic(GenerationContext *context, std::string reason);
+TypedValue *generateUnionIs(GenerationContext *context, TypedValue *unionToConvert, Type *targetType);
+TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unionToConvert, Type *targetType);
 
 llvm::Type *getRefCountType(llvm::LLVMContext &context);
 llvm::Type *getUnionIdType(llvm::LLVMContext &context);

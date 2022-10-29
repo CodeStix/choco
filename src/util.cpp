@@ -392,6 +392,11 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
 
 bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree)
 {
+    if (maybeManagedPointer->getTypeCode() == TypeCode::UNION)
+    {
+        // TODO
+    }
+
     if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
     {
         // Increase reference count for loaded pointer
@@ -426,7 +431,7 @@ bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue 
     return true;
 }
 
-TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
+llvm::BasicBlock *generateUnionCheck(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
 {
     assert(unionToConvert->getTypeCode() == TypeCode::UNION);
 
@@ -467,6 +472,13 @@ TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unio
         context->irBuilder->SetInsertPoint(nextBlock);
     }
 
+    return okBlock;
+}
+
+TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
+{
+    llvm::BasicBlock *okBlock = generateUnionCheck(context, unionToConvert, targetType);
+
     // After the last block is reached, the value does not match the union, panic
     if (!generatePanic(context, "Cannot cast " + unionToConvert->getType()->toString() + " to " + targetType->toString()))
     {
@@ -482,7 +494,8 @@ TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unio
     }
     else
     {
-        indices[0] = 1;
+        std::vector<unsigned int> indices;
+        indices.push_back(1);
         llvm::Value *llvmUnionData = context->irBuilder->CreateExtractValue(unionToConvert->getValue(), indices, "union.data");
         auto llvmTargetType = targetType->getLLVMType(context);
         llvm::Value *llvmCastedValue;
@@ -496,6 +509,27 @@ TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unio
         }
         return new TypedValue(llvmCastedValue, targetType);
     }
+}
+
+TypedValue *generateUnionIs(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
+{
+    llvm::BasicBlock *okBlock = generateUnionCheck(context, unionToConvert, targetType);
+    llvm::BasicBlock *notOkBlock = context->irBuilder->GetInsertBlock();
+
+    llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "union.is.continue", notOkBlock->getParent());
+    context->irBuilder->CreateBr(continueBlock);
+
+    context->irBuilder->SetInsertPoint(okBlock);
+    context->irBuilder->CreateBr(continueBlock);
+
+    context->irBuilder->SetInsertPoint(continueBlock);
+
+    // After the last block is reached, the value does not match the union, return false
+    auto llvmBoolType = BOOL_TYPE.getLLVMType(context);
+    auto phi = context->irBuilder->CreatePHI(llvmBoolType, 2, "union.is");
+    phi->addIncoming(llvm::ConstantInt::get(llvmBoolType, 0, false), notOkBlock);
+    phi->addIncoming(llvm::ConstantInt::get(llvmBoolType, 1, false), okBlock);
+    return new TypedValue(phi, &BOOL_TYPE);
 }
 
 // Try to cast a value to a specific type

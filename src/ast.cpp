@@ -1522,14 +1522,51 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
     if (left->isType() || right->isType())
     {
-        if (!(left->isType() && right->isType()))
+        if (operatorType == TokenType::OPERATOR_EQUALS)
         {
-            std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
-            return NULL;
-        }
+            if (!(left->isType() && right->isType()))
+            {
+                std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+                return NULL;
+            }
 
-        if (operatorType == TokenType::OPERATOR_OR)
+            bool value = *right->getType() == *left->getType();
+            auto llvmValue = llvm::ConstantInt::get(BOOL_TYPE.getLLVMType(context), value ? 1 : 0, false);
+            return new TypedValue(llvmValue, &BOOL_TYPE);
+        }
+        else if (operatorType == TokenType::IS_KEYWORD)
         {
+            if (!right->isType())
+            {
+                std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+                return NULL;
+            }
+
+            if (left->isType())
+            {
+                assert(false && "'<type> is <type>' is currently unimplemented");
+            }
+            else
+            {
+                if (left->getTypeCode() == TypeCode::UNION)
+                {
+                    return generateUnionIs(context, left, right->getType());
+                }
+                else
+                {
+                    std::cout << "ERROR: Cannot perform is operator on " << left->getType()->toString() << "\n";
+                    return NULL;
+                }
+            }
+        }
+        else if (operatorType == TokenType::OPERATOR_OR)
+        {
+            if (!(left->isType() && right->isType()))
+            {
+                std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+                return NULL;
+            }
+
             Type *newType = NULL;
             if (left->getTypeCode() == TypeCode::UNION && right->getTypeCode() == TypeCode::UNION)
             {
