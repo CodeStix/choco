@@ -235,16 +235,20 @@ llvm::Value *UnionType::createValue(GenerationContext *context, TypedValue *valu
     indices[0] = 0;
     llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvm::ConstantInt::get(getUnionIdType(*context->context), typeId, false), indices, "union.novalue");
 
+    int typeBits = context->module->getDataLayout().getTypeStoreSizeInBits(value->getValue()->getType());
+    auto llvmValueAsInteger = context->irBuilder->CreateBitOrPointerCast(value->getValue(), llvm::Type::getIntNTy(*context->context, typeBits), "union.value.asint");
+
     auto llvmDataType = this->getLLVMDataType(context);
-    llvm::Value *llvmBitCastedValue;
-    if (value->getValue()->getType()->isPointerTy())
-    {
-        llvmBitCastedValue = context->irBuilder->CreatePtrToInt(value->getValue(), llvmDataType, "union.value.casted");
-    }
-    else
-    {
-        llvmBitCastedValue = context->irBuilder->CreateBitCast(value->getValue(), llvmDataType, "union.value.casted");
-    }
+    llvm::Value *llvmBitCastedValue = context->irBuilder->CreateZExtOrBitCast(llvmValueAsInteger, llvmDataType, "union.value.zext");
+
+    // if (value->getValue()->getType()->isPointerTy())
+    // {
+    //     llvmBitCastedValue = context->irBuilder->CreatePtrToInt(value->getValue(), llvmDataType, "union.value.casted");
+    // }
+    // else
+    // {
+    //     llvmBitCastedValue = context->irBuilder->CreateBitCast(value->getValue(), llvmDataType, "union.value.casted");
+    // }
 
     indices[0] = 1;
     llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvmBitCastedValue, indices, "union");
@@ -356,16 +360,21 @@ bool PointerType::operator==(const Type &b) const
 
 llvm::Type *PointerType::getLLVMPointedType(GenerationContext *context) const
 {
-    llvm::Type *pointedType = this->pointedType->getLLVMType(context);
     if (this->managed)
     {
-        // Wrap containing value in a struct where the first value contains the reference count
         std::vector<llvm::Type *> fields;
         fields.push_back(getRefCountType(*context->context));
-        fields.push_back(pointedType);
-        pointedType = llvm::StructType::get(*context->context, fields, false);
+        if (this->pointedType != NULL)
+        {
+            fields.push_back(this->pointedType->getLLVMType(context));
+        }
+        return llvm::StructType::get(*context->context, fields, false);
     }
-    return pointedType;
+    else
+    {
+        assert(this->pointedType != NULL);
+        return this->pointedType->getLLVMType(context);
+    }
 }
 
 llvm::Type *PointerType::getLLVMType(GenerationContext *context) const
@@ -376,7 +385,14 @@ llvm::Type *PointerType::getLLVMType(GenerationContext *context) const
 std::string PointerType::toString()
 {
     std::string str = this->managed ? "&" : "*";
-    str += this->pointedType->toString();
+    if (this->pointedType != NULL)
+    {
+        str += this->pointedType->toString();
+    }
+    else
+    {
+        str += "Any";
+    }
     return str;
 }
 

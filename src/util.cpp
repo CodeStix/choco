@@ -269,26 +269,18 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
             StructType *structType = static_cast<StructType *>(pointerType->getPointedType());
             for (auto &field : structType->getFields())
             {
-                if (field.type->getTypeCode() == TypeCode::POINTER)
+                int fieldIndex = structType->getFieldIndex(field.name);
+
+                std::vector<llvm::Value *> indices;
+                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0));
+                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1));
+                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), fieldIndex));
+                auto fieldPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(context), pointerArg, indices, "member.free");
+                auto fieldValue = context->irBuilder->CreateLoad(field.type->getLLVMType(context), fieldPointer, "member.free.load");
+
+                if (!generateDecrementReferenceIfPointer(context, new TypedValue(fieldValue, field.type, field.name), true))
                 {
-                    PointerType *structFieldType = static_cast<PointerType *>(field.type);
-                    if (structFieldType->isManaged())
-                    {
-                        // Call freer function
-                        int fieldIndex = structType->getFieldIndex(field.name);
-
-                        std::vector<llvm::Value *> indices;
-                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0));
-                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1));
-                        indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), fieldIndex));
-                        auto fieldPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(context), pointerArg, indices, "member.free");
-                        auto fieldValue = context->irBuilder->CreateLoad(structFieldType->getLLVMType(context), fieldPointer, "member.free.load");
-
-                        if (!generateDecrementReference(context, new TypedValue(fieldValue, structFieldType, field.name), true))
-                        {
-                            return false;
-                        }
-                    }
+                    return false;
                 }
             }
         }
@@ -392,22 +384,38 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
 
 bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree)
 {
+    // Union type could include pointer
     if (maybeManagedPointer->getTypeCode() == TypeCode::UNION)
     {
-        // TODO
-    }
+        UnionType *unionType = static_cast<UnionType *>(maybeManagedPointer->getType());
 
-    if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
+        // Check if union contains pointer types
+        for (Type *containedUnionType : unionType->getTypes())
+        {
+            // If the union can be a pointer
+            if (containedUnionType->getTypeCode() == TypeCode::POINTER && static_cast<PointerType *>(containedUnionType)->isManaged())
+            {
+                auto okBlock = generateUnionIsBranches(context, maybeManagedPointer, containedUnionType);
+                llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "union.ref.dec.continue", context->irBuilder->GetInsertBlock()->getParent());
+                context->irBuilder->CreateBr(continueBlock);
+
+                context->irBuilder->SetInsertPoint(okBlock);
+                // At this point, we are sure maybeManagedPointer is containedUnionType
+                auto llvmUnionData = generateUnionGetData(context, maybeManagedPointer, containedUnionType);
+                assert(generateDecrementReference(context, llvmUnionData, checkFree));
+                context->irBuilder->CreateBr(continueBlock);
+
+                context->irBuilder->SetInsertPoint(continueBlock);
+            }
+        }
+    }
+    else if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
     {
         // Increase reference count for loaded pointer
         PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
         if (loadedPointerType->isManaged())
         {
-            if (!generateDecrementReference(context, maybeManagedPointer, checkFree))
-            {
-                std::cout << "ERROR: Could not generate reference counting decrease code\n";
-                return false;
-            }
+            assert(generateDecrementReference(context, maybeManagedPointer, checkFree));
         }
     }
     return true;
@@ -431,22 +439,27 @@ bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue 
     return true;
 }
 
-llvm::BasicBlock *generateUnionCheck(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
+llvm::Value *generateUnionGetTypeId(GenerationContext *context, TypedValue *unionToExtract)
 {
-    assert(unionToConvert->getTypeCode() == TypeCode::UNION);
-
-    llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
+    assert(unionToExtract->getTypeCode() == TypeCode::UNION);
 
     std::vector<unsigned int> indices;
     indices.push_back(0);
+    return context->irBuilder->CreateExtractValue(unionToExtract->getValue(), indices, "union.typeid");
+}
 
-    indices[0] = 0;
-    llvm::Value *llvmTypeIdValue = context->irBuilder->CreateExtractValue(unionToConvert->getValue(), indices, "union.typeid");
+llvm::BasicBlock *generateUnionIsBranches(GenerationContext *context, TypedValue *unionToCompare, Type *compareType)
+{
+    assert(unionToCompare->getTypeCode() == TypeCode::UNION);
+
+    llvm::Function *currentFunction = context->irBuilder->GetInsertBlock()->getParent();
+
+    llvm::Value *llvmTypeIdValue = generateUnionGetTypeId(context, unionToCompare);
 
     std::vector<uint64_t> allowedTypeIds;
-    if (targetType->getTypeCode() == TypeCode::UNION)
+    if (compareType->getTypeCode() == TypeCode::UNION)
     {
-        UnionType *targetUnionType = static_cast<UnionType *>(targetType);
+        UnionType *targetUnionType = static_cast<UnionType *>(compareType);
         for (auto type : targetUnionType->getTypes())
         {
             allowedTypeIds.push_back(context->getTypeId(type));
@@ -454,7 +467,7 @@ llvm::BasicBlock *generateUnionCheck(GenerationContext *context, TypedValue *uni
     }
     else
     {
-        allowedTypeIds.push_back(context->getTypeId(targetType));
+        allowedTypeIds.push_back(context->getTypeId(compareType));
     }
     assert(allowedTypeIds.size() > 0);
 
@@ -475,9 +488,24 @@ llvm::BasicBlock *generateUnionCheck(GenerationContext *context, TypedValue *uni
     return okBlock;
 }
 
+TypedValue *generateUnionGetData(GenerationContext *context, TypedValue *unionToConvert, Type *asType)
+{
+    assert(unionToConvert->getTypeCode() == TypeCode::UNION);
+
+    std::vector<unsigned int> indices;
+    indices.push_back(1);
+    llvm::Value *llvmUnionData = context->irBuilder->CreateExtractValue(unionToConvert->getValue(), indices, "union.data.asint");
+    auto llvmTargetType = asType->getLLVMType(context);
+
+    int asTypeBitSize = context->module->getDataLayout().getTypeStoreSizeInBits(llvmTargetType);
+    auto llvmCastedAsIntValue = context->irBuilder->CreateTruncOrBitCast(llvmUnionData, llvm::Type::getIntNTy(*context->context, asTypeBitSize), "union.data.trunc");
+    auto llvmCastedValue = context->irBuilder->CreateBitOrPointerCast(llvmCastedAsIntValue, llvmTargetType, "union.data");
+    return new TypedValue(llvmCastedValue, asType);
+}
+
 TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
 {
-    llvm::BasicBlock *okBlock = generateUnionCheck(context, unionToConvert, targetType);
+    llvm::BasicBlock *okBlock = generateUnionIsBranches(context, unionToConvert, targetType);
 
     // After the last block is reached, the value does not match the union, panic
     if (!generatePanic(context, "Cannot cast " + unionToConvert->getType()->toString() + " to " + targetType->toString()))
@@ -494,26 +522,13 @@ TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unio
     }
     else
     {
-        std::vector<unsigned int> indices;
-        indices.push_back(1);
-        llvm::Value *llvmUnionData = context->irBuilder->CreateExtractValue(unionToConvert->getValue(), indices, "union.data");
-        auto llvmTargetType = targetType->getLLVMType(context);
-        llvm::Value *llvmCastedValue;
-        if (llvmTargetType->isPointerTy())
-        {
-            llvmCastedValue = context->irBuilder->CreateIntToPtr(llvmUnionData, llvmTargetType);
-        }
-        else
-        {
-            llvmCastedValue = context->irBuilder->CreateBitCast(llvmUnionData, llvmTargetType);
-        }
-        return new TypedValue(llvmCastedValue, targetType);
+        return generateUnionGetData(context, unionToConvert, targetType);
     }
 }
 
-TypedValue *generateUnionIs(GenerationContext *context, TypedValue *unionToConvert, Type *targetType)
+TypedValue *generateUnionIs(GenerationContext *context, TypedValue *unionToCompare, Type *compareType)
 {
-    llvm::BasicBlock *okBlock = generateUnionCheck(context, unionToConvert, targetType);
+    llvm::BasicBlock *okBlock = generateUnionIsBranches(context, unionToCompare, compareType);
     llvm::BasicBlock *notOkBlock = context->irBuilder->GetInsertBlock();
 
     llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "union.is.continue", notOkBlock->getParent());

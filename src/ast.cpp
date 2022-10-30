@@ -1967,20 +1967,23 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
 
     // TODO: this code will segfault when the declaration hasn't specified a value (previous value is uninitialized)
-    if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
-    {
-        // If a previous pointer value will be overwritten, the reference count must be decremented if was a managed pointer
-        PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
-        if (storedPointerType->isManaged())
-        {
-            llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
-            if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), false))
-            {
-                std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
-                return NULL;
-            }
-        }
-    }
+    llvm::Value *llvmPreviousStoredValue = context->irBuilder->CreateLoad(valuePointerType->getPointedType()->getLLVMType(context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
+    assert(generateDecrementReferenceIfPointer(context, new TypedValue(llvmPreviousStoredValue, valuePointerType->getPointedType()), false));
+
+    // if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
+    // {
+    //     // If a previous pointer value will be overwritten, the reference count must be decremented if was a managed pointer
+    //     PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
+    //     if (storedPointerType->isManaged())
+    //     {
+    //         llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
+    //         if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), false))
+    //         {
+    //             std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
+    //             return NULL;
+    //         }
+    //     }
+    // }
 
     TypedValue *newValue = this->value->generateLLVM(context, scope, valuePointerType->getPointedType(), false);
 
@@ -2222,19 +2225,24 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             }
 
             PointerType *valuePointerType = static_cast<PointerType *>(p.second->getType());
-            if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
-            {
-                PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
-                if (storedPointerType->isManaged())
-                {
-                    llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(context), p.second->getValue(), p.second->getOriginVariable() + ".load");
-                    if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), true))
-                    {
-                        std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
-                        return NULL;
-                    }
-                }
-            }
+
+            llvm::Value *finalizedValue = context->irBuilder->CreateLoad(valuePointerType->getPointedType()->getLLVMType(context), p.second->getValue(), p.second->getOriginVariable() + ".load");
+            assert(generateDecrementReferenceIfPointer(context, new TypedValue(finalizedValue, valuePointerType->getPointedType()), true));
+
+            // PointerType *valuePointerType = static_cast<PointerType *>(p.second->getType());
+            // if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
+            // {
+            //     PointerType *storedPointerType = static_cast<PointerType *>(valuePointerType->getPointedType());
+            //     if (storedPointerType->isManaged())
+            //     {
+            //         llvm::Value *storedManagedPointer = context->irBuilder->CreateLoad(storedPointerType->getLLVMType(context), p.second->getValue(), p.second->getOriginVariable() + ".load");
+            //         if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), true))
+            //         {
+            //             std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
+            //             return NULL;
+            //         }
+            //     }
+            // }
         }
 
         if (context->currentFunctionReturnValuePointer != NULL)
