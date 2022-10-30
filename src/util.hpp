@@ -34,11 +34,11 @@ TypedValue *generateTypeConversion(GenerationContext *context, TypedValue *value
 bool generateAssignment(GenerationContext *context, TypedValue *valuePointer, TypedValue *newValue, bool isVolatile);
 TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *valuePointer);
 TypedValue *generateLoad(GenerationContext *context, TypedValue *valuePointer);
-bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer);
-bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree);
-bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *managedPointer);
-bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree);
-bool generatePanic(GenerationContext *context, std::string reason);
+void generateIncrementReference(GenerationContext *context, TypedValue *managedPointer);
+void generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree);
+void generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *managedPointer);
+void generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree);
+void generatePanic(GenerationContext *context, std::string reason);
 TypedValue *generateUnionIs(GenerationContext *context, TypedValue *unionToCompare, Type *compareType);
 TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unionToConvert, Type *targetType);
 TypedValue *generateUnionGetData(GenerationContext *context, TypedValue *unionToConvert, Type *asType);

@@ -215,24 +215,16 @@ llvm::Type *UnionType::getLLVMDataType(GenerationContext *context) const
 
 llvm::Value *UnionType::createValue(GenerationContext *context, TypedValue *value) const
 {
-    // if (value->getTypeCode() == TypeCode::UNION)
-    // {
-    //     UnionType *valueUnionType = static_cast<UnionType *>(value->getType());
-
-    // }
-
     assert(this->managed && "Unmanaged not supported");
     assert(this->containsType(value->getType()));
 
     uint64_t typeId = context->getTypeId(value->getType());
 
-    std::vector<unsigned int> indices;
-    indices.push_back(0);
-
     auto llvmType = this->getLLVMType(context);
     llvm::Value *llvmUnionValue = llvm::UndefValue::get(llvmType);
 
-    indices[0] = 0;
+    std::vector<unsigned int> indices;
+    indices.push_back(0);
     llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvm::ConstantInt::get(getUnionIdType(*context->context), typeId, false), indices, "union.novalue");
 
     int typeBits = context->module->getDataLayout().getTypeStoreSizeInBits(value->getValue()->getType());
@@ -240,15 +232,6 @@ llvm::Value *UnionType::createValue(GenerationContext *context, TypedValue *valu
 
     auto llvmDataType = this->getLLVMDataType(context);
     llvm::Value *llvmBitCastedValue = context->irBuilder->CreateZExtOrBitCast(llvmValueAsInteger, llvmDataType, "union.value.zext");
-
-    // if (value->getValue()->getType()->isPointerTy())
-    // {
-    //     llvmBitCastedValue = context->irBuilder->CreatePtrToInt(value->getValue(), llvmDataType, "union.value.casted");
-    // }
-    // else
-    // {
-    //     llvmBitCastedValue = context->irBuilder->CreateBitCast(value->getValue(), llvmDataType, "union.value.casted");
-    // }
 
     indices[0] = 1;
     llvmUnionValue = context->irBuilder->CreateInsertValue(llvmUnionValue, llvmBitCastedValue, indices, "union");

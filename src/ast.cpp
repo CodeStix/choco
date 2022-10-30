@@ -1968,7 +1968,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
 
     // TODO: this code will segfault when the declaration hasn't specified a value (previous value is uninitialized)
     llvm::Value *llvmPreviousStoredValue = context->irBuilder->CreateLoad(valuePointerType->getPointedType()->getLLVMType(context), valuePointer->getValue(), valuePointer->getOriginVariable() + ".load");
-    assert(generateDecrementReferenceIfPointer(context, new TypedValue(llvmPreviousStoredValue, valuePointerType->getPointedType()), false));
+    generateDecrementReferenceIfPointer(context, new TypedValue(llvmPreviousStoredValue, valuePointerType->getPointedType()), false);
 
     // if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
     // {
@@ -2227,7 +2227,7 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             PointerType *valuePointerType = static_cast<PointerType *>(p.second->getType());
 
             llvm::Value *finalizedValue = context->irBuilder->CreateLoad(valuePointerType->getPointedType()->getLLVMType(context), p.second->getValue(), p.second->getOriginVariable() + ".load");
-            assert(generateDecrementReferenceIfPointer(context, new TypedValue(finalizedValue, valuePointerType->getPointedType()), true));
+            generateDecrementReferenceIfPointer(context, new TypedValue(finalizedValue, valuePointerType->getPointedType()), true);
 
             // PointerType *valuePointerType = static_cast<PointerType *>(p.second->getType());
             // if (valuePointerType->getPointedType()->getTypeCode() == TypeCode::POINTER)
@@ -2403,10 +2403,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
             std::string twine = pointerToIndex->getOriginVariable() + ".refs";
             llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(context), pointerToIndex->getValue(), indices, twine);
 
-            if (!generateDecrementReferenceIfPointer(context, pointerToIndex, false))
-            {
-                return NULL;
-            }
+            generateDecrementReferenceIfPointer(context, pointerToIndex, false);
 
             return new TypedValue(fieldPointer, (new IntegerType(64, false))->getUnmanagedPointerToType());
         }
@@ -2438,10 +2435,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         std::string twine = pointerToIndex->getOriginVariable() + "." + this->nameToken->value + ".ptr";
         llvm::Value *fieldPointer = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(context), pointerToIndex->getValue(), indices, twine);
 
-        if (!generateDecrementReferenceIfPointer(context, pointerToIndex, false))
-        {
-            return NULL;
-        }
+        generateDecrementReferenceIfPointer(context, pointerToIndex, false);
 
         return new TypedValue(fieldPointer, structField->type->getUnmanagedPointerToType(), twine);
     }

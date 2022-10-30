@@ -34,20 +34,12 @@ TypedValue *generateReferenceAwareLoad(GenerationContext *context, TypedValue *v
     }
 
     // Pointer 'valueToConvert' will be dereferenced, decrease ref count
-    if (!generateDecrementReferenceIfPointer(context, valuePointer, false))
-    {
-        std::cout << "ERROR: generateReferenceAwareLoad(...) could not decrement pointer\n";
-        return NULL;
-    }
+    generateDecrementReferenceIfPointer(context, valuePointer, false);
 
     valuePointer = generateLoad(context, valuePointer);
 
     // Pointer 'valueToConvert' just got loaded, increase ref count
-    if (!generateIncrementReferenceIfPointer(context, valuePointer))
-    {
-        std::cout << "ERROR: generateReferenceAwareLoad(...) could not increment pointer\n";
-        return NULL;
-    }
+    generateIncrementReferenceIfPointer(context, valuePointer);
 
     return valuePointer;
 }
@@ -227,19 +219,12 @@ llvm::Type *getUnionIdType(llvm::LLVMContext &context)
     return llvm::IntegerType::getInt64Ty(context);
 }
 
-bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPointer)
+void generateCallFreeFunction(GenerationContext *context, TypedValue *managedPointer)
 {
-    if (managedPointer->getTypeCode() != TypeCode::POINTER)
-    {
-        std::cout << "WARNING: Cannot generateFreeFunction(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
-        return false;
-    }
+    assert(managedPointer->getTypeCode() == TypeCode::POINTER && "generateCallFreeFunction arg must be pointer");
+
     PointerType *pointerType = static_cast<PointerType *>(managedPointer->getType());
-    if (!pointerType->isManaged())
-    {
-        std::cout << "WARNING: Cannot generateFreeFunction(...) an unmanaged pointer (" << managedPointer->getType()->toString() << ")\n";
-        return false;
-    }
+    assert(pointerType->isManaged() && "generateCallFreeFunction pointer arg must be managed");
 
     llvm::Function *freeFunction;
     llvm::Type *llvmTypeToFree = pointerType->getLLVMPointedType(context);
@@ -278,10 +263,7 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
                 auto fieldPointer = context->irBuilder->CreateGEP(pointerType->getLLVMPointedType(context), pointerArg, indices, "member.free");
                 auto fieldValue = context->irBuilder->CreateLoad(field.type->getLLVMType(context), fieldPointer, "member.free.load");
 
-                if (!generateDecrementReferenceIfPointer(context, new TypedValue(fieldValue, field.type, field.name), true))
-                {
-                    return false;
-                }
+                generateDecrementReferenceIfPointer(context, new TypedValue(fieldValue, field.type, field.name), true);
             }
         }
 
@@ -291,32 +273,20 @@ bool generateCallFreeFunction(GenerationContext *context, TypedValue *managedPoi
 
         context->irBuilder->SetInsertPoint(savedBlock);
 
-        if (llvm::verifyFunction(*freeFunction, &llvm::errs()))
-        {
-            std::cout << "ERROR: LLVM reported invalid free function\n";
-            return false;
-        }
+        assert(!llvm::verifyFunction(*freeFunction, &llvm::errs()));
     }
 
     std::vector<llvm::Value *> params;
     params.push_back(managedPointer->getValue());
     context->irBuilder->CreateCall(freeFunction, params);
-    return true;
 }
 
-bool generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree)
+void generateDecrementReference(GenerationContext *context, TypedValue *managedPointer, bool checkFree)
 {
-    if (managedPointer->getTypeCode() != TypeCode::POINTER)
-    {
-        std::cout << "WARNING: Cannot generateDecrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
-        return false;
-    }
+    assert(managedPointer->getTypeCode() == TypeCode::POINTER && "generateDecrementReference arg must be pointer");
+
     PointerType *pointerType = static_cast<PointerType *>(managedPointer->getType());
-    if (!pointerType->isManaged())
-    {
-        std::cout << "WARNING: Cannot generateDecrementReference(...) an unmanaged pointer (" << managedPointer->getType()->toString() << ")\n";
-        return false;
-    }
+    assert(pointerType->isManaged() && "generateDecrementReference pointer arg must be managed");
 
     std::string twine = managedPointer->getOriginVariable();
 
@@ -350,23 +320,14 @@ bool generateDecrementReference(GenerationContext *context, TypedValue *managedP
 
         context->irBuilder->SetInsertPoint(continueBlock);
     }
-
-    return true;
 }
 
-bool generateIncrementReference(GenerationContext *context, TypedValue *managedPointer)
+void generateIncrementReference(GenerationContext *context, TypedValue *managedPointer)
 {
-    if (managedPointer->getTypeCode() != TypeCode::POINTER)
-    {
-        std::cout << "WARNING: Cannot generateIncrementReference(...) a non pointer (" << managedPointer->getType()->toString() << ")\n";
-        return false;
-    }
+    assert(managedPointer->getTypeCode() == TypeCode::POINTER && "generateIncrementReference arg must be pointer");
+
     PointerType *pointerType = static_cast<PointerType *>(managedPointer->getType());
-    if (!pointerType->isManaged())
-    {
-        std::cout << "WARNING: Cannot generateIncrementReference(...) an unmanaged pointer (" << managedPointer->getType()->toString() << ")\n";
-        return false;
-    }
+    assert(pointerType->isManaged() && "generateIncrementReference pointer arg must be managed");
 
     std::string twine = managedPointer->getOriginVariable();
 
@@ -379,10 +340,9 @@ bool generateIncrementReference(GenerationContext *context, TypedValue *managedP
     // Increase refCount by 1
     refCount = context->irBuilder->CreateAdd(refCount, llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), twine + ".refcount.inc", true, true);
     context->irBuilder->CreateStore(refCount, refCountPointer, false);
-    return true;
 }
 
-bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree)
+void generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer, bool checkFree)
 {
     // Union type could include pointer
     if (maybeManagedPointer->getTypeCode() == TypeCode::UNION)
@@ -402,7 +362,7 @@ bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue 
                 context->irBuilder->SetInsertPoint(okBlock);
                 // At this point, we are sure maybeManagedPointer is containedUnionType
                 auto llvmUnionData = generateUnionGetData(context, maybeManagedPointer, containedUnionType);
-                assert(generateDecrementReference(context, llvmUnionData, checkFree));
+                generateDecrementReference(context, llvmUnionData, checkFree);
                 context->irBuilder->CreateBr(continueBlock);
 
                 context->irBuilder->SetInsertPoint(continueBlock);
@@ -415,13 +375,12 @@ bool generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue 
         PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
         if (loadedPointerType->isManaged())
         {
-            assert(generateDecrementReference(context, maybeManagedPointer, checkFree));
+            generateDecrementReference(context, maybeManagedPointer, checkFree);
         }
     }
-    return true;
 }
 
-bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer)
+void generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer)
 {
     if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
     {
@@ -429,14 +388,9 @@ bool generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue 
         PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
         if (loadedPointerType->isManaged())
         {
-            if (!generateIncrementReference(context, maybeManagedPointer))
-            {
-                std::cout << "ERROR: Could not generate reference counting increase code\n";
-                return false;
-            }
+            generateIncrementReference(context, maybeManagedPointer);
         }
     }
-    return true;
 }
 
 llvm::Value *generateUnionGetTypeId(GenerationContext *context, TypedValue *unionToExtract)
@@ -508,10 +462,7 @@ TypedValue *generateUnionConversion(GenerationContext *context, TypedValue *unio
     llvm::BasicBlock *okBlock = generateUnionIsBranches(context, unionToConvert, targetType);
 
     // After the last block is reached, the value does not match the union, panic
-    if (!generatePanic(context, "Cannot cast " + unionToConvert->getType()->toString() + " to " + targetType->toString()))
-    {
-        return NULL;
-    }
+    generatePanic(context, "Cannot cast " + unionToConvert->getType()->toString() + " to " + targetType->toString());
 
     context->irBuilder->SetInsertPoint(okBlock);
 
@@ -759,7 +710,7 @@ llvm::Value *generateSizeOf(GenerationContext *context, llvm::Type *type, std::s
     return context->irBuilder->CreatePtrToInt(fakePointer, llvm::Type::getInt64Ty(*context->context), twine + ".sizeof.int");
 }
 
-bool generatePanic(GenerationContext *context, std::string reason)
+void generatePanic(GenerationContext *context, std::string reason)
 {
     llvm::Function *panicFunction = context->module->getFunction(panicName);
     if (panicFunction == NULL)
@@ -774,7 +725,6 @@ bool generatePanic(GenerationContext *context, std::string reason)
     parameters.push_back(context->irBuilder->CreateGlobalStringPtr(reason));
     context->irBuilder->CreateCall(panicFunction, parameters);
     context->irBuilder->CreateUnreachable();
-    return true;
 }
 
 llvm::Value *generateMalloc(GenerationContext *context, llvm::Type *type, std::string twine)
