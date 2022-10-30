@@ -9,11 +9,11 @@ GenerationContext::GenerationContext() : context(std::make_unique<llvm::LLVMCont
 {
     this->unionTypeIds.push_back(new NullType());
 #ifndef DEBUG
-    passManager->add(llvm::createMemCpyOptPass());
     passManager->add(llvm::createPromoteMemoryToRegisterPass());
-    passManager->add(llvm::createInstructionCombiningPass());
-    passManager->add(llvm::createReassociatePass());
     passManager->add(llvm::createGVNPass());
+    passManager->add(llvm::createReassociatePass());
+    passManager->add(llvm::createInstructionCombiningPass());
+    passManager->add(llvm::createMemCpyOptPass());
     passManager->add(llvm::createCFGSimplificationPass());
     passManager->add(llvm::createDeadCodeEliminationPass());
 #endif
