@@ -1550,7 +1550,9 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             {
                 if (left->getTypeCode() == TypeCode::UNION)
                 {
-                    return generateUnionIs(context, left, right->getType());
+                    auto isValue = generateUnionIs(context, left, right->getType());
+                    generateDecrementReferenceIfPointer(context, left, false);
+                    return isValue;
                 }
                 else
                 {
@@ -2296,7 +2298,7 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
 
     context->irBuilder->SetInsertPoint(loopStartBlock);
     loopStartBlock->insertInto(parentFunction);
-    auto loopScope = new FunctionScope(*scope);
+    auto loopScope = scope; // TODO: new FunctionScope(*scope); This does not work because finalizers will not free
     this->loopBody->generateLLVM(context, loopScope, NULL, true);
 
     TypedValue *conditionValue = this->condition->generateLLVM(context, loopScope, &BOOL_TYPE, false);
@@ -2315,7 +2317,7 @@ TypedValue *ASTWhileStatement::generateLLVM(GenerationContext *context, Function
 
     context->irBuilder->SetInsertPoint(elseStartBlock);
     elseStartBlock->insertInto(parentFunction);
-    auto elseScope = new FunctionScope(*scope);
+    auto elseScope = scope; // TODO: new FunctionScope(*scope); This does not work because finalizers will not free
     if (this->elseBody != NULL)
     {
         this->elseBody->generateLLVM(context, elseScope, NULL, true);
@@ -2469,7 +2471,7 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 
     context->irBuilder->SetInsertPoint(thenStartBlock);
     thenStartBlock->insertInto(parentFunction);
-    auto thenScope = new FunctionScope(*scope);
+    auto thenScope = scope; // TODO: new FunctionScope(*scope); This does not work because finalizers will not free
     this->thenBody->generateLLVM(context, thenScope, NULL, true);
 
     llvm::BasicBlock *thenEndBlock = context->irBuilder->GetInsertBlock(); // Current block could have changed in generateLLVM calls above, update it here
@@ -2480,7 +2482,7 @@ TypedValue *ASTIfStatement::generateLLVM(GenerationContext *context, FunctionSco
 
     context->irBuilder->SetInsertPoint(elseStartBlock);
     elseStartBlock->insertInto(parentFunction);
-    auto elseScope = new FunctionScope(*scope);
+    auto elseScope = scope; // TODO: new FunctionScope(*scope); This does not work because finalizers will not free
     if (this->elseBody != NULL)
     {
         this->elseBody->generateLLVM(context, elseScope, NULL, true);
