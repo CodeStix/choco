@@ -382,7 +382,32 @@ void generateDecrementReferenceIfPointer(GenerationContext *context, TypedValue 
 
 void generateIncrementReferenceIfPointer(GenerationContext *context, TypedValue *maybeManagedPointer)
 {
-    if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
+    // Union type could include pointer
+    if (maybeManagedPointer->getTypeCode() == TypeCode::UNION)
+    {
+        UnionType *unionType = static_cast<UnionType *>(maybeManagedPointer->getType());
+
+        // Check if union contains pointer types
+        for (Type *containedUnionType : unionType->getTypes())
+        {
+            // If the union can be a pointer
+            if (containedUnionType->getTypeCode() == TypeCode::POINTER && static_cast<PointerType *>(containedUnionType)->isManaged())
+            {
+                auto okBlock = generateUnionIsBranches(context, maybeManagedPointer, containedUnionType);
+                llvm::BasicBlock *continueBlock = llvm::BasicBlock::Create(*context->context, "union.ref.inc.continue", context->irBuilder->GetInsertBlock()->getParent());
+                context->irBuilder->CreateBr(continueBlock);
+
+                context->irBuilder->SetInsertPoint(okBlock);
+                // At this point, we are sure maybeManagedPointer is containedUnionType
+                auto llvmUnionData = generateUnionGetData(context, maybeManagedPointer, containedUnionType);
+                generateIncrementReference(context, llvmUnionData);
+                context->irBuilder->CreateBr(continueBlock);
+
+                context->irBuilder->SetInsertPoint(continueBlock);
+            }
+        }
+    }
+    else if (maybeManagedPointer->getTypeCode() == TypeCode::POINTER)
     {
         // Increase reference count for loaded pointer
         PointerType *loadedPointerType = static_cast<PointerType *>(maybeManagedPointer->getType());
