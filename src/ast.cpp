@@ -1218,28 +1218,21 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
             llvm::ConstantInt *llvmTimesValue = llvm::cast<llvm::ConstantInt>(timesValue->getValue());
             uint64_t timesInt = llvmTimesValue->getValue().getZExtValue();
 
-            arrayType = new ArrayType(segmentValues[0]->getType(), timesInt, this->managed);
+            arrayType = new ArrayType(segmentValues[0]->getType(), timesInt, this->value, this->managed);
         }
         else
         {
             if (this->value)
             {
-                std::cout << "ERROR: Value array must have known item count (size)\n";
+                std::cout << "ERROR: Value array must have known item count\n";
                 exit(-1);
                 return NULL;
             }
 
-            arrayType = new ArrayType(segmentValues[0]->getType(), this->managed);
+            arrayType = new ArrayType(segmentValues[0]->getType(), this->value, this->managed);
         }
 
-        if (this->value)
-        {
-            return new TypedValue(NULL, arrayType);
-        }
-        else
-        {
-            return new TypedValue(NULL, new PointerType(arrayType, this->managed));
-        }
+        return new TypedValue(NULL, arrayType);
     }
     else
     {
@@ -1280,7 +1273,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
                 return NULL;
             }
 
-            typeHint = new ArrayType(arrayItemType, arrayItemCount, this->managed);
+            typeHint = new ArrayType(arrayItemType, arrayItemCount, this->value, this->managed);
         }
         else
         {
@@ -1330,7 +1323,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
                 std::vector<llvm::Value *> indices;
                 indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context->context), 0, false));
                 indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context->context), i, false));
-                auto llvmArrayItemPtr = context->irBuilder->CreateGEP(llvmArrayValue, indices, "array.set." + std::to_string(i) + ".gep");
+                auto llvmArrayItemPtr = context->irBuilder->CreateGEP(llvmArrayType, llvmArrayValue, indices, "array.set." + std::to_string(i) + ".gep");
                 context->irBuilder->CreateStore(llvmValue, llvmArrayItemPtr, false);
             }
         }
@@ -1341,15 +1334,20 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
         }
         else
         {
-            return new TypedValue(llvmArrayValue, new PointerType(arrayType, this->managed));
+            if (this->managed)
+            {
+            }
+            else
+            {
+                return new TypedValue(llvmArrayValue, arrayType->getUnmanagedPointerToType());
+            }
         }
     }
 }
 
 TypedValue *ASTArraySegment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
-    assert(false && "Unimplemented");
-    return NULL;
+    return this->value->generateLLVM(context, scope, typeHint, expectPointer);
 }
 
 TypedValue *ASTNullCoalesce::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)

@@ -363,7 +363,9 @@ public:
     }
 
 private:
+    // True if a ref count field should be emitted
     bool managed;
+    // True if a length field should be emitted (does point to multiple objects of the same type)
     Type *pointedType;
 };
 
@@ -417,8 +419,8 @@ private:
 class ArrayType : public Type
 {
 public:
-    ArrayType(Type *innerType, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(-1), managed(managed) {}
-    ArrayType(Type *innerType, int64_t count, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(count), managed(managed) {}
+    ArrayType(Type *innerType, bool value, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(-1), value(value), managed(managed) {}
+    ArrayType(Type *innerType, int64_t count, bool value, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(count), value(value), managed(managed) {}
 
     bool operator==(const Type &b) const override
     {
@@ -452,10 +454,13 @@ public:
         return this->count;
     }
 
+    static llvm::Type *getLLVMLengthFieldType(GenerationContext *context);
+
 private:
-    bool managed;
     int64_t count;
     Type *innerType;
+    bool value;
+    bool managed;
 };
 
 class StructTypeField
