@@ -417,20 +417,44 @@ private:
 class ArrayType : public Type
 {
 public:
-    ArrayType(Type *innerType, uint64_t count) : Type(TypeCode::ARRAY), innerType(innerType), count(count), knownCount(true) {}
+    ArrayType(Type *innerType, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(-1), managed(managed) {}
+    ArrayType(Type *innerType, int64_t count, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(count), managed(managed) {}
 
     bool operator==(const Type &b) const override
     {
-        return false;
+        if (b.getTypeCode() == TypeCode::ARRAY)
+        {
+            auto other = static_cast<const ArrayType &>(b);
+            return other.count == this->count && *other.innerType == *this->innerType;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     llvm::Type *getLLVMType(GenerationContext *context) const override;
 
     std::string toString() override;
 
+    bool hasKnownCount()
+    {
+        return this->count >= 0;
+    }
+
+    Type *getItemType()
+    {
+        return this->innerType;
+    }
+
+    int64_t getCount()
+    {
+        return this->count;
+    }
+
 private:
-    bool knownCount;
-    uint64_t count;
+    bool managed;
+    int64_t count;
     Type *innerType;
 };
 
@@ -482,5 +506,6 @@ extern IntegerType BYTE_TYPE;
 extern IntegerType CHAR_TYPE;
 extern IntegerType BOOL_TYPE;
 extern IntegerType UINT32_TYPE;
+extern IntegerType UINT64_TYPE;
 
 std::string typeCodeToString(TypeCode code);

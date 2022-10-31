@@ -1200,8 +1200,150 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
 
 TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
-    assert(false && "Unimplemented");
-    return NULL;
+    std::vector<TypedValue *> segmentValues;
+    for (auto v : this->values)
+    {
+        segmentValues.push_back(v->generateLLVM(context, scope, NULL, false));
+    }
+
+    if (segmentValues.size() == 1 && segmentValues[0]->isType())
+    {
+        // This is an array type
+
+        ArrayType *arrayType = NULL;
+        auto times = this->values[0]->getTimes();
+        if (times != NULL)
+        {
+            TypedValue *timesValue = times->generateLLVM(context, scope, &UINT64_TYPE, false);
+            llvm::ConstantInt *llvmTimesValue = llvm::cast<llvm::ConstantInt>(timesValue->getValue());
+            uint64_t timesInt = llvmTimesValue->getValue().getZExtValue();
+
+            arrayType = new ArrayType(segmentValues[0]->getType(), timesInt, this->managed);
+        }
+        else
+        {
+            if (this->value)
+            {
+                std::cout << "ERROR: Value array must have known item count (size)\n";
+                exit(-1);
+                return NULL;
+            }
+
+            arrayType = new ArrayType(segmentValues[0]->getType(), this->managed);
+        }
+
+        if (this->value)
+        {
+            return new TypedValue(NULL, arrayType);
+        }
+        else
+        {
+            return new TypedValue(NULL, new PointerType(arrayType, this->managed));
+        }
+    }
+    else
+    {
+        // TODO allow empty arrayoj
+        assert(segmentValues.size() > 0);
+
+        uint64_t arrayItemCount = 0;
+        Type *arrayItemType = segmentValues[0]->getType();
+        std::vector<llvm::Value *> llvmArrayValues;
+        for (int i = 0; i < segmentValues.size(); i++)
+        {
+            if (*segmentValues[i]->getType() != *arrayItemType)
+            {
+                std::cout << "ERROR: All values in the array must be of the same type " << arrayItemType->toString() << "\n";
+                exit(-1);
+                return NULL;
+            }
+
+            TypedValue *timesValue = this->values[i]->generateLLVM(context, scope, &UINT64_TYPE, false);
+            llvm::ConstantInt *llvmTimesValue = llvm::cast<llvm::ConstantInt>(timesValue->getValue());
+            uint64_t timesInt = llvmTimesValue->getValue().getZExtValue();
+
+            for (uint64_t j = 0; j < timesInt; j++)
+            {
+                llvmArrayValues.push_back(segmentValues[i]->getValue());
+            }
+
+            arrayItemCount += timesInt;
+        }
+
+        if (typeHint == NULL)
+        {
+            // Infer type
+            if (segmentValues.size() == 0)
+            {
+                std::cout << "ERROR: It is impossible to infer empty array type\n";
+                exit(-1);
+                return NULL;
+            }
+
+            typeHint = new ArrayType(arrayItemType, arrayItemCount, this->managed);
+        }
+        else
+        {
+            if (typeHint->getTypeCode() != TypeCode::ARRAY)
+            {
+                std::cout << "ERROR: Array cannot assign to type " << typeHint->toString() << "\n";
+                return NULL;
+            }
+
+            ArrayType *arrayTypeHint = static_cast<ArrayType *>(typeHint);
+            if (*arrayItemType != *arrayTypeHint->getItemType() || (arrayTypeHint->hasKnownCount() && arrayTypeHint->getCount() != arrayItemCount))
+            {
+                std::cout << "ERROR: Array cannot assign to type " << typeHint->toString() << ", invalid count or item type\n";
+                return NULL;
+            }
+        }
+
+        ArrayType *arrayType = static_cast<ArrayType *>(typeHint);
+        llvm::ArrayType *llvmArrayType = llvm::cast<llvm::ArrayType>(arrayType->getLLVMType(context));
+        llvm::Type *llvmArrayItemType = arrayItemType->getLLVMType(context);
+
+        llvm::Value *llvmArrayValue;
+        if (this->value)
+        {
+            std::vector<llvm::Constant *> llvmUndefValues;
+            for (auto v : llvmArrayValues)
+            {
+                llvmUndefValues.push_back(llvm::UndefValue::get(llvmArrayItemType));
+            }
+            llvmArrayValue = llvm::ConstantArray::get(llvmArrayType, llvmUndefValues);
+        }
+        else
+        {
+            llvmArrayValue = generateMalloc(context, llvm::ArrayType::get(llvmArrayItemType, arrayItemCount), "array.malloc");
+        }
+
+        for (uint64_t i = 0; i < arrayItemCount; i++)
+        {
+            llvm::Value *llvmValue = llvmArrayValues[i];
+
+            if (this->value)
+            {
+                llvmArrayValue = context->irBuilder->CreateInsertValue(llvmArrayValue, llvmValue, (unsigned int)i, "array.set." + std::to_string(i));
+            }
+            else
+            {
+                std::vector<llvm::Value *> indices;
+                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context->context), 0, false));
+                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context->context), i, false));
+                auto llvmArrayItemPtr = context->irBuilder->CreateGEP(llvmArrayValue, indices, "array.set." + std::to_string(i) + ".gep");
+                context->irBuilder->CreateStore(llvmValue, llvmArrayItemPtr, false);
+            }
+        }
+
+        if (this->value)
+        {
+            return new TypedValue(llvmArrayValue, arrayType);
+        }
+        else
+        {
+            return new TypedValue(llvmArrayValue, new PointerType(arrayType, this->managed));
+        }
+    }
 }
 
 TypedValue *ASTArraySegment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)

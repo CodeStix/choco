@@ -7,6 +7,7 @@ IntegerType BYTE_TYPE(8, false);
 IntegerType CHAR_TYPE(8, false);
 IntegerType BOOL_TYPE(1, false);
 IntegerType UINT32_TYPE(32, false);
+IntegerType UINT64_TYPE(64, false);
 
 PointerType *Type::getUnmanagedPointerToType()
 {
@@ -435,14 +436,15 @@ std::string FunctionType::toString()
 
 llvm::Type *ArrayType::getLLVMType(GenerationContext *context) const
 {
-    return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
+    // Return a 0 sized array when this array is dynamically sized (can use getelemptr trick)
+    return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count <= 0 ? 0 : this->count);
 }
 
 std::string ArrayType::toString()
 {
     std::string str = "[";
     str += this->innerType->toString();
-    if (this->knownCount)
+    if (this->count >= 0)
     {
         str += " # ";
         str += std::to_string(this->count);
