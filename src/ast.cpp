@@ -1054,6 +1054,8 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
         else if (typeHint->getTypeCode() == TypeCode::POINTER)
         {
             std::cout << "ERROR: null can only be assigned to a nullable pointer (please union it with null)\n";
+            exit(-1);
+
             return NULL;
         }
         else if (typeHint->getTypeCode() == TypeCode::UNION)
@@ -1067,12 +1069,16 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
             else
             {
                 std::cout << "ERROR: null not assignable to union " << typeHint->toString() << " (please add it)\n";
+                exit(-1);
+
                 return NULL;
             }
         }
         else
         {
             std::cout << "ERROR: null is not assignable to " << typeHint->toString() << "\n";
+            exit(-1);
+
             return NULL;
         }
     }
@@ -1084,6 +1090,8 @@ TypedValue *ASTSymbol::generateLLVM(GenerationContext *context, FunctionScope *s
         if (!valuePointer)
         {
             std::cout << "ERROR: Could not find '" << this->nameToken->value << "'\n";
+            exit(-1);
+
             return NULL;
         }
     }
@@ -1133,6 +1141,8 @@ TypedValue *ASTLiteralNumber::generateLLVM(GenerationContext *context, FunctionS
             if (isFloating)
             {
                 std::cout << "ERROR: a number literal cannot have multiple periods\n";
+                exit(-1);
+
                 return NULL;
             }
             isFloating = true;
@@ -1240,12 +1250,16 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
         else
         {
             std::cout << "ERROR: Unexpected struct, expected " << typeHint->toString() << "\n";
+            exit(-1);
+
             return NULL;
         }
 
         if (this->value || !this->managed || this->packed)
         {
             std::cout << "ERROR: Struct modifier cannot be specified again\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -1255,6 +1269,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             if (hintField == NULL)
             {
                 std::cout << "ERROR: Struct field " << field->getName() << " does not exist on type " << typeHint->toString() << "\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1262,6 +1278,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             if (fieldValue->isType())
             {
                 std::cout << "ERROR: Struct field cannot be initialized with a type\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1285,6 +1303,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             if (fieldValue->isType() != isType)
             {
                 std::cout << "ERROR: cannot mix value and type structs\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1318,6 +1338,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
                 if (!convertedFieldValue)
                 {
                     std::cout << "ERROR: Could not set field " << fieldName << " of value struct initialization\n";
+                    exit(-1);
+
                     return NULL;
                 }
 
@@ -1374,6 +1396,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
                 if (!generateAssignment(context, structFieldPointerValue, fieldValue, isVolatile))
                 {
                     std::cout << "ERROR: Cannot initialize struct field " << fieldName << " of " << structType->toString() << "\n";
+                    exit(-1);
+
                     return NULL;
                 }
             }
@@ -1385,6 +1409,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             if (fieldValues[field.name] == NULL)
             {
                 std::cout << "ERROR: Struct field " << field.name << " of " << structType->toString() << " must be initialized\n";
+                exit(-1);
+
                 return NULL;
             }
         }
@@ -1408,6 +1434,8 @@ TypedValue *ASTStruct::generateLLVM(GenerationContext *context, FunctionScope *s
             if (!context->globalModule->addValue(this->nameToken->value, type))
             {
                 std::cout << "ERROR: The struct '" << this->nameToken->value << "' has already been declared";
+                exit(-1);
+
                 return NULL;
             }
         }
@@ -1449,6 +1477,8 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
             if (!intType->getSigned())
             {
                 std::cout << "ERROR: integer must be signed to be able to negate\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1458,6 +1488,8 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
         else
         {
             std::cout << "ERROR: Cannot use operator " << this->operatorToken->value << " on value\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -1470,11 +1502,15 @@ TypedValue *ASTUnaryOperator::generateLLVM(GenerationContext *context, FunctionS
         else
         {
             std::cout << "ERROR: Cannot use operator " << this->operatorToken->value << " on value\n";
+            exit(-1);
+
             return NULL;
         }
 
     default:
         std::cout << "ERROR: Unimplemented unary operator " << this->operatorToken->value << "\n";
+        exit(-1);
+
         return NULL;
     }
 }
@@ -1489,6 +1525,8 @@ TypedValue *ASTCast::generateLLVM(GenerationContext *context, FunctionScope *sco
     if (targetType == NULL || !targetType->isType())
     {
         std::cout << "ERROR: Left-hand side of cast must be a type (got a value)\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -1496,6 +1534,8 @@ TypedValue *ASTCast::generateLLVM(GenerationContext *context, FunctionScope *sco
     if (value == NULL || value->isType())
     {
         std::cout << "ERROR: Right-hand side of cast must be a value (got a type)\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -1527,6 +1567,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             if (!(left->isType() && right->isType()))
             {
                 std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1539,6 +1581,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             if (!right->isType())
             {
                 std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1557,6 +1601,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
                 else
                 {
                     std::cout << "ERROR: Cannot perform is operator on " << left->getType()->toString() << "\n";
+                    exit(-1);
+
                     return NULL;
                 }
             }
@@ -1566,6 +1612,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             if (!(left->isType() && right->isType()))
             {
                 std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on type and value\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -1608,6 +1656,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         else
         {
             std::cout << "ERROR: Cannot perform operator " << this->operatorToken->value << " on types\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -1631,6 +1681,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         if (!generateTypeJugging(context, &left, &right))
         {
             std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, their types cannot be matched\n";
+            exit(-1);
+
             return NULL;
         }
     }
@@ -1639,6 +1691,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         if (*left->getType() != *right->getType())
         {
             std::cout << "ERROR: Left and right operands must be the same type to perform " << this->operatorToken->value << "\n";
+            exit(-1);
+
             return NULL;
         }
     }
@@ -1710,6 +1764,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
         case TokenType::OPERATOR_CARET:
         default:
             std::cout << "ERROR: Invalid operator '" << this->operatorToken->value << "' on floats\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -1818,6 +1874,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             if (leftIntegerType->getBitSize() != 1 || rightIntegerType->getBitSize() != 1)
             {
                 std::cout << "ERROR: Logical and operator can only be used on booleans\n";
+                exit(-1);
+
                 return NULL;
             }
             result = context->irBuilder->CreateAnd(leftValue, rightValue, "opandint");
@@ -1830,6 +1888,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
             if (leftIntegerType->getBitSize() != 1 || rightIntegerType->getBitSize() != 1)
             {
                 std::cout << "ERROR: Logical or operator can only be used on booleans\n";
+                exit(-1);
+
                 return NULL;
             }
             result = context->irBuilder->CreateOr(leftValue, rightValue, "oporint");
@@ -1847,6 +1907,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 
         default:
             std::cout << "ERROR: Invalid operator '" << this->operatorToken->value << "' on integers\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -1855,6 +1917,8 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
     else
     {
         std::cout << "ERROR: Cannot " << this->operatorToken->value << " values, the type does not support this operator\n";
+        exit(-1);
+
         return NULL;
     }
 }
@@ -1878,6 +1942,8 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     if (scope->hasValue(this->nameToken->value))
     {
         std::cout << "ERROR: Cannot redeclare '" << this->nameToken->value << "', it has already been declared\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -1888,6 +1954,8 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         if (!specifiedTypeValue->isType())
         {
             std::cout << "ERROR: Declaration type specifier may not have value\n";
+            exit(-1);
+
             return NULL;
         }
         specifiedType = specifiedTypeValue->getType();
@@ -1907,6 +1975,8 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         initialValue = NULL;
         // TODO: remove this error when unimplemented variables have been implemented
         std::cout << "ERROR: Declaration must have initial value (due to uninitialized variables not being implemented)\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -1924,6 +1994,8 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
         else
         {
             std::cout << "ERROR: Declaration type must be specified when value is missing\n";
+            exit(-1);
+
             return NULL;
         }
     }
@@ -1934,6 +2006,8 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     if (!scope->addValue(this->nameToken->value, valuePointer))
     {
         std::cout << "ERROR: Cannot generate declaration for " << this->nameToken->value << "\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -1941,6 +2015,8 @@ TypedValue *ASTDeclaration::generateLLVM(GenerationContext *context, FunctionSco
     if (!generateAssignment(context, valuePointer, initialValue, isVolatile))
     {
         std::cout << "ERROR: Cannot generate declaration for " << this->nameToken->value << "\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -1959,11 +2035,15 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     if (valuePointer == NULL)
     {
         std::cout << "ERROR: Cannot set variable '" << valuePointer->getOriginVariable() << "', it is not found\n";
+        exit(-1);
+
         return NULL;
     }
     if (valuePointer->getTypeCode() != TypeCode::POINTER)
     {
         std::cout << "ERROR: Assert failed: valuePointer->getTypeCode() != TypeCode::POINTER\n";
+        exit(-1);
+
         return NULL;
     }
     PointerType *valuePointerType = static_cast<PointerType *>(valuePointer->getType());
@@ -1982,6 +2062,8 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     //         if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), false))
     //         {
     //             std::cout << "ERROR: Could not generate decrement managed pointer code for assignment\n";
+    // exit(-1);
+
     //             return NULL;
     //         }
     //     }
@@ -1992,6 +2074,7 @@ TypedValue *ASTAssignment::generateLLVM(GenerationContext *context, FunctionScop
     if (!generateAssignment(context, valuePointer, newValue, isVolatile))
     {
         std::cout << "ERROR: Cannot generate assignment\n";
+        exit(-1);
         return NULL;
     }
 
@@ -2009,6 +2092,7 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         if (returnType == NULL)
         {
             std::cout << "ERROR: Function does not return value\n";
+            exit(-1);
             return NULL;
         }
 
@@ -2016,6 +2100,8 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         if (value == NULL)
         {
             std::cout << "ERROR: Could not generate return value\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -2023,6 +2109,8 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         if (newValue == NULL)
         {
             std::cout << "ERROR: Cannot convert return value in function\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -2035,6 +2123,8 @@ TypedValue *ASTReturn::generateLLVM(GenerationContext *context, FunctionScope *s
         if (returnType != NULL)
         {
             std::cout << "ERROR: Return statement must provide a value\n";
+            exit(-1);
+
             return NULL;
         }
         context->irBuilder->CreateBr(context->currentFunctionReturnBlock);
@@ -2091,6 +2181,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         if (!parameterTypeValue->isType())
         {
             std::cout << "ERROR: parameter type specifier may not have value\n";
+            exit(-1);
+
             return NULL;
         }
         parameters.push_back(FunctionParameter(parameterTypeValue->getType(), parameter->getParameterName()));
@@ -2103,6 +2195,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         if (!returnTypeValue->isType())
         {
             std::cout << "ERROR: return type specifier may not have value\n";
+            exit(-1);
+
             return NULL;
         }
         returnType = returnTypeValue->getType();
@@ -2121,6 +2215,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     if (function == NULL)
     {
         std::cout << "ERROR: Function::Create returned null\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -2159,6 +2255,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
     if (!context->globalModule->addValue(this->nameToken->value, newFunctionPointerType))
     {
         std::cout << "ERROR: The function '" << this->nameToken->value << "' has already been declared";
+        exit(-1);
+
         return NULL;
     }
 
@@ -2168,6 +2266,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         if (!function->empty())
         {
             std::cout << "ERROR: Cannot implement the '" << this->nameToken->value << "' function a second time\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -2189,6 +2289,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             if (!parameterTypeValue->isType())
             {
                 std::cout << "ERROR: parameter type specifier may not have value\n";
+                exit(-1);
+
                 return NULL;
             }
             Type *parameterType = parameterTypeValue->getType();
@@ -2211,6 +2313,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             else
             {
                 std::cout << "ERROR: Function '" << this->nameToken->value << "' must return a value in all execution paths\n";
+                exit(-1);
+
                 return NULL;
             }
         }
@@ -2241,6 +2345,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
             //         if (!generateDecrementReference(context, new TypedValue(storedManagedPointer, storedPointerType), true))
             //         {
             //             std::cout << "ERROR: Could not generate decrement managed pointer code for return\n";
+            // exit(-1);
+
             //             return NULL;
             //         }
             //     }
@@ -2262,6 +2368,8 @@ TypedValue *ASTFunction::generateLLVM(GenerationContext *context, FunctionScope 
         if (llvm::verifyFunction(*function, &llvm::errs()))
         {
             std::cout << "ERROR: LLVM reported invalid function\n";
+            exit(-1);
+
             return NULL;
         }
 
@@ -2345,6 +2453,8 @@ TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, Functi
     TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope, NULL, true);
     TypedValue *indexValue = this->index->generateLLVM(context, scope, &UINT32_TYPE, false);
     std::cout << "ERROR: Index dereference not implemented\n";
+    exit(-1);
+
     return NULL;
 }
 
@@ -2365,6 +2475,8 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
             if (moduleValue == NULL)
             {
                 std::cout << "ERROR: '" << this->nameToken->value << "' cannot be found in module '" << mod->getFullName() << "'\n";
+                exit(-1);
+
                 return NULL;
             }
             return moduleValue;
@@ -2372,6 +2484,8 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         else
         {
             std::cout << "ERROR: Type has no members to dereference\n";
+            exit(-1);
+
             return NULL;
         }
     }
@@ -2380,6 +2494,8 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     if (pointerToIndex == NULL)
     {
         std::cout << "ERROR: Member dereference only supports pointers\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -2395,6 +2511,8 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
             if (!pointerTypeToIndex->isManaged())
             {
                 std::cout << "ERROR: Cannot read reference count of unmanaged object\n";
+                exit(-1);
+
                 return NULL;
             }
 
@@ -2414,6 +2532,8 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
         if (fieldIndex < 0)
         {
             std::cout << "ERROR: Cannot access member '" << this->nameToken->value << "' of struct\n";
+            exit(-1);
+
             return NULL;
         }
         StructTypeField *structField = structType->getField(this->nameToken->value);
@@ -2444,6 +2564,8 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
     else
     {
         std::cout << "ERROR: Member dereference only supports structs\n";
+        exit(-1);
+
         return NULL;
     }
 }
@@ -2512,18 +2634,24 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
     if (functionValue == NULL)
     {
         std::cout << "ERROR: Function to call not found\n";
+        exit(-1);
+
         return NULL;
     }
 
     if (functionValue->getTypeCode() != TypeCode::POINTER)
     {
         std::cout << "ERROR: Cannot invoke '" << functionValue->getOriginVariable() << "', it must be a pointer\n";
+        exit(-1);
+
         return NULL;
     }
     PointerType *functionPointerType = static_cast<PointerType *>(functionValue->getType());
     if (functionPointerType->getPointedType()->getTypeCode() != TypeCode::FUNCTION)
     {
         std::cout << "ERROR: Cannot invoke '" << functionValue->getOriginVariable() << "', it must be a function pointer\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -2536,6 +2664,8 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
     if (actualParameterCount != parameterCount)
     {
         std::cout << "ERROR: Invalid amount of parameters for function '" << functionValue->getOriginVariable() << "' invocation, expected " << actualParameterCount << ", got " << parameterCount << "\n";
+        exit(-1);
+
         return NULL;
     }
 
@@ -2555,11 +2685,15 @@ TypedValue *ASTInvocation::generateLLVM(GenerationContext *context, FunctionScop
         if (convertedValue == NULL)
         {
             std::cout << "ERROR: Cannot convert value '" << parameter.name << "' for invoke '" << functionValue->getOriginVariable() << "'\n";
+            exit(-1);
+
             return NULL;
         }
         if (convertedValue->isType())
         {
             std::cout << "ERROR: Types cannot be passed as parameters\n";
+            exit(-1);
+
             return NULL;
         }
         parameterValues.push_back(convertedValue->getValue());
