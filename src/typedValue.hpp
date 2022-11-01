@@ -437,6 +437,10 @@ public:
 
     llvm::Type *getLLVMType(GenerationContext *context) const override;
 
+    llvm::StructType *getLLVMLengthStructType(GenerationContext *context) const;
+
+    llvm::Type *getLLVMArrayPointerType(GenerationContext *context) const;
+
     std::string toString() override;
 
     bool hasKnownCount()
@@ -452,6 +456,16 @@ public:
     int64_t getCount()
     {
         return this->count;
+    }
+
+    bool getManaged()
+    {
+        return this->managed;
+    }
+
+    bool getByValue()
+    {
+        return this->value;
     }
 
     static llvm::Type *getLLVMLengthFieldType(GenerationContext *context);

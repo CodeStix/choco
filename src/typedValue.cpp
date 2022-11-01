@@ -371,8 +371,6 @@ std::string PointerType::toString()
     std::string str = "";
     if (this->managed)
         str += "m";
-    if (this->sized)
-        str += "s";
     str += "*";
     if (this->pointedType != NULL)
     {
@@ -439,42 +437,40 @@ std::string FunctionType::toString()
     return str;
 }
 
-llvm::Type *ArrayType::getLLVMAllocType(GenerationContext *context) const
+llvm::Type *ArrayType::getLLVMArrayPointerType(GenerationContext *context) const
 {
+    return (new PointerType(new ArrayType(this->innerType, true, false), this->managed))->getLLVMType(context);
+}
+
+llvm::StructType *ArrayType::getLLVMLengthStructType(GenerationContext *context) const
+{
+    assert(this->managed);
+
     std::vector<llvm::Type *> llvmLengthStructFields;
     llvmLengthStructFields.push_back(getLLVMLengthFieldType(context));
-    llvmLengthStructFields.push_back(llvmLengthArrayPointer);
+    llvmLengthStructFields.push_back(this->getLLVMArrayPointerType(context));
     return llvm::StructType::get(*context->context, llvmLengthStructFields, false);
 }
 
 llvm::Type *ArrayType::getLLVMType(GenerationContext *context) const
 {
-    // Use a 0 sized array when this array is dynamically sized (can use getelemptr trick)
-    auto llvmArrayType = llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count <= 0 ? 0 : this->count);
     if (this->value)
     {
-        return llvmArrayType;
+        return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count < 0 ? 0 : this->count);
     }
     else
     {
+        // Use a 0 sized array (can use getelemptr trick)
+        auto llvmArrayType = llvm::ArrayType::get(this->innerType->getLLVMType(context), 0);
         if (this->managed)
         {
-            auto arrayPointerType = new PointerType(new ArrayType(this->innerType, this->count, true, false), true);
-
-            std::vector<llvm::Type *> llvmLengthStructFields;
-            llvmLengthStructFields.push_back(getLLVMLengthFieldType(context));
-            llvmLengthStructFields.push_back(arrayPointerType->getLLVMType(context));
-            return llvm::StructType::get(*context->context, llvmLengthStructFields, false);
+            return this->getLLVMLengthStructType(context);
         }
         else
         {
             return llvmArrayType->getPointerTo();
         }
     }
-}
-
-llvm::Value *ArrayType::createLLVMValue(GenerationContext *context)
-{
 }
 
 llvm::Type *ArrayType::getLLVMLengthFieldType(GenerationContext *context)

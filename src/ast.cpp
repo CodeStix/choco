@@ -1203,7 +1203,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
     std::vector<TypedValue *> segmentValues;
     for (auto v : this->values)
     {
-        segmentValues.push_back(v->generateLLVM(context, scope, NULL, false));
+        segmentValues.push_back(v->getValue()->generateLLVM(context, scope, NULL, false));
     }
 
     if (segmentValues.size() == 1 && segmentValues[0]->isType())
@@ -1236,8 +1236,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
     }
     else
     {
-        // TODO allow empty arrayoj
-        assert(segmentValues.size() > 0);
+        assert(segmentValues.size() > 0 && "TODO allow empty array");
 
         uint64_t arrayItemCount = 0;
         Type *arrayItemType = segmentValues[0]->getType();
@@ -1251,9 +1250,19 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
                 return NULL;
             }
 
-            TypedValue *timesValue = this->values[i]->generateLLVM(context, scope, &UINT64_TYPE, false);
-            llvm::ConstantInt *llvmTimesValue = llvm::cast<llvm::ConstantInt>(timesValue->getValue());
-            uint64_t timesInt = llvmTimesValue->getValue().getZExtValue();
+            ASTNode *timesNode = this->values[i]->getTimes();
+
+            uint64_t timesInt;
+            if (timesNode != NULL)
+            {
+                TypedValue *timesValue = timesNode->generateLLVM(context, scope, &UINT64_TYPE, false);
+                llvm::ConstantInt *llvmTimesValue = llvm::cast<llvm::ConstantInt>(timesValue->getValue());
+                timesInt = llvmTimesValue->getValue().getZExtValue();
+            }
+            else
+            {
+                timesInt = 1;
+            }
 
             for (uint64_t j = 0; j < timesInt; j++)
             {
@@ -1284,62 +1293,88 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
             }
 
             ArrayType *arrayTypeHint = static_cast<ArrayType *>(typeHint);
-            if (*arrayItemType != *arrayTypeHint->getItemType() || (arrayTypeHint->hasKnownCount() && arrayTypeHint->getCount() != arrayItemCount))
+            if (*arrayItemType != *arrayTypeHint->getItemType() || (arrayTypeHint->hasKnownCount() && arrayTypeHint->getCount() != arrayItemCount) /* || arrayTypeHint->getManaged() != this->managed || arrayTypeHint->getByValue() != this->value*/)
             {
-                std::cout << "ERROR: Array cannot assign to type " << typeHint->toString() << ", invalid count or item type\n";
+                std::cout << "ERROR: Array cannot assign to type " << typeHint->toString() << ", invalid count, item type, managed or value\n";
                 return NULL;
             }
         }
 
         ArrayType *arrayType = static_cast<ArrayType *>(typeHint);
-        llvm::ArrayType *llvmArrayType = llvm::cast<llvm::ArrayType>(arrayType->getLLVMType(context));
-        llvm::Type *llvmArrayItemType = arrayItemType->getLLVMType(context);
 
-        llvm::Value *llvmArrayValue;
-        if (this->value)
+        if (arrayType->getByValue())
         {
+            llvm::ArrayType *llvmArrayType = llvm::cast<llvm::ArrayType>(arrayType->getLLVMType(context));
+            llvm::Type *llvmArrayItemType = arrayItemType->getLLVMType(context);
+
             std::vector<llvm::Constant *> llvmUndefValues;
             for (auto v : llvmArrayValues)
             {
                 llvmUndefValues.push_back(llvm::UndefValue::get(llvmArrayItemType));
             }
-            llvmArrayValue = llvm::ConstantArray::get(llvmArrayType, llvmUndefValues);
-        }
-        else
-        {
-            llvmArrayValue = generateMalloc(context, llvm::ArrayType::get(llvmArrayItemType, arrayItemCount), "array.malloc");
-        }
+            llvm::Value *llvmArrayValue = llvm::ConstantArray::get(llvmArrayType, llvmUndefValues);
 
-        for (uint64_t i = 0; i < arrayItemCount; i++)
-        {
-            llvm::Value *llvmValue = llvmArrayValues[i];
-
-            if (this->value)
+            for (uint64_t i = 0; i < arrayItemCount; i++)
             {
+                llvm::Value *llvmValue = llvmArrayValues[i];
                 llvmArrayValue = context->irBuilder->CreateInsertValue(llvmArrayValue, llvmValue, (unsigned int)i, "array.set." + std::to_string(i));
             }
-            else
-            {
-                std::vector<llvm::Value *> indices;
-                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context->context), 0, false));
-                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context->context), i, false));
-                auto llvmArrayItemPtr = context->irBuilder->CreateGEP(llvmArrayType, llvmArrayValue, indices, "array.set." + std::to_string(i) + ".gep");
-                context->irBuilder->CreateStore(llvmValue, llvmArrayItemPtr, false);
-            }
-        }
 
-        if (this->value)
-        {
             return new TypedValue(llvmArrayValue, arrayType);
         }
         else
         {
-            if (this->managed)
+            auto arrayPointerType = (new PointerType(new ArrayType(arrayType->getItemType(), true, false), arrayType->getManaged()));
+            auto llvmArrayPointer = generateMalloc(context, arrayPointerType->getLLVMPointedType(context), "array.malloc");
+            // auto llvmArrayPointer = context->irBuilder->CreateBitCast(llvmArrayPointerUncasted, arrayType->getLLVMArrayPointerType(context), "array.malloc");
+
+            // llvmArrayPointerUncasted->print(llvm::outs());
+            // std::cout << "\n";
+            // llvmArrayPointer->print(llvm::outs());
+            // std::cout << "\n";
+
+            for (uint64_t i = 0; i < arrayItemCount; i++)
             {
+                llvm::Value *llvmValue = llvmArrayValues[i];
+
+                std::vector<llvm::Value *> indices;
+                indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+                if (arrayType->getManaged())
+                {
+                    // TODO: move this to shared code
+                    indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1, false));
+                }
+                indices.push_back(llvm::ConstantInt::get(ArrayType::getLLVMLengthFieldType(context), i, false));
+
+                auto llvmArrayItemPtr = context->irBuilder->CreateGEP(arrayPointerType->getLLVMPointedType(context), llvmArrayPointer, indices, "array.set." + std::to_string(i) + ".gep");
+                context->irBuilder->CreateStore(llvmValue, llvmArrayItemPtr, false);
+            }
+
+            if (arrayType->getManaged())
+            {
+                // Set initial ref count to 1
+                // TODO: move this to shared code
+                std::vector<llvm::Value *> refCountIndices;
+                refCountIndices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+                refCountIndices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+                auto llvmRefCountPointer = context->irBuilder->CreateGEP(arrayPointerType->getLLVMPointedType(context), llvmArrayPointer, refCountIndices, "array.ref");
+                context->irBuilder->CreateStore(llvm::ConstantInt::get(getRefCountType(*context->context), 1, false), llvmRefCountPointer, false);
+
+                std::vector<llvm::Constant *> llvmLengthStructFields;
+                llvmLengthStructFields.push_back(llvm::ConstantInt::get(ArrayType::getLLVMLengthFieldType(context), arrayItemCount, false));
+                llvmLengthStructFields.push_back(llvm::UndefValue::get(arrayPointerType->getLLVMType(context)));
+                llvm::Value *llvmLengthStruct = llvm::ConstantStruct::get(arrayType->getLLVMLengthStructType(context), llvmLengthStructFields);
+
+                std::vector<unsigned int> indices;
+                indices.push_back(1);
+
+                llvmLengthStruct = context->irBuilder->CreateInsertValue(llvmLengthStruct, llvmArrayPointer, indices, "array.sized");
+
+                return new TypedValue(llvmLengthStruct, arrayType);
             }
             else
             {
-                return new TypedValue(llvmArrayValue, arrayType->getUnmanagedPointerToType());
+                return new TypedValue(llvmArrayPointer, arrayType);
             }
         }
     }
@@ -1347,7 +1382,9 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
 
 TypedValue *ASTArraySegment::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
 {
-    return this->value->generateLLVM(context, scope, typeHint, expectPointer);
+    assert(false && "ASTArraySegment->getValue() and ASTArraySegment->getTimes() should be used to generate LLVM");
+    return NULL;
+    // return this->value->generateLLVM(context, scope, typeHint, expectPointer);
 }
 
 TypedValue *ASTNullCoalesce::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)
@@ -2069,7 +2106,7 @@ TypedValue *ASTLiteralString::generateLLVM(GenerationContext *context, FunctionS
     std::cout << "debug: ASTLiteralString::generateLLVM\n";
 #endif
     auto value = context->irBuilder->CreateGlobalString(this->valueToken->value, "str");
-    Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length() + 1);
+    Type *type = new ArrayType(&CHAR_TYPE, this->valueToken->value.length() + 1, false, true);
     return new TypedValue(value, type);
 }
 
