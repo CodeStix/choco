@@ -1509,11 +1509,11 @@ TypedValue *ASTOperator::generateLLVM(GenerationContext *context, FunctionScope 
 #ifdef DEBUG
     std::cout << "debug: ASTOperator::generateLLVM left\n";
 #endif
-    auto *left = this->left->generateLLVM(context, scope, NULL, expectPointer);
+    auto *left = this->left->generateLLVM(context, scope, NULL, false);
 #ifdef DEBUG
     std::cout << "debug: ASTOperator::generateLLVM right\n";
 #endif
-    auto *right = this->right->generateLLVM(context, scope, NULL, expectPointer);
+    auto *right = this->right->generateLLVM(context, scope, NULL, false);
 
     if (!left || !right)
     {
