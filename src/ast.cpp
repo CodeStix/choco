@@ -802,6 +802,7 @@ ASTNode *parseValueAndSuffix(TokenStream *tokens, bool parseType)
                 std::cout << "ERROR: index dereference must end with ]\n";
                 return NULL;
             }
+            tokens->next();
 
             value = new ASTIndexDereference(value, indexValue);
         }
@@ -2627,12 +2628,53 @@ TypedValue *ASTIndexDereference::generateLLVM(GenerationContext *context, Functi
     std::cout << "debug: ASTIndexDereference::generateLLVM\n";
 #endif
 
-    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope, NULL, true);
-    TypedValue *indexValue = this->index->generateLLVM(context, scope, &UINT32_TYPE, false);
-    std::cout << "ERROR: Index dereference not implemented\n";
-    exit(-1);
+    TypedValue *valueToIndex = this->toIndex->generateLLVM(context, scope, NULL, false);
+    TypedValue *indexValue = this->index->generateLLVM(context, scope, &UINT64_TYPE, false);
 
-    return NULL;
+    if (valueToIndex->getTypeCode() == TypeCode::ARRAY)
+    {
+        ArrayType *arrayType = static_cast<ArrayType *>(valueToIndex->getType());
+
+        // TODO check indexValue->getValue() array bounds
+
+        llvm::Value *llvmArrayPointer;
+        std::vector<llvm::Value *> indices;
+        if (arrayType->getManaged())
+        {
+            // TODO: move this to shared code
+            // Select array pointer (not length field)
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+            // Select array (not ref count field)
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1, false));
+
+            std::vector<unsigned int> lengthIndices;
+            lengthIndices.push_back(1);
+            llvmArrayPointer = context->irBuilder->CreateExtractValue(valueToIndex->getValue(), lengthIndices, "array.ptr");
+        }
+        else
+        {
+            llvmArrayPointer = indexValue->getValue();
+        }
+        indices.push_back(indexValue->getValue());
+
+        auto llvmArrayItemPtr = context->irBuilder->CreateGEP(arrayType->getArrayPointerType()->getLLVMPointedType(context), llvmArrayPointer, indices, "array.index.gep");
+
+        auto itemPointer = new TypedValue(llvmArrayItemPtr, arrayType->getItemType()->getUnmanagedPointerToType());
+        if (expectPointer)
+        {
+            return itemPointer;
+        }
+        else
+        {
+            return generateReferenceAwareLoad(context, itemPointer);
+        }
+    }
+    else
+    {
+        std::cout << "ERROR: Can only index dereference arrays\n";
+        exit(-1);
+        return NULL;
+    }
 }
 
 TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer)

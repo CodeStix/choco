@@ -437,9 +437,15 @@ std::string FunctionType::toString()
     return str;
 }
 
+PointerType *ArrayType::getArrayPointerType() const
+{
+    assert(!this->value);
+    return new PointerType(new ArrayType(this->innerType, true, false), this->managed);
+}
+
 llvm::Type *ArrayType::getLLVMArrayPointerType(GenerationContext *context) const
 {
-    return (new PointerType(new ArrayType(this->innerType, true, false), this->managed))->getLLVMType(context);
+    return this->getArrayPointerType()->getLLVMType(context);
 }
 
 llvm::StructType *ArrayType::getLLVMLengthStructType(GenerationContext *context) const

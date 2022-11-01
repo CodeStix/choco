@@ -435,6 +435,8 @@ public:
         }
     }
 
+    PointerType *getArrayPointerType() const;
+
     llvm::Type *getLLVMType(GenerationContext *context) const override;
 
     llvm::StructType *getLLVMLengthStructType(GenerationContext *context) const;
