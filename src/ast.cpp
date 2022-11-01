@@ -1303,7 +1303,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
 
         ArrayType *arrayType = static_cast<ArrayType *>(typeHint);
 
-        if (arrayType->getByValue())
+        if (this->value)
         {
             llvm::ArrayType *llvmArrayType = llvm::cast<llvm::ArrayType>(arrayType->getLLVMType(context));
             llvm::Type *llvmArrayItemType = arrayItemType->getLLVMType(context);
@@ -1325,7 +1325,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
         }
         else
         {
-            auto arrayPointerType = (new PointerType(new ArrayType(arrayType->getItemType(), arrayType->getCount(), true, false), arrayType->getManaged()));
+            auto arrayPointerType = (new PointerType(new ArrayType(arrayItemType, arrayItemCount, true, false), this->managed));
             auto llvmArrayPointer = generateMalloc(context, arrayPointerType->getLLVMPointedType(context), "array.malloc");
             // auto llvmArrayPointer = context->irBuilder->CreateBitCast(llvmArrayPointerUncasted, arrayType->getLLVMArrayPointerType(context), "array.malloc");
 
@@ -1340,7 +1340,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
 
                 std::vector<llvm::Value *> indices;
                 indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
-                if (arrayType->getManaged())
+                if (this->managed)
                 {
                     // TODO: move this to shared code
                     indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1, false));
@@ -1351,7 +1351,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
                 context->irBuilder->CreateStore(llvmValue, llvmArrayItemPtr, false);
             }
 
-            if (arrayType->getManaged())
+            if (this->managed)
             {
                 // Set initial ref count to 1
                 // TODO: move this to shared code
@@ -1363,13 +1363,14 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
 
                 std::vector<llvm::Constant *> llvmLengthStructFields;
                 llvmLengthStructFields.push_back(llvm::ConstantInt::get(ArrayType::getLLVMLengthFieldType(context), arrayItemCount, false));
-                llvmLengthStructFields.push_back(llvm::UndefValue::get(arrayPointerType->getLLVMType(context)));
+                llvmLengthStructFields.push_back(llvm::UndefValue::get(arrayType->getLLVMArrayPointerType(context)));
                 llvm::Value *llvmLengthStruct = llvm::ConstantStruct::get(arrayType->getLLVMLengthStructType(context), llvmLengthStructFields);
 
                 std::vector<unsigned int> indices;
                 indices.push_back(1);
 
-                llvmLengthStruct = context->irBuilder->CreateInsertValue(llvmLengthStruct, llvmArrayPointer, indices, "array.sized");
+                auto llvmCastedArrayPointer = context->irBuilder->CreateBitCast(llvmArrayPointer, arrayType->getLLVMArrayPointerType(context), "array.ptr.casted");
+                llvmLengthStruct = context->irBuilder->CreateInsertValue(llvmLengthStruct, llvmCastedArrayPointer, indices, "array.sized");
 
                 return new TypedValue(llvmLengthStruct, arrayType);
             }
