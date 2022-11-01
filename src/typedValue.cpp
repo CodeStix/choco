@@ -7,6 +7,7 @@ IntegerType BYTE_TYPE(8, false);
 IntegerType CHAR_TYPE(8, false);
 IntegerType BOOL_TYPE(1, false);
 IntegerType UINT32_TYPE(32, false);
+IntegerType UINT64_TYPE(64, false);
 
 PointerType *Type::getUnmanagedPointerToType()
 {
@@ -367,7 +368,12 @@ llvm::Type *PointerType::getLLVMType(GenerationContext *context) const
 
 std::string PointerType::toString()
 {
-    std::string str = this->managed ? "&" : "*";
+    std::string str = "";
+    if (this->managed)
+        str += "m";
+    if (this->sized)
+        str += "s";
+    str += "*";
     if (this->pointedType != NULL)
     {
         str += this->pointedType->toString();
@@ -433,16 +439,54 @@ std::string FunctionType::toString()
     return str;
 }
 
+llvm::Type *ArrayType::getLLVMAllocType(GenerationContext *context) const
+{
+    std::vector<llvm::Type *> llvmLengthStructFields;
+    llvmLengthStructFields.push_back(getLLVMLengthFieldType(context));
+    llvmLengthStructFields.push_back(llvmLengthArrayPointer);
+    return llvm::StructType::get(*context->context, llvmLengthStructFields, false);
+}
+
 llvm::Type *ArrayType::getLLVMType(GenerationContext *context) const
 {
-    return llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count);
+    // Use a 0 sized array when this array is dynamically sized (can use getelemptr trick)
+    auto llvmArrayType = llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count <= 0 ? 0 : this->count);
+    if (this->value)
+    {
+        return llvmArrayType;
+    }
+    else
+    {
+        if (this->managed)
+        {
+            auto arrayPointerType = new PointerType(new ArrayType(this->innerType, this->count, true, false), true);
+
+            std::vector<llvm::Type *> llvmLengthStructFields;
+            llvmLengthStructFields.push_back(getLLVMLengthFieldType(context));
+            llvmLengthStructFields.push_back(arrayPointerType->getLLVMType(context));
+            return llvm::StructType::get(*context->context, llvmLengthStructFields, false);
+        }
+        else
+        {
+            return llvmArrayType->getPointerTo();
+        }
+    }
+}
+
+llvm::Value *ArrayType::createLLVMValue(GenerationContext *context)
+{
+}
+
+llvm::Type *ArrayType::getLLVMLengthFieldType(GenerationContext *context)
+{
+    return llvm::Type::getInt64Ty(*context->context);
 }
 
 std::string ArrayType::toString()
 {
     std::string str = "[";
     str += this->innerType->toString();
-    if (this->knownCount)
+    if (this->count >= 0)
     {
         str += " # ";
         str += std::to_string(this->count);

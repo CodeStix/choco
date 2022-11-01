@@ -271,6 +271,16 @@ public:
 
     TypedValue *generateLLVM(GenerationContext *context, FunctionScope *scope, Type *typeHint, bool expectPointer) override;
 
+    ASTNode *getValue()
+    {
+        return this->value;
+    }
+
+    ASTNode *getTimes()
+    {
+        return this->times;
+    }
+
 private:
     ASTNode *value;
     ASTNode *times;

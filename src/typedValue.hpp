@@ -363,7 +363,9 @@ public:
     }
 
 private:
+    // True if a ref count field should be emitted
     bool managed;
+    // True if a length field should be emitted (does point to multiple objects of the same type)
     Type *pointedType;
 };
 
@@ -417,21 +419,48 @@ private:
 class ArrayType : public Type
 {
 public:
-    ArrayType(Type *innerType, uint64_t count) : Type(TypeCode::ARRAY), innerType(innerType), count(count), knownCount(true) {}
+    ArrayType(Type *innerType, bool value, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(-1), value(value), managed(managed) {}
+    ArrayType(Type *innerType, int64_t count, bool value, bool managed) : Type(TypeCode::ARRAY), innerType(innerType), count(count), value(value), managed(managed) {}
 
     bool operator==(const Type &b) const override
     {
-        return false;
+        if (b.getTypeCode() == TypeCode::ARRAY)
+        {
+            auto other = static_cast<const ArrayType &>(b);
+            return other.count == this->count && *other.innerType == *this->innerType;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     llvm::Type *getLLVMType(GenerationContext *context) const override;
 
     std::string toString() override;
 
+    bool hasKnownCount()
+    {
+        return this->count >= 0;
+    }
+
+    Type *getItemType()
+    {
+        return this->innerType;
+    }
+
+    int64_t getCount()
+    {
+        return this->count;
+    }
+
+    static llvm::Type *getLLVMLengthFieldType(GenerationContext *context);
+
 private:
-    bool knownCount;
-    uint64_t count;
+    int64_t count;
     Type *innerType;
+    bool value;
+    bool managed;
 };
 
 class StructTypeField
@@ -482,5 +511,6 @@ extern IntegerType BYTE_TYPE;
 extern IntegerType CHAR_TYPE;
 extern IntegerType BOOL_TYPE;
 extern IntegerType UINT32_TYPE;
+extern IntegerType UINT64_TYPE;
 
 std::string typeCodeToString(TypeCode code);
