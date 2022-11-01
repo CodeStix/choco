@@ -440,7 +440,7 @@ std::string FunctionType::toString()
 PointerType *ArrayType::getArrayPointerType() const
 {
     assert(!this->value);
-    return new PointerType(new ArrayType(this->innerType, true, false), this->managed);
+    return new PointerType(new ArrayType(this->innerType, this->count, true, false), this->managed);
 }
 
 llvm::Type *ArrayType::getLLVMArrayPointerType(GenerationContext *context) const
@@ -467,7 +467,7 @@ llvm::Type *ArrayType::getLLVMType(GenerationContext *context) const
     else
     {
         // Use a 0 sized array (can use getelemptr trick)
-        auto llvmArrayType = llvm::ArrayType::get(this->innerType->getLLVMType(context), 0);
+        auto llvmArrayType = llvm::ArrayType::get(this->innerType->getLLVMType(context), this->count < 0 ? 0 : this->count);
         if (this->managed)
         {
             return this->getLLVMLengthStructType(context);

@@ -1325,7 +1325,7 @@ TypedValue *ASTArray::generateLLVM(GenerationContext *context, FunctionScope *sc
         }
         else
         {
-            auto arrayPointerType = (new PointerType(new ArrayType(arrayType->getItemType(), true, false), arrayType->getManaged()));
+            auto arrayPointerType = (new PointerType(new ArrayType(arrayType->getItemType(), arrayType->getCount(), true, false), arrayType->getManaged()));
             auto llvmArrayPointer = generateMalloc(context, arrayPointerType->getLLVMPointedType(context), "array.malloc");
             // auto llvmArrayPointer = context->irBuilder->CreateBitCast(llvmArrayPointerUncasted, arrayType->getLLVMArrayPointerType(context), "array.malloc");
 
@@ -2720,6 +2720,77 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
 
     PointerType *pointerTypeToIndex = static_cast<PointerType *>(pointerToIndex->getType());
 
+    if (pointerTypeToIndex->getPointedType()->getTypeCode() == TypeCode::ARRAY)
+    {
+        ArrayType *arrayType = static_cast<ArrayType *>(pointerTypeToIndex->getPointedType());
+
+        if (this->nameToken->value == "length")
+        {
+            if (!arrayType->getManaged())
+            {
+                std::cout << "ERROR: Cannot get length of unmanaged array\n";
+                exit(-1);
+                return NULL;
+            }
+
+            // TODO: move this to shared code
+            std::vector<llvm::Value *> indices;
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+
+            auto llvmArrayLength = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(context), pointerToIndex->getValue(), indices, "array.length.gep");
+
+            generateDecrementReferenceIfPointer(context, pointerToIndex, false);
+
+            auto itemPointer = new TypedValue(llvmArrayLength, UINT64_TYPE.getUnmanagedPointerToType());
+            if (expectPointer)
+            {
+                return itemPointer;
+            }
+            else
+            {
+                return generateReferenceAwareLoad(context, itemPointer);
+            }
+        }
+        else if (this->nameToken->value == "refs")
+        {
+            if (!arrayType->getManaged())
+            {
+                std::cout << "ERROR: Cannot get reference count of unmanaged array\n";
+                exit(-1);
+                return NULL;
+            }
+
+            // TODO: move this to shared code
+            std::vector<llvm::Value *> indices;
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+            // Select array pointer (not length field)
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 1, false));
+            // Select ref count field
+            indices.push_back(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context->context), 0, false));
+
+            auto llvmArrayRefsPtr = context->irBuilder->CreateGEP(pointerTypeToIndex->getLLVMPointedType(context), pointerToIndex->getValue(), indices, "array.refs.gep");
+
+            generateDecrementReferenceIfPointer(context, pointerToIndex, false);
+
+            auto itemPointer = new TypedValue(llvmArrayRefsPtr, UINT64_TYPE.getUnmanagedPointerToType());
+            if (expectPointer)
+            {
+                return itemPointer;
+            }
+            else
+            {
+                return generateReferenceAwareLoad(context, itemPointer);
+            }
+        }
+        else
+        {
+            std::cout << "ERROR: Can only read length and refs of array\n";
+            exit(-1);
+            return NULL;
+        }
+    }
+
     if (pointerTypeToIndex->getPointedType()->getTypeCode() == TypeCode::STRUCT)
     {
         StructType *structType = static_cast<StructType *>(pointerTypeToIndex->getPointedType());
@@ -2744,7 +2815,7 @@ TypedValue *ASTMemberDereference::generateLLVM(GenerationContext *context, Funct
 
             generateDecrementReferenceIfPointer(context, pointerToIndex, false);
 
-            return new TypedValue(fieldPointer, (new IntegerType(64, false))->getUnmanagedPointerToType());
+            return new TypedValue(fieldPointer, UINT64_TYPE.getUnmanagedPointerToType());
         }
 
         int fieldIndex = structType->getFieldIndex(this->nameToken->value);
