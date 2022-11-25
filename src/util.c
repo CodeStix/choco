@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+void free_null(void* ptr_or_null) {
+    if (ptr_or_null != NULL) {
+        free(ptr_or_null);
+    }
+}
+
 bool is_operator(char c) {
     switch (c) {
     case '=':

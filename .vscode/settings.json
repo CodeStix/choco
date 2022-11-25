@@ -4,6 +4,7 @@
         "cstdlib": "c",
         "list.h": "c",
         "ctype.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "util.h": "c"
     }
 }

@@ -6,6 +6,7 @@ all: src/main.c
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/main.c -o build/main.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/util.c -o build/util.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/list.c -o build/list.o
+	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/map.c -o build/map.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/token.c -o build/token.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast.c -o build/ast.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/function.c -o build/ast/function.o
