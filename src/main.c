@@ -1,3 +1,4 @@
+#include "ast.h"
 #include "list.h"
 #include "token.h"
 #include "llvm-c/Core.h"
@@ -15,8 +16,11 @@ int main() {
     List* tokens = sourcefile_tokenize(f);
     token_print_list(tokens);
 
+    ASTNode* root = ast_build(tokens, f);
+
+    ast_node_print(root);
+
     list_free(tokens);
     sourcefile_free(f);
-
     return 0;
 }

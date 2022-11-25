@@ -3,6 +3,7 @@
         "core.h": "c",
         "cstdlib": "c",
         "list.h": "c",
-        "ctype.h": "c"
+        "ctype.h": "c",
+        "types.h": "c"
     }
 }

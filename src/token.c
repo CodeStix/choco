@@ -71,6 +71,10 @@ Token* sourcefile_read_literal_number(SourceFile* src, unsigned int* i) {
     }
 }
 
+char* sourcefile_path(SourceFile* src) {
+    return src->source_path;
+}
+
 Token* sourcefile_read_symbol(SourceFile* src, unsigned int* i) {
     unsigned int start = *i, len = 0;
     while (true) {
@@ -81,7 +85,18 @@ Token* sourcefile_read_symbol(SourceFile* src, unsigned int* i) {
         if (isalnum(c) || c == '_') {
             len++;
         } else {
-            return token_malloc(TOKEN_SYMBOL, src, start, len);
+            Token* tok = token_malloc(TOKEN_SYMBOL, src, start, len);
+            char* token_str = &tok->source->contents[tok->start];
+
+            if (strncmp(token_str, "func", tok->length) == 0) {
+                tok->type = TOKEN_FUNC_KEYWORD;
+            } else if (strncmp(token_str, "export", tok->length) == 0) {
+                tok->type = TOKEN_EXPORT_KEYWORD;
+            } else if (strncmp(token_str, "extern", tok->length) == 0) {
+                tok->type = TOKEN_EXTERN_KEYWORD;
+            }
+
+            return tok;
         }
 
         (*i)++;
@@ -216,6 +231,23 @@ void sourcefile_print(SourceFile* src, bool contents) {
            contents ? src->contents : "...");
 }
 
+TokenType token_type(Token* tok) {
+    return tok->type;
+}
+
+char* token_value(Token* tok, unsigned int* out_len) {
+    *out_len = tok->length;
+    return &tok->source->contents[tok->start];
+}
+
+unsigned int token_start_index(Token* tok) {
+    return tok->start;
+}
+
+unsigned int token_length(Token* tok) {
+    return tok->length;
+}
+
 Token* token_malloc(TokenType type, SourceFile* src, unsigned int start, unsigned int len) {
     Token* tok = (Token*)malloc(sizeof(Token));
     tok->type = type;
@@ -303,7 +335,7 @@ char* tokentype_to_string(TokenType type) {
     case TOKEN_NOT_EQUAL:
         return "TOKEN_NOT_EQUAL";
     default:
-        assert(false && "TokenType is not implemented");
+        assert(false && "tokentype_to_string TokenType is not implemented");
         break;
     }
 }

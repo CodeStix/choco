@@ -14,6 +14,8 @@ enum TokenType
 {
     TOKEN_SYMBOL,
     TOKEN_FUNC_KEYWORD,
+    TOKEN_EXPORT_KEYWORD,
+    TOKEN_EXTERN_KEYWORD,
     TOKEN_WHITESPACE,
     TOKEN_LITERAL_NUMBER,
     TOKEN_LITERAL_STRING,
@@ -47,7 +49,12 @@ void sourcefile_free(SourceFile* src);
 List* sourcefile_tokenize(SourceFile* src);
 char* sourcefile_get_part_terminated(SourceFile* src, unsigned int i, unsigned int len);
 void sourcefile_print(SourceFile* src, bool contents);
+char* sourcefile_path(SourceFile* src);
 
+TokenType token_type(Token* tok);
+char* token_value(Token* tok, unsigned int* out_len);
+unsigned int token_start_index(Token* tok);
+unsigned int token_length(Token* tok);
 Token* token_malloc(TokenType type, SourceFile* src, unsigned int start, unsigned int len);
 void token_print(Token* tok);
 void token_print_list(List* token_list);
