@@ -278,12 +278,85 @@ void token_print_list(List* token_list) {
     }
 }
 
+void sourcefile_line_offset_at(SourceFile* src, unsigned int index, unsigned int* out_line, unsigned int* out_offset) {
+    *out_line = 0;
+    *out_offset = 0;
+    for (unsigned int i = 0; i < index; i++) {
+        if (src->contents[i] == '\n') {
+            (*out_line)++;
+            *out_offset = 0;
+        } else {
+            (*out_offset)++;
+        }
+    }
+}
+
+char* sourcefile_get_line(SourceFile* src, unsigned int line_index, unsigned int* out_length) {
+    unsigned int line_start_offset = 0;
+    unsigned int line = 0;
+
+    for (unsigned int i = 0; i < src->length; i++) {
+        if (src->contents[i] == '\n' || src->contents[i] == '\0') {
+            if (line == line_index) {
+                *out_length = i - line_start_offset;
+                return &src->contents[line_start_offset];
+            }
+
+            line++;
+
+            if (line == line_index) {
+                line_start_offset = i + 1;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+void sourcefile_highlight(SourceFile* src, unsigned int start_index, unsigned int end_index) {
+
+    assert(end_index >= start_index);
+
+    unsigned int start_line, end_line;
+    unsigned int start_offset, end_offset;
+    sourcefile_line_offset_at(src, start_index, &start_line, &start_offset);
+    sourcefile_line_offset_at(src, end_index, &end_line, &end_offset);
+
+    assert(end_line >= start_line || end_offset >= start_offset);
+
+    const int EXTRA_LINES = 2;
+
+    for (int i = (int)start_line - EXTRA_LINES; i <= (int)end_line + EXTRA_LINES; i++) {
+        unsigned int line_len;
+        char* line_str = sourcefile_get_line(src, i, &line_len);
+        if (line_str == NULL) {
+            continue;
+        }
+
+        printf("%4d: %.*s\n", i + 1, line_len, line_str);
+
+        if (i >= start_line && i <= end_line) {
+            printf("      ");
+            unsigned int start = i == start_line ? start_offset : 0;
+            unsigned int end = i == end_line ? end_offset : line_len;
+            for (unsigned int j = 0; j < line_len; j++) {
+                putchar(j >= start && j < end ? '~' : ' ');
+            }
+            putchar('\n');
+        }
+    }
+}
+
 char* tokentype_to_string(TokenType type) {
     switch (type) {
     case TOKEN_SYMBOL:
         return "TOKEN_SYMBOL";
     case TOKEN_FUNC_KEYWORD:
         return "TOKEN_FUNC_KEYWORD";
+    case TOKEN_EXPORT_KEYWORD:
+        return "TOKEN_EXPORT_KEYWORD";
+    case TOKEN_EXTERN_KEYWORD:
+        return "TOKEN_EXTERN_KEYWORD";
     case TOKEN_WHITESPACE:
         return "TOKEN_WHITESPACE";
     case TOKEN_LITERAL_NUMBER:

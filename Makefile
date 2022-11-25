@@ -14,6 +14,9 @@ all: src/main.c
 
 	clang -g -O0 -fno-limit-debug-info build/*.o build/common/*.o build/ast/*.o `llvm-config-14 --ldflags --libs` -lpthread -lncurses -o build/output
 
+run: all
+	./build/output
+
 clean:
 	rm -rf build
 	

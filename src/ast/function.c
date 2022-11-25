@@ -49,9 +49,11 @@ ASTNode* ast_parse_function(List* tokens, unsigned int* i) {
         if (token_type(tok) == TOKEN_EXPORT_KEYWORD) {
             is_exported = true;
             tok = next(tokens, i);
+            consume(tokens, i, TOKEN_WHITESPACE);
         } else if (token_type(tok) == TOKEN_EXTERN_KEYWORD) {
             is_extern = true;
             tok = next(tokens, i);
+            consume(tokens, i, TOKEN_WHITESPACE);
         } else {
             break;
         }

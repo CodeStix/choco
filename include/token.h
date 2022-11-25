@@ -50,6 +50,9 @@ List* sourcefile_tokenize(SourceFile* src);
 char* sourcefile_get_part_terminated(SourceFile* src, unsigned int i, unsigned int len);
 void sourcefile_print(SourceFile* src, bool contents);
 char* sourcefile_path(SourceFile* src);
+void sourcefile_line_offset_at(SourceFile* src, unsigned int index, unsigned int* out_line, unsigned int* out_offset);
+char* sourcefile_get_line(SourceFile* src, unsigned int line_index, unsigned int* out_length);
+void sourcefile_highlight(SourceFile* src, unsigned int start_index, unsigned int end_index);
 
 TokenType token_type(Token* tok);
 char* token_value(Token* tok, unsigned int* out_len);
