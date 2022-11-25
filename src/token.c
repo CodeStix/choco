@@ -1,5 +1,5 @@
 #include "token.h"
-#include "list.h"
+#include "common/list.h"
 #include "util.h"
 #include <assert.h>
 #include <ctype.h>

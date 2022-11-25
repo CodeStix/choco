@@ -1,7 +1,7 @@
 #ifndef AST_H
 #define AST_H
 
-#include "list.h"
+#include "common/list.h"
 #include "token.h"
 #include <stdbool.h>
 #include <stdlib.h>

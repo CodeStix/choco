@@ -1,6 +1,6 @@
 #include "ast/function.h"
 #include "ast.h"
-#include "list.h"
+#include "common/list.h"
 #include "token.h"
 #include <assert.h>
 #include <stdbool.h>

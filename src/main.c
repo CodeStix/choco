@@ -1,6 +1,6 @@
 #include "ast.h"
-#include "list.h"
-#include "map.h"
+#include "common/list.h"
+#include "common/map.h"
 #include "token.h"
 #include "util.h"
 #include "llvm-c/Core.h"
@@ -31,12 +31,7 @@ int main() {
     map_put(m, "getint", "calculate");
     map_put(m, "exported", "something ele");
 
-    printf("%s\n", map_get(m, "nice", "?"));
-    printf("%s\n", map_get(m, "main", "?"));
-    printf("%s\n", map_get(m, "getint", "?"));
-    printf("%s\n", map_get(m, "exported", "?"));
-
-    map_print(m, "%s ==== %s\n");
+    map_print(m, "%s -> %s\n");
 
     map_free(m);
 

@@ -1,7 +1,7 @@
 #include "ast.h"
 #include "ast/file.h"
 #include "ast/function.h"
-#include "list.h"
+#include "common/list.h"
 #include "token.h"
 #include <assert.h>
 #include <llvm-c/Core.h>

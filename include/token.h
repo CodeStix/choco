@@ -1,7 +1,7 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
-#include "list.h"
+#include "common/list.h"
 #include <stdbool.h>
 
 struct Token;

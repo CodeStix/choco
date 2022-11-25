@@ -2,7 +2,7 @@
 #define AST_FUNCTION_H
 
 #include "ast.h"
-#include "list.h"
+#include "common/list.h"
 #include "token.h"
 #include <stdbool.h>
 #include <stdlib.h>

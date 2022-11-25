@@ -2,7 +2,7 @@
 #define AST_FILE_H
 
 #include "ast.h"
-#include "list.h"
+#include "common/list.h"
 #include <stdlib.h>
 
 typedef struct ASTFile ASTFile;
