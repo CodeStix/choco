@@ -1,6 +1,7 @@
 #include "map.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +15,7 @@ struct Map {
     HashCodeCalculatorFunc key_hasher;
     ComparatorFunc key_comparator;
     unsigned int table_size;
+    unsigned int length;
     struct MapNode** table;
 };
 
@@ -21,6 +23,7 @@ Map* map_malloc(unsigned int table_size, ComparatorFunc comp_func, HashCodeCalcu
     Map* m = malloc(sizeof(Map));
     m->table = malloc(table_size * sizeof(struct MapNode*));
     m->table_size = table_size;
+    m->length = 0;
     m->key_hasher = hash_func;
     m->key_comparator = comp_func;
 
@@ -71,6 +74,7 @@ void* map_put(Map* map, void* key, void* value) {
         MapNode* current_node = *current_node_ptr;
         if (current_node == NULL) {
             *current_node_ptr = mapnode_malloc(key, value);
+            map->length++;
             return NULL;
         }
 
@@ -121,6 +125,7 @@ void* map_delete(Map* map, void* key) {
             *current_node_ptr = current_node->next;
             void* value = current_node->value;
             mapnode_free(current_node);
+            map->length--;
             return value;
         }
 
@@ -140,9 +145,72 @@ void map_clear(Map* map) {
 
         map->table[i] = NULL;
     }
+    map->length = 0;
+}
+
+unsigned int map_length(Map* map) {
+    return map->length;
 }
 
 void map_free(Map* map) {
     free(map->table);
     free(map);
+}
+
+struct MapIterator {
+    Map* map;
+    MapNode* current_node;
+    int table_index;
+};
+
+MapIterator* map_iter_begin(Map* map) {
+    MapIterator* i = malloc(sizeof(MapIterator));
+    i->map = map;
+    i->current_node = NULL;
+    i->table_index = 0;
+    return i;
+}
+
+bool map_iter_next(MapIterator* iterator, void** out_key, void** out_value) {
+
+    if (iterator->current_node == NULL) {
+        iterator->current_node = iterator->map->table[0];
+    } else {
+        if (iterator->current_node->next == NULL) {
+            while (true) {
+                iterator->table_index++;
+
+                if (iterator->table_index >= iterator->map->table_size) {
+                    return false;
+                }
+
+                iterator->current_node = iterator->map->table[iterator->table_index];
+                if (iterator->current_node != NULL) {
+                    break;
+                }
+            }
+        } else {
+            iterator->current_node = iterator->current_node->next;
+        }
+    }
+
+    *out_key = iterator->current_node->key;
+    *out_value = iterator->current_node->value;
+    return true;
+}
+
+void map_iter_end(MapIterator* iter) {
+    free(iter);
+}
+
+void map_print(Map* map, char* key_value_format) {
+    MapIterator* iterator = map_iter_begin(map);
+
+    void* value;
+    void* key;
+    while (map_iter_next(iterator, &key, &value)) {
+        printf(key_value_format, key, value);
+    }
+
+    map_iter_end(iterator);
 }

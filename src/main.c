@@ -36,6 +36,8 @@ int main() {
     printf("%s\n", map_get(m, "getint", "?"));
     printf("%s\n", map_get(m, "exported", "?"));
 
+    map_print(m, "%s ==== %s\n");
+
     map_free(m);
 
     return 0;
