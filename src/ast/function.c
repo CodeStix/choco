@@ -1,5 +1,6 @@
 #include "ast/function.h"
 #include "ast.h"
+#include "ast/block.h"
 #include "common/list.h"
 #include "token.h"
 #include <assert.h>
@@ -96,17 +97,8 @@ ASTNode* ast_parse_function(List* tokens, unsigned int* i) {
     ASTNode* return_type = NULL;
     consume(tokens, i, TOKEN_WHITESPACE);
 
-    tok = peek(tokens, i);
-    assert(token_type(tok) == TOKEN_CURLY_BRACKET_OPEN);
-    next(tokens, i);
-
-    // TODO read block (statements)
-    ASTNode* body = NULL;
-    consume(tokens, i, TOKEN_WHITESPACE);
-
-    tok = peek(tokens, i);
-    assert(token_type(tok) == TOKEN_CURLY_BRACKET_CLOSE);
-    next(tokens, i);
+    ASTNode* body = ast_parse_block(tokens, i);
+    assert(body != NULL);
 
     return ast_node_malloc(AST_FUNCTION,
                            ast_function_malloc(func_name, parameter_type, return_type, body, is_exported, is_extern),

@@ -240,12 +240,22 @@ char* token_value(Token* tok, unsigned int* out_len) {
     return &tok->source->contents[tok->start];
 }
 
+SourceFile* token_source(Token* tok) {
+    return tok->source;
+}
+
 unsigned int token_start_index(Token* tok) {
     return tok->start;
 }
 
 unsigned int token_length(Token* tok) {
     return tok->length;
+}
+
+void token_highlight(Token* tok) {
+    SourceFile* src = tok->source;
+    printf("In %s:\n", src->source_path);
+    sourcefile_highlight(src, tok->start, tok->start + tok->length);
 }
 
 Token* token_malloc(TokenType type, SourceFile* src, unsigned int start, unsigned int len) {

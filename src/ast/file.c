@@ -35,12 +35,16 @@ ASTNode* ast_parse_file(List* tokens, unsigned int* i, SourceFile* source) {
         }
 
         ASTNode* file_statement = NULL;
-        if (type == TOKEN_FUNC_KEYWORD || type == TOKEN_EXPORT_KEYWORD || type == TOKEN_EXTERN_KEYWORD) {
-            file_statement = ast_parse_function(tokens, i);
-        } else {
-            printf("Error: unexpected %s in file at index %u\n", tokentype_to_string(type), *i);
+        if (type == TOKEN_WHITESPACE) {
             (*i)++;
             continue;
+        } else if (type == TOKEN_FUNC_KEYWORD || type == TOKEN_EXPORT_KEYWORD || type == TOKEN_EXTERN_KEYWORD) {
+            file_statement = ast_parse_function(tokens, i);
+        } else {
+            printf("Invalid file statement\n");
+            token_highlight(tok);
+            assert(false && "Unexpected file statement");
+            return NULL;
         }
 
         assert(file_statement != NULL);

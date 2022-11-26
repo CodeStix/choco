@@ -61,6 +61,8 @@ unsigned int token_length(Token* tok);
 Token* token_malloc(TokenType type, SourceFile* src, unsigned int start, unsigned int len);
 void token_print(Token* tok);
 void token_print_list(List* token_list);
+SourceFile* token_source(Token* tok);
+void token_highlight(Token* tok);
 
 char* tokentype_to_string(TokenType type);
 
