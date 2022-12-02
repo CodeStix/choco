@@ -3,9 +3,9 @@
 
 export func main() {
 
-    let a = 100 + 5 / a;
+    let a = 5 + 100 / 5 * 2;
     const b = {};
-    a = 100;
+    a = 100 * 100;
 
 }
 

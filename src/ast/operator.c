@@ -101,42 +101,38 @@ ASTNode* ast_parse_value_or_prefix(List* tokens, unsigned int* i) {
     }
 }
 
-ASTNode* ast_parse_value_or_operator(List* tokens, unsigned int* i) {
-    unsigned int start_token = *i;
-    ASTNode* left = ast_parse_value_or_prefix(tokens, i);
+// Stolen from https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/LangImpl02.html#binary-expression-parsing
+ASTNode* ast_parse_value_or_operator_rhs(List* tokens, unsigned int* i, int left_importance, ASTNode* left) {
+    while (1) {
+        unsigned int start_token = *i;
 
-    consume(tokens, i, TOKEN_WHITESPACE);
-
-    Token* op_tok = peek(tokens, i);
-    int importance = operator_importance(token_type(op_tok));
-    if (importance < 0) {
-        // Just return value, not an operator
-        return left;
-    }
-
-    next(tokens, i);
-    consume(tokens, i, TOKEN_WHITESPACE);
-
-    ASTNode* right = ast_parse_value_or_operator(tokens, i);
-    ASTOperator* top_op = ast_operator_malloc(op_tok, left, right);
-    ASTNode* top = ast_node_malloc(AST_OPERATOR, top_op, start_token, *i);
-
-    if (ast_node_type(right) == AST_OPERATOR) {
-        // Right side also an operator, make sure the right precedence is used
-        ASTOperator* right_op = (ASTOperator*)ast_node_data(right);
-
-        if (importance > operator_importance(token_type(right_op->op))) {
-            // The AST should be rotated to the left
-
-            top_op->left = right_op->left;
-            right_op->left = top;
-            top_op = right_op;
-            top = right;
-            // ast_node_set_data(top, top_op);
+        Token* op_tok = peek(tokens, i);
+        int importance = operator_importance(token_type(op_tok));
+        if (importance < 0 || importance < left_importance) {
+            // This isn't an operator, stop consuming
+            return left;
         }
-    }
 
-    return top;
+        next(tokens, i);
+        consume(tokens, i, TOKEN_WHITESPACE);
+
+        ASTNode* right = ast_parse_value_or_prefix(tokens, i);
+        assert(right != NULL);
+
+        int next_importance = operator_importance(token_type(peek(tokens, i)));
+        if (importance < next_importance) {
+            right = ast_parse_value_or_operator_rhs(tokens, i, importance + 1, right);
+            assert(right != NULL);
+        }
+
+        left = ast_node_malloc(AST_OPERATOR, ast_operator_malloc(op_tok, left, right), start_token, *i);
+    }
+}
+
+ASTNode* ast_parse_value_or_operator(List* tokens, unsigned int* i) {
+    ASTNode* left = ast_parse_value_or_prefix(tokens, i);
+    assert(left != NULL);
+    return ast_parse_value_or_operator_rhs(tokens, i, 0, left);
 }
 
 void ast_operator_print(ASTNode* node, bool verbose, unsigned int indent) {
