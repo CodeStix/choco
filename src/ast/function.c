@@ -33,7 +33,7 @@ void ast_function_print(ASTNode* node, bool verbose, unsigned int indent) {
     unsigned int tok_len = 0;
     char* tok_value = token_value(func->name_token, &tok_len);
 
-    printf("%*sFunction { name=%.*s, exported=%s, extern=%s }\n", indent, "", tok_len, tok_value,
+    printf("%*sFunction { name=\"%.*s\", exported=%s, extern=%s }\n", indent, "", tok_len, tok_value,
            ast_modifiers_has(func->modifiers, MODIFIER_EXPORT) ? "yes" : "no",
            ast_modifiers_has(func->modifiers, MODIFIER_EXTERN) ? "yes" : "no");
 

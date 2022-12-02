@@ -21,7 +21,7 @@ ASTFile* ast_file_malloc(SourceFile* source, List* statements) {
 void ast_file_print(ASTNode* node, bool verbose, unsigned int indent) {
     ASTFile* file = (ASTFile*)ast_node_data(node);
 
-    printf("%*sFile { path=%s, statements=%u }\n", indent, "", sourcefile_path(file->source),
+    printf("%*sFile { path=\"%s\", statements=%u }\n", indent, "", sourcefile_path(file->source),
            list_length(file->statements));
 
     if (verbose) {

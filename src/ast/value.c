@@ -289,3 +289,110 @@ ASTNode* ast_parse_brackets(List* tokens, unsigned int* i) {
 
     return ast_node_malloc(AST_BRACKETS, ast_brackets_malloc(value), start_token, *i);
 }
+
+void ast_symbol_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTSymbol* br = (ASTSymbol*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(br->name, &tok_len);
+
+    printf("%*sSymbol { name=%.*s }\n", indent, "", tok_len, tok_value);
+
+    if (br->modifiers != NULL) {
+        ast_node_print(br->modifiers, true, indent + 2);
+    }
+}
+
+void ast_brackets_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTBrackets* br = (ASTBrackets*)ast_node_data(node);
+
+    printf("%*sBrackets { }\n", indent, "");
+
+    if (verbose) {
+        ast_node_print(br->value, true, indent + 2);
+    }
+}
+
+void ast_literal_number_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTLiteralNumber* num = (ASTLiteralNumber*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(num->value, &tok_len);
+
+    printf("%*sLiteralNumber { value=%.*s }\n", indent, "", tok_len, tok_value);
+
+    if (num->modifiers != NULL) {
+        ast_node_print(num->modifiers, true, indent + 2);
+    }
+}
+
+void ast_literal_string_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTLiteralString* num = (ASTLiteralString*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(num->value, &tok_len);
+
+    printf("%*sASTLiteralString { value=\"%.*s\" }\n", indent, "", tok_len, tok_value);
+
+    if (num->modifiers != NULL) {
+        ast_node_print(num->modifiers, true, indent + 2);
+    }
+}
+
+void ast_object_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTObject* br = (ASTObject*)ast_node_data(node);
+
+    printf("%*sObject { fields=%u }\n", indent, "", list_length(br->fields));
+
+    if (br->modifiers != NULL) {
+        ast_node_print(br->modifiers, true, indent + 2);
+    }
+
+    for (int i = 0; i < list_length(br->fields); i++) {
+        ast_node_print(list_get(br->fields, i), true, indent + 2);
+    }
+}
+
+void ast_object_field_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTObjectField* br = (ASTObjectField*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(br->name, &tok_len);
+
+    printf("%*sObjectField { name=%.*s }\n", indent, "", tok_len, tok_value);
+
+    if (verbose) {
+        ast_node_print(br->value_or_type, true, indent + 2);
+    }
+}
+
+void ast_array_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTArray* br = (ASTArray*)ast_node_data(node);
+
+    printf("%*sArray { segments=%u }\n", indent, "", list_length(br->segments));
+
+    if (br->modifiers != NULL) {
+        ast_node_print(br->modifiers, true, indent + 2);
+    }
+
+    for (int i = 0; i < list_length(br->segments); i++) {
+        ast_node_print(list_get(br->segments, i), true, indent + 2);
+    }
+}
+
+void ast_array_segment_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTArraySegment* br = (ASTArraySegment*)ast_node_data(node);
+
+    printf("%*sArraySegment { has_times=%s }\n", indent, "", br->times_value != NULL ? "yes" : "no");
+
+    if (verbose) {
+        if (br->times_value == NULL) {
+            ast_node_print(br->value_or_type, true, indent + 2);
+        } else {
+            printf("%*sValue:\n", indent + 2, "");
+            ast_node_print(br->value_or_type, true, indent + 4);
+            printf("%*sTimes:\n", indent + 2, "");
+            ast_node_print(br->times_value, true, indent + 4);
+        }
+    }
+}

@@ -2,6 +2,7 @@
 #include "ast.h"
 #include "ast/value.h"
 #include <assert.h>
+#include <stdio.h>
 
 struct ASTOperator {
     ASTNode* left;
@@ -136,4 +137,33 @@ ASTNode* ast_parse_value_or_operator(List* tokens, unsigned int* i) {
     }
 
     return top;
+}
+
+void ast_operator_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTOperator* op = (ASTOperator*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(op->op, &tok_len);
+
+    printf("%*sOperator { op=\"%.*s\" }\n", indent, "", tok_len, tok_value);
+
+    if (verbose) {
+        printf("%*sLeft:\n", indent + 2, "");
+        ast_node_print(op->left, true, indent + 4);
+        printf("%*sRight:\n", indent + 2, "");
+        ast_node_print(op->right, true, indent + 4);
+    }
+}
+
+void ast_unary_operator_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTUnaryOperator* op = (ASTUnaryOperator*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(op->op, &tok_len);
+
+    printf("%*sUnaryOperator { op=\"%.*s\" }\n", indent, "", tok_len, tok_value);
+
+    if (verbose) {
+        ast_node_print(op->value, true, indent + 2);
+    }
 }

@@ -84,21 +84,18 @@ void ast_declaration_print(ASTNode* node, bool verbose, unsigned int indent) {
     unsigned int tok_len = 0;
     char* tok_value = token_value(decl->name_token, &tok_len);
 
-    printf("%*sDeclaration { name=%.*s, const=%s }\n", indent, "", tok_len, tok_value, decl->is_const ? "yes" : "no");
+    printf("%*sDeclaration { name=%.*s, const=%s, typed=%s, intial=%s }\n", indent, "", tok_len, tok_value,
+           decl->is_const ? "yes" : "no", decl->type_specifier != NULL ? "yes" : "no",
+           decl->initial_value != NULL ? "yes" : "no");
 
     if (verbose) {
-        printf("%*sType specifier:\n", indent + 2, "");
         if (decl->type_specifier != NULL) {
+            printf("%*sType specifier:\n", indent + 2, "");
             ast_node_print(decl->type_specifier, true, indent + 4);
-        } else {
-            printf("%*sNULL\n", indent + 4, "");
         }
-
-        printf("%*sInitial value:\n", indent + 2, "");
         if (decl->initial_value != NULL) {
+            printf("%*sInitial value:\n", indent + 2, "");
             ast_node_print(decl->initial_value, true, indent + 4);
-        } else {
-            printf("%*sNULL\n", indent + 4, "");
         }
     }
 }

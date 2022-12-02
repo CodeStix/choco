@@ -50,7 +50,17 @@ typedef struct ASTPrintEntry ASTPrintEntry;
 static ASTPrintEntry node_to_string[] = {{AST_FILE, ast_file_print},
                                          {AST_FUNCTION, ast_function_print},
                                          {AST_BLOCK, ast_block_print},
-                                         {AST_DECLARATION, ast_declaration_print}};
+                                         {AST_DECLARATION, ast_declaration_print},
+                                         {AST_OPERATOR, ast_operator_print},
+                                         {AST_UNARY_OPERATOR, ast_unary_operator_print},
+                                         {AST_SYMBOL, ast_symbol_print},
+                                         {AST_BRACKETS, ast_brackets_print},
+                                         {AST_LITERAL_NUMBER, ast_literal_number_print},
+                                         {AST_LITERAL_STRING, ast_literal_string_print},
+                                         {AST_OBJECT, ast_object_print},
+                                         {AST_OBJECT_FIELD, ast_object_field_print},
+                                         {AST_ARRAY, ast_array_print},
+                                         {AST_ARRAY_SEGMENT, ast_array_segment_print}};
 
 inline Token* peek(List* tokens, unsigned int* i) {
     return list_get(tokens, *i);

@@ -17,4 +17,13 @@ typedef struct ASTArray ASTArray;
 ASTNode* ast_parse_value(List* tokens, unsigned int* i);
 ASTNode* ast_parse_brackets(List* tokens, unsigned int* i);
 
+void ast_symbol_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_brackets_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_literal_number_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_literal_string_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_object_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_object_field_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_array_print(ASTNode* node, bool verbose, unsigned int indent);
+void ast_array_segment_print(ASTNode* node, bool verbose, unsigned int indent);
+
 #endif   // AST_VALUE_H
