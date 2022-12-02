@@ -42,9 +42,7 @@ Token* sourcefile_read_whitespace(SourceFile* src, unsigned int* i) {
     while (true) {
         char c = src->contents[*i];
 
-        assert(c != '\0' && "Reached end of file");
-
-        if (isspace(c)) {
+        if (isspace(c) && c != '\0') {
             len++;
         } else {
             return token_malloc(TOKEN_WHITESPACE, src, start, len);
@@ -75,6 +73,15 @@ char* sourcefile_path(SourceFile* src) {
     return src->source_path;
 }
 
+bool token_string_matches(Token* tok, char* cmp) {
+    if (tok->length != strlen(cmp)) {
+        return false;
+    }
+
+    char* token_str = &tok->source->contents[tok->start];
+    return strncmp(token_str, cmp, tok->length) == 0;
+}
+
 Token* sourcefile_read_symbol(SourceFile* src, unsigned int* i) {
     unsigned int start = *i, len = 0;
     while (true) {
@@ -86,37 +93,36 @@ Token* sourcefile_read_symbol(SourceFile* src, unsigned int* i) {
             len++;
         } else {
             Token* tok = token_malloc(TOKEN_SYMBOL, src, start, len);
-            char* token_str = &tok->source->contents[tok->start];
 
-            if (strncmp(token_str, "func", tok->length) == 0) {
+            if (token_string_matches(tok, "func")) {
                 tok->type = TOKEN_FUNC_KEYWORD;
-            } else if (strncmp(token_str, "export", tok->length) == 0) {
+            } else if (token_string_matches(tok, "export")) {
                 tok->type = TOKEN_EXPORT_KEYWORD;
-            } else if (strncmp(token_str, "extern", tok->length) == 0) {
+            } else if (token_string_matches(tok, "extern")) {
                 tok->type = TOKEN_EXTERN_KEYWORD;
-            } else if (strncmp(token_str, "if", tok->length) == 0) {
+            } else if (token_string_matches(tok, "if")) {
                 tok->type = TOKEN_IF_KEYWORD;
-            } else if (strncmp(token_str, "while", tok->length) == 0) {
+            } else if (token_string_matches(tok, "while")) {
                 tok->type = TOKEN_WHILE_KEYWORD;
-            } else if (strncmp(token_str, "struct", tok->length) == 0) {
+            } else if (token_string_matches(tok, "struct")) {
                 tok->type = TOKEN_STRUCT_KEYWORD;
-            } else if (strncmp(token_str, "let", tok->length) == 0) {
+            } else if (token_string_matches(tok, "let")) {
                 tok->type = TOKEN_LET_KEYWORD;
-            } else if (strncmp(token_str, "const", tok->length) == 0) {
+            } else if (token_string_matches(tok, "const")) {
                 tok->type = TOKEN_CONST_KEYWORD;
-            } else if (strncmp(token_str, "break", tok->length) == 0) {
+            } else if (token_string_matches(tok, "break")) {
                 tok->type = TOKEN_BREAK_KEYWORD;
-            } else if (strncmp(token_str, "return", tok->length) == 0) {
+            } else if (token_string_matches(tok, "return")) {
                 tok->type = TOKEN_RETURN_KEYWORD;
-            } else if (strncmp(token_str, "as", tok->length) == 0) {
+            } else if (token_string_matches(tok, "as")) {
                 tok->type = TOKEN_AS_KEYWORD;
-            } else if (strncmp(token_str, "panic", tok->length) == 0) {
+            } else if (token_string_matches(tok, "panic")) {
                 tok->type = TOKEN_PANIC_KEYWORD;
-            } else if (strncmp(token_str, "unmanaged", tok->length) == 0) {
+            } else if (token_string_matches(tok, "unmanaged")) {
                 tok->type = TOKEN_UNMANAGED_KEYWORD;
-            } else if (strncmp(token_str, "value", tok->length) == 0) {
+            } else if (token_string_matches(tok, "value")) {
                 tok->type = TOKEN_VALUE_KEYWORD;
-            } else if (strncmp(token_str, "packed", tok->length) == 0) {
+            } else if (token_string_matches(tok, "packed")) {
                 tok->type = TOKEN_PACKED_KEYWORD;
             }
 
@@ -160,33 +166,33 @@ Token* sourcefile_read_operator(SourceFile* src, unsigned int* i) {
             Token* tok = token_malloc(TOKEN_OPERATOR, src, start, len);
             char* token_str = &tok->source->contents[tok->start];
 
-            if (strncmp(token_str, "+", tok->length) == 0) {
+            if (token_string_matches(tok, "+")) {
                 tok->type = TOKEN_PLUS;
-            } else if (strncmp(token_str, "-", tok->length) == 0) {
+            } else if (token_string_matches(tok, "-")) {
                 tok->type = TOKEN_MINUS;
-            } else if (strncmp(token_str, "*", tok->length) == 0) {
+            } else if (token_string_matches(tok, "*")) {
                 tok->type = TOKEN_STAR;
-            } else if (strncmp(token_str, "/", tok->length) == 0) {
+            } else if (token_string_matches(tok, "/")) {
                 tok->type = TOKEN_SLASH;
-            } else if (strncmp(token_str, "=", tok->length) == 0) {
+            } else if (token_string_matches(tok, "=")) {
                 tok->type = TOKEN_EQUAL;
-            } else if (strncmp(token_str, "==", tok->length) == 0) {
+            } else if (token_string_matches(tok, "==")) {
                 tok->type = TOKEN_DOUBLE_EQUAL;
-            } else if (strncmp(token_str, ">", tok->length) == 0) {
+            } else if (token_string_matches(tok, ">")) {
                 tok->type = TOKEN_GREATER;
-            } else if (strncmp(token_str, ">=", tok->length) == 0) {
+            } else if (token_string_matches(tok, ">=")) {
                 tok->type = TOKEN_GREATER_EQUAL;
-            } else if (strncmp(token_str, "<", tok->length) == 0) {
+            } else if (token_string_matches(tok, "<")) {
                 tok->type = TOKEN_LESS;
-            } else if (strncmp(token_str, "<=", tok->length) == 0) {
+            } else if (token_string_matches(tok, "<=")) {
                 tok->type = TOKEN_LESS_EQUAL;
-            } else if (strncmp(token_str, "!=", tok->length) == 0) {
+            } else if (token_string_matches(tok, "!=")) {
                 tok->type = TOKEN_NOT_EQUAL;
-            } else if (strncmp(token_str, "?", tok->length) == 0) {
+            } else if (token_string_matches(tok, "?")) {
                 tok->type = TOKEN_QUESTION;
-            } else if (strncmp(token_str, "!", tok->length) == 0) {
+            } else if (token_string_matches(tok, "!")) {
                 tok->type = TOKEN_EXCLAMATION;
-            } else if (strncmp(token_str, "!", tok->length) == 0) {
+            } else if (token_string_matches(tok, "!")) {
                 tok->type = TOKEN_HASHTAG;
             } else {
                 printf("Warning: unimplemented token for operator '%.*s'\n", tok->length, token_str);
@@ -206,6 +212,11 @@ List* sourcefile_tokenize(SourceFile* src) {
 
     unsigned int i = 0;
     while (1) {
+        if (i >= src->length) {
+            // Reached end of file
+            break;
+        }
+
         char c = src->contents[i];
         if (c == '\0') {
             // Reached end of file

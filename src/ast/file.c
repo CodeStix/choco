@@ -42,7 +42,7 @@ ASTNode* ast_parse_file(List* tokens, unsigned int* i, SourceFile* source) {
             file_statement = ast_parse_function(tokens, i);
         } else {
             printf("Invalid file statement\n");
-            token_highlight(tok);
+            token_highlight(tok, tok);
             assert(false && "Unexpected file statement");
             return NULL;
         }

@@ -22,6 +22,7 @@ enum ASTNodeType
     AST_ARRAY,
     AST_ARRAY_SEGMENT,
     AST_MODIFIERS,
+    AST_DECLARATION,
 };
 
 typedef enum ASTNodeType ASTNodeType;
@@ -39,6 +40,7 @@ ASTNode* ast_build(List* tokens, SourceFile* source);
 ASTNode* ast_node_malloc(ASTNodeType type, void* data, unsigned int start_token, unsigned int end_token);
 ASTNodeType ast_node_type(ASTNode* node);
 void* ast_node_data(ASTNode* node);
+void ast_node_set_data(ASTNode* node, void* new_data);
 void ast_node_free(ASTNode* node);
 bool ast_node_to_string(ASTNode* node, char* output, size_t max_length);
 void ast_node_print(ASTNode* node);

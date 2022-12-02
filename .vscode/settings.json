@@ -16,6 +16,7 @@
         "limits": "c",
         "numeric": "c",
         "streambuf": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "operator.h": "c"
     }
 }

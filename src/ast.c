@@ -1,6 +1,10 @@
 #include "ast.h"
+#include "ast/block.h"
 #include "ast/file.h"
 #include "ast/function.h"
+#include "ast/modifiers.h"
+#include "ast/operator.h"
+#include "ast/value.h"
 #include "common/list.h"
 #include "token.h"
 #include <assert.h>
@@ -19,7 +23,19 @@ struct ASTNode {
     ASTNodeType type;
     union {
         void* data;
+        ASTFile* file_data;
         ASTFunction* function_data;
+        ASTBlock* block_data;
+        ASTDeclaration* decl_data;
+        ASTOperator* operator_data;
+        ASTUnaryOperator* unary_operator_data;
+        ASTObject* object_data;
+        ASTObjectField* object_field_data;
+        ASTArray* array_data;
+        ASTArraySegment* array_segment_data;
+        ASTLiteralNumber* number_data;
+        ASTLiteralString* string_data;
+        ASTModifiers* modifiers_data;
     };
     unsigned int start_token;
     unsigned int end_token;
@@ -81,6 +97,10 @@ ASTNodeType ast_node_type(ASTNode* node) {
 
 void* ast_node_data(ASTNode* node) {
     return node->data;
+}
+
+void ast_node_set_data(ASTNode* node, void* new_data) {
+    node->data = new_data;
 }
 
 void ast_node_free(ASTNode* node) {

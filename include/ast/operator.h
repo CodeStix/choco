@@ -7,7 +7,12 @@
 typedef struct ASTOperator ASTOperator;
 typedef struct ASTUnaryOperator ASTUnaryOperator;
 
+int operator_importance(TokenType type);
+
 ASTOperator* ast_operator_malloc(Token* op, ASTNode* left, ASTNode* right);
-ASTOperator* ast_unary_operator_malloc(Token* op, ASTNode* value);
+ASTUnaryOperator* ast_unary_operator_malloc(Token* op, ASTNode* value);
+
+ASTNode* ast_parse_value_or_suffix(List* tokens, unsigned int* i);
+ASTNode* ast_parse_value_or_operator(List* tokens, unsigned int* i);
 
 #endif   // AST_OPERATOR_H

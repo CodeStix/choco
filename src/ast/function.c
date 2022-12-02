@@ -34,8 +34,8 @@ void ast_function_to_string(ASTNode* node, char* output, size_t max_length) {
     char* tok_value = token_value(func->name_token, &tok_len);
 
     snprintf(output, max_length, "Function { name=%.*s, exported=%s, extern=%s }", tok_len, tok_value,
-             modifier_has(func->modifiers, MODIFIER_EXPORT) ? "yes" : "no",
-             modifier_has(func->modifiers, MODIFIER_EXTERN) ? "yes" : "no");
+             ast_modifiers_has(func->modifiers, MODIFIER_EXPORT) ? "yes" : "no",
+             ast_modifiers_has(func->modifiers, MODIFIER_EXTERN) ? "yes" : "no");
 }
 
 ASTNode* ast_parse_function(List* tokens, unsigned int* i) {

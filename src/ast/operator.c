@@ -22,7 +22,7 @@ ASTOperator* ast_operator_malloc(Token* op, ASTNode* left, ASTNode* right) {
     return o;
 }
 
-ASTOperator* ast_unary_operator_malloc(Token* op, ASTNode* value) {
+ASTUnaryOperator* ast_unary_operator_malloc(Token* op, ASTNode* value) {
     ASTUnaryOperator* o = malloc(sizeof(ASTUnaryOperator));
     o->op = op;
     o->value = value;
@@ -58,13 +58,13 @@ ASTNode* ast_parse_value_or_suffix(List* tokens, unsigned int* i) {
     switch (token_type(tok)) {
     case TOKEN_BRACKET_OPEN:
         // TODO: invocation
-        break;
+        return NULL;
     case TOKEN_PERIOD:
         // TODO: member access
-        break;
+        return NULL;
     case TOKEN_SQUARE_BRACKET_OPEN:
         // TODO: array access (when 'value' is value) or array initializer (when 'value' is type)
-        break;
+        return NULL;
 
     default:
         return value;
@@ -107,7 +107,7 @@ ASTNode* ast_parse_value_or_operator(List* tokens, unsigned int* i) {
     consume(tokens, i, TOKEN_WHITESPACE);
 
     Token* op_tok = peek(tokens, i);
-    int importance = operator_importance(op_tok);
+    int importance = operator_importance(token_type(op_tok));
     if (importance < 0) {
         // Just return value, not an operator
         return left;
@@ -117,20 +117,23 @@ ASTNode* ast_parse_value_or_operator(List* tokens, unsigned int* i) {
     consume(tokens, i, TOKEN_WHITESPACE);
 
     ASTNode* right = ast_parse_value_or_operator(tokens, i);
-    ASTOperator* top = ast_operator_malloc(op_tok, left, right);
+    ASTOperator* top_op = ast_operator_malloc(op_tok, left, right);
+    ASTNode* top = ast_node_malloc(AST_OPERATOR, top_op, start_token, *i);
 
     if (ast_node_type(right) == AST_OPERATOR) {
         // Right side also an operator, make sure the right precedence is used
         ASTOperator* right_op = (ASTOperator*)ast_node_data(right);
 
-        if (importance > operator_importance(right_op->op)) {
+        if (importance > operator_importance(token_type(right_op->op))) {
             // The AST should be rotated to the left
 
-            top->left = right_op->left;
+            top_op->left = right_op->left;
             right_op->left = top;
-            top = right_op;
+            top_op = right_op;
+            top = right;
+            // ast_node_set_data(top, top_op);
         }
     }
 
-    return ast_node_malloc(AST_OPERATOR, top, start_token, *i);
+    return top;
 }

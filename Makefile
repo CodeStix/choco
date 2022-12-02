@@ -10,6 +10,8 @@ all: src/main.c
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/token.c -o build/token.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast.c -o build/ast.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/function.c -o build/ast/function.o
+	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/value.c -o build/ast/value.o
+	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/operator.c -o build/ast/operator.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/file.c -o build/ast/file.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/block.c -o build/ast/block.o
 	clang -g -O0 -fno-limit-debug-info -c `llvm-config-14 --cflags` -Iinclude/ -I/usr/lib/llvm-14/include src/ast/modifiers.c -o build/ast/modifiers.o

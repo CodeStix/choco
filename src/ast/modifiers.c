@@ -1,6 +1,8 @@
 #include "ast/modifiers.h"
 #include "ast.h"
+#include <assert.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 struct ASTModifiers {
@@ -9,6 +11,12 @@ struct ASTModifiers {
 
 bool modifier_has(Modifiers value, Modifiers has) {
     return (value & has) == has;
+}
+
+bool ast_modifiers_has(ASTNode* modifiers_node, Modifiers has) {
+    assert(ast_node_type(modifiers_node) == AST_MODIFIERS);
+    ASTModifiers* m = (ASTModifiers*)ast_node_data(modifiers_node);
+    return modifier_has(m->modifiers, has);
 }
 
 ASTModifiers* ast_modifiers_malloc(Modifiers modifiers) {

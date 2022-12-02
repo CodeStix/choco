@@ -1,8 +1,11 @@
 #include "ast/value.h"
 #include "ast.h"
 #include "ast/modifiers.h"
+#include "ast/operator.h"
 #include "common/list.h"
-#include "map.h"
+#include "common/map.h"
+#include <assert.h>
+#include <stdio.h>
 
 struct ASTBrackets {
     ASTNode* value;
@@ -237,7 +240,7 @@ ASTNode* ast_parse_array_value(List* tokens, unsigned int* i, ASTNode* modifiers
 ASTNode* ast_parse_value(List* tokens, unsigned int* i) {
     unsigned int start_token = *i;
 
-    ASTModifiers* modifiers = ast_parse_modifiers(tokens, i);
+    ASTNode* modifiers = ast_parse_modifiers(tokens, i);
 
     Token* tok = peek(tokens, i);
 
