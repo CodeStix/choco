@@ -1,5 +1,6 @@
 #include "ast/value.h"
 #include "ast.h"
+#include "ast/modifiers.h"
 #include "common/list.h"
 #include "map.h"
 
@@ -9,10 +10,12 @@ struct ASTBrackets {
 
 struct ASTLiteralNumber {
     Token* value;
+    ASTNode* modifiers;
 };
 
 struct ASTLiteralString {
     Token* value;
+    ASTNode* modifiers;
 };
 
 struct ASTObjectField {
@@ -22,6 +25,7 @@ struct ASTObjectField {
 
 struct ASTObject {
     List* fields;   // array of ASTObjectField*
+    ASTNode* modifiers;
 };
 
 struct ASTArraySegment {
@@ -31,10 +35,12 @@ struct ASTArraySegment {
 
 struct ASTArray {
     List* segments;   // array of ASTArraySegment*
+    ASTNode* modifiers;
 };
 
 struct ASTSymbol {
     Token* name;
+    ASTNode* modifiers;
 };
 
 ASTBrackets* ast_brackets_malloc(ASTNode* value) {
@@ -43,27 +49,31 @@ ASTBrackets* ast_brackets_malloc(ASTNode* value) {
     return b;
 }
 
-ASTLiteralNumber* ast_literal_number_malloc(Token* value) {
+ASTLiteralNumber* ast_literal_number_malloc(Token* value, ASTNode* modifiers) {
     ASTLiteralNumber* b = (ASTLiteralNumber*)malloc(sizeof(ASTLiteralNumber));
     b->value = value;
+    b->modifiers = modifiers;
     return b;
 }
 
-ASTLiteralString* ast_literal_string_malloc(Token* value) {
+ASTLiteralString* ast_literal_string_malloc(Token* value, ASTNode* modifiers) {
     ASTLiteralString* b = (ASTLiteralString*)malloc(sizeof(ASTLiteralString));
     b->value = value;
+    b->modifiers = modifiers;
     return b;
 }
 
-ASTSymbol* ast_symbol_malloc(Token* name) {
+ASTSymbol* ast_symbol_malloc(Token* name, ASTNode* modifiers) {
     ASTSymbol* b = (ASTSymbol*)malloc(sizeof(ASTSymbol));
     b->name = name;
+    b->modifiers = modifiers;
     return b;
 }
 
-ASTObject* ast_object_malloc(List* fields) {
+ASTObject* ast_object_malloc(List* fields, ASTNode* modifiers) {
     ASTObject* obj = (ASTObject*)malloc(sizeof(ASTObject));
     obj->fields = fields;
+    obj->modifiers = modifiers;
     return obj;
 }
 
@@ -74,9 +84,10 @@ ASTObjectField* ast_object_field_malloc(Token* name, ASTNode* value_or_type) {
     return obj;
 }
 
-ASTArray* ast_array_malloc(List* segments) {
+ASTArray* ast_array_malloc(List* segments, ASTNode* modifiers) {
     ASTArray* obj = (ASTArray*)malloc(sizeof(ASTArray));
     obj->segments = segments;
+    obj->modifiers = modifiers;
     return obj;
 }
 
@@ -87,7 +98,7 @@ ASTArraySegment* ast_array_segment_malloc(ASTNode* times_value, ASTNode* value_o
     return obj;
 }
 
-ASTNode* ast_parse_symbol(List* tokens, unsigned int* i) {
+ASTNode* ast_parse_symbol(List* tokens, unsigned int* i, ASTNode* modifiers) {
     unsigned int start_token = *i;
 
     Token* tok = peek(tokens, i);
@@ -95,10 +106,10 @@ ASTNode* ast_parse_symbol(List* tokens, unsigned int* i) {
 
     next(tokens, i);
     consume(tokens, i, TOKEN_WHITESPACE);
-    return ast_node_malloc(AST_SYMBOL, ast_symbol_malloc(tok), start_token, *i);
+    return ast_node_malloc(AST_SYMBOL, ast_symbol_malloc(tok, modifiers), start_token, *i);
 }
 
-ASTNode* ast_parse_object_value(List* tokens, unsigned int* i) {
+ASTNode* ast_parse_object_value(List* tokens, unsigned int* i, ASTNode* modifiers) {
     unsigned int start_token = *i;
 
     Token* tok = peek(tokens, i);
@@ -164,10 +175,10 @@ ASTNode* ast_parse_object_value(List* tokens, unsigned int* i) {
         }
     }
 
-    return ast_node_malloc(AST_OBJECT, ast_object_malloc(fields), start_token, *i);
+    return ast_node_malloc(AST_OBJECT, ast_object_malloc(fields, modifiers), start_token, *i);
 }
 
-ASTNode* ast_parse_array_value(List* tokens, unsigned int* i) {
+ASTNode* ast_parse_array_value(List* tokens, unsigned int* i, ASTNode* modifiers) {
     unsigned int start_token = *i;
 
     Token* tok = peek(tokens, i);
@@ -220,52 +231,37 @@ ASTNode* ast_parse_array_value(List* tokens, unsigned int* i) {
         }
     }
 
-    return ast_node_malloc(AST_ARRAY, ast_array_malloc(segments), start_token, *i);
+    return ast_node_malloc(AST_ARRAY, ast_array_malloc(segments, modifiers), start_token, *i);
 }
 
 ASTNode* ast_parse_value(List* tokens, unsigned int* i) {
     unsigned int start_token = *i;
+
+    ASTModifiers* modifiers = ast_parse_modifiers(tokens, i);
+
     Token* tok = peek(tokens, i);
-
-    // Parse modifiers
-    bool unmanaged = false, value = false, packed = false;
-    while (1) {
-        tok = peek(tokens, i);
-
-        if (token_type(tok) == TOKEN_UNMANAGED_KEYWORD) {
-            unmanaged = true;
-        } else if (token_type(tok) == TOKEN_VALUE_KEYWORD) {
-            value = true;
-        } else if (token_type(tok) == TOKEN_PACKED_KEYWORD) {
-            packed = true;
-        } else {
-            break;
-        }
-
-        next(tokens, i);
-        consume(tokens, i, TOKEN_WHITESPACE);
-    }
 
     switch (token_type(tok)) {
     case TOKEN_LITERAL_STRING:
         next(tokens, i);
         consume(tokens, i, TOKEN_WHITESPACE);
-        return ast_node_malloc(AST_LITERAL_STRING, ast_literal_string_malloc(tok), start_token, *i);
+        return ast_node_malloc(AST_LITERAL_STRING, ast_literal_string_malloc(tok, modifiers), start_token, *i);
     case TOKEN_LITERAL_NUMBER:
         next(tokens, i);
         consume(tokens, i, TOKEN_WHITESPACE);
-        return ast_node_malloc(AST_LITERAL_NUMBER, ast_literal_number_malloc(tok), start_token, *i);
+        return ast_node_malloc(AST_LITERAL_NUMBER, ast_literal_number_malloc(tok, modifiers), start_token, *i);
     case TOKEN_SYMBOL:
-        return ast_parse_symbol(tokens, i);
+        return ast_parse_symbol(tokens, i, modifiers);
     case TOKEN_BRACKET_OPEN:
         return ast_parse_brackets(tokens, i);
     case TOKEN_SQUARE_BRACKET_OPEN:
-        return ast_parse_array_value(tokens, i);
+        return ast_parse_array_value(tokens, i, modifiers);
     case TOKEN_CURLY_BRACKET_OPEN:
-        return ast_parse_object_value(tokens, i);
+        return ast_parse_object_value(tokens, i, modifiers);
 
     default:
         // This isn't a value
+        *i = start_token;
         return NULL;
     }
 }

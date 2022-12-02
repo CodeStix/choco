@@ -15,6 +15,7 @@
         "algorithm": "c",
         "limits": "c",
         "numeric": "c",
-        "streambuf": "c"
+        "streambuf": "c",
+        "string.h": "c"
     }
 }

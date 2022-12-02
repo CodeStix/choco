@@ -21,6 +21,7 @@ enum ASTNodeType
     AST_OBJECT_FIELD,
     AST_ARRAY,
     AST_ARRAY_SEGMENT,
+    AST_MODIFIERS,
 };
 
 typedef enum ASTNodeType ASTNodeType;
