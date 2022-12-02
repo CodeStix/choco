@@ -158,7 +158,7 @@ ASTNode* ast_parse_object_value(List* tokens, unsigned int* i, ASTNode* modifier
         next(tokens, i);
         consume(tokens, i, TOKEN_WHITESPACE);
 
-        ASTNode* field_value_or_type = ast_parse_value(tokens, i);
+        ASTNode* field_value_or_type = ast_parse_value_or_operator(tokens, i);
         assert(field_value_or_type != NULL);
 
         list_add(fields, ast_node_malloc(AST_OBJECT_FIELD, ast_object_field_malloc(field_name_tok, field_value_or_type),

@@ -2,6 +2,7 @@
 #include "ast.h"
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -75,6 +76,23 @@ ASTNode* ast_parse_modifiers(List* tokens, unsigned int* i) {
     }
 
     return ast_node_malloc(AST_MODIFIERS, ast_modifiers_malloc(modifiers), start_token, *i);
+}
+
+void ast_modifiers_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTModifiers* m = (ASTModifiers*)ast_node_data(node);
+
+    printf("%*sModifiers { hex=%lx }\n", indent, "", (uint64_t)m->modifiers);
+
+    if (verbose) {
+        for (int i = 0; i < MODIFIER_COUNT; i++) {
+            uint64_t mask = (1ull << i);
+            uint64_t and = m->modifiers & mask;
+
+            if (and) {
+                printf("%*s%s\n", indent + 2, "", modifier_to_string((Modifiers) and));
+            }
+        }
+    }
 }
 
 char* modifier_to_string(Modifiers modifier) {

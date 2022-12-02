@@ -17,11 +17,14 @@ enum Modifiers
     MODIFIER_VALUE = (1 << 4),
 };
 
+#define MODIFIER_COUNT 5
+
 char* modifier_to_string(Modifiers modifier);
 bool modifier_has(Modifiers value, Modifiers has);
 
 bool ast_modifiers_has(ASTNode* modifiers_node, Modifiers has);
 ASTModifiers* ast_modifiers_malloc(Modifiers modifiers);
 ASTNode* ast_parse_modifiers(List* tokens, unsigned int* i);
+void ast_modifiers_print(ASTNode* node, bool verbose, unsigned int indent);
 
 #endif   // AST_MODIFIERS_H

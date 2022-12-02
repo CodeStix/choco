@@ -60,7 +60,8 @@ static ASTPrintEntry node_to_string[] = {{AST_FILE, ast_file_print},
                                          {AST_OBJECT, ast_object_print},
                                          {AST_OBJECT_FIELD, ast_object_field_print},
                                          {AST_ARRAY, ast_array_print},
-                                         {AST_ARRAY_SEGMENT, ast_array_segment_print}};
+                                         {AST_ARRAY_SEGMENT, ast_array_segment_print},
+                                         {AST_MODIFIERS, ast_modifiers_print}};
 
 inline Token* peek(List* tokens, unsigned int* i) {
     return list_get(tokens, *i);
