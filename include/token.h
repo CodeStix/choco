@@ -16,6 +16,18 @@ enum TokenType
     TOKEN_FUNC_KEYWORD,
     TOKEN_EXPORT_KEYWORD,
     TOKEN_EXTERN_KEYWORD,
+    TOKEN_LET_KEYWORD,
+    TOKEN_CONST_KEYWORD,
+    TOKEN_RETURN_KEYWORD,
+    TOKEN_BREAK_KEYWORD,
+    TOKEN_IF_KEYWORD,
+    TOKEN_WHILE_KEYWORD,
+    TOKEN_STRUCT_KEYWORD,
+    TOKEN_AS_KEYWORD,
+    TOKEN_PANIC_KEYWORD,
+    TOKEN_VALUE_KEYWORD,
+    TOKEN_PACKED_KEYWORD,
+    TOKEN_UNMANAGED_KEYWORD,
     TOKEN_WHITESPACE,
     TOKEN_LITERAL_NUMBER,
     TOKEN_LITERAL_STRING,
@@ -41,6 +53,11 @@ enum TokenType
     TOKEN_GREATER_EQUAL,
     TOKEN_LESS_EQUAL,
     TOKEN_NOT_EQUAL,
+    TOKEN_EXCLAMATION,
+    TOKEN_QUESTION,
+    TOKEN_PERIOD,
+    TOKEN_COMMA,
+    TOKEN_HASHTAG
 };
 typedef enum TokenType TokenType;
 
@@ -62,7 +79,7 @@ Token* token_malloc(TokenType type, SourceFile* src, unsigned int start, unsigne
 void token_print(Token* tok);
 void token_print_list(List* token_list);
 SourceFile* token_source(Token* tok);
-void token_highlight(Token* tok);
+void token_highlight(Token* start_tok, Token* end_tok_or_null);
 
 char* tokentype_to_string(TokenType type);
 

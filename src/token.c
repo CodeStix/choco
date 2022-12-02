@@ -94,6 +94,30 @@ Token* sourcefile_read_symbol(SourceFile* src, unsigned int* i) {
                 tok->type = TOKEN_EXPORT_KEYWORD;
             } else if (strncmp(token_str, "extern", tok->length) == 0) {
                 tok->type = TOKEN_EXTERN_KEYWORD;
+            } else if (strncmp(token_str, "if", tok->length) == 0) {
+                tok->type = TOKEN_IF_KEYWORD;
+            } else if (strncmp(token_str, "while", tok->length) == 0) {
+                tok->type = TOKEN_WHILE_KEYWORD;
+            } else if (strncmp(token_str, "struct", tok->length) == 0) {
+                tok->type = TOKEN_STRUCT_KEYWORD;
+            } else if (strncmp(token_str, "let", tok->length) == 0) {
+                tok->type = TOKEN_LET_KEYWORD;
+            } else if (strncmp(token_str, "const", tok->length) == 0) {
+                tok->type = TOKEN_CONST_KEYWORD;
+            } else if (strncmp(token_str, "break", tok->length) == 0) {
+                tok->type = TOKEN_BREAK_KEYWORD;
+            } else if (strncmp(token_str, "return", tok->length) == 0) {
+                tok->type = TOKEN_RETURN_KEYWORD;
+            } else if (strncmp(token_str, "as", tok->length) == 0) {
+                tok->type = TOKEN_AS_KEYWORD;
+            } else if (strncmp(token_str, "panic", tok->length) == 0) {
+                tok->type = TOKEN_PANIC_KEYWORD;
+            } else if (strncmp(token_str, "unmanaged", tok->length) == 0) {
+                tok->type = TOKEN_UNMANAGED_KEYWORD;
+            } else if (strncmp(token_str, "value", tok->length) == 0) {
+                tok->type = TOKEN_VALUE_KEYWORD;
+            } else if (strncmp(token_str, "packed", tok->length) == 0) {
+                tok->type = TOKEN_PACKED_KEYWORD;
             }
 
             return tok;
@@ -158,6 +182,12 @@ Token* sourcefile_read_operator(SourceFile* src, unsigned int* i) {
                 tok->type = TOKEN_LESS_EQUAL;
             } else if (strncmp(token_str, "!=", tok->length) == 0) {
                 tok->type = TOKEN_NOT_EQUAL;
+            } else if (strncmp(token_str, "?", tok->length) == 0) {
+                tok->type = TOKEN_QUESTION;
+            } else if (strncmp(token_str, "!", tok->length) == 0) {
+                tok->type = TOKEN_EXCLAMATION;
+            } else if (strncmp(token_str, "!", tok->length) == 0) {
+                tok->type = TOKEN_HASHTAG;
             } else {
                 printf("Warning: unimplemented token for operator '%.*s'\n", tok->length, token_str);
             }
@@ -208,6 +238,10 @@ List* sourcefile_tokenize(SourceFile* src) {
             list_add(token_list, token_malloc(TOKEN_CURLY_BRACKET_OPEN, src, i++, 1));
         } else if (c == '}') {
             list_add(token_list, token_malloc(TOKEN_CURLY_BRACKET_CLOSE, src, i++, 1));
+        } else if (c == '.') {
+            list_add(token_list, token_malloc(TOKEN_PERIOD, src, i++, 1));
+        } else if (c == ',') {
+            list_add(token_list, token_malloc(TOKEN_COMMA, src, i++, 1));
         } else {
             printf("Invalid char: %c\n", c);
             assert(false && "Invalid character found");
@@ -252,10 +286,16 @@ unsigned int token_length(Token* tok) {
     return tok->length;
 }
 
-void token_highlight(Token* tok) {
-    SourceFile* src = tok->source;
+void token_highlight(Token* start_tok, Token* end_tok) {
+    if (end_tok != NULL) {
+        assert(strcmp(start_tok->source->source_path, end_tok->source->source_path) == 0);
+    } else {
+        end_tok = start_tok;
+    }
+
+    SourceFile* src = start_tok->source;
     printf("In %s:\n", src->source_path);
-    sourcefile_highlight(src, tok->start, tok->start + tok->length);
+    sourcefile_highlight(src, start_tok->start, end_tok->start + end_tok->length);
 }
 
 Token* token_malloc(TokenType type, SourceFile* src, unsigned int start, unsigned int len) {
@@ -369,6 +409,24 @@ char* tokentype_to_string(TokenType type) {
         return "TOKEN_EXTERN_KEYWORD";
     case TOKEN_WHITESPACE:
         return "TOKEN_WHITESPACE";
+    case TOKEN_LET_KEYWORD:
+        return "TOKEN_LET_KEYWORD";
+    case TOKEN_CONST_KEYWORD:
+        return "TOKEN_CONST_KEYWORD";
+    case TOKEN_RETURN_KEYWORD:
+        return "TOKEN_RETURN_KEYWORD";
+    case TOKEN_BREAK_KEYWORD:
+        return "TOKEN_BREAK_KEYWORD";
+    case TOKEN_IF_KEYWORD:
+        return "TOKEN_IF_KEYWORD";
+    case TOKEN_WHILE_KEYWORD:
+        return "TOKEN_WHILE_KEYWORD";
+    case TOKEN_STRUCT_KEYWORD:
+        return "TOKEN_STRUCT_KEYWORD";
+    case TOKEN_AS_KEYWORD:
+        return "TOKEN_AS_KEYWORD";
+    case TOKEN_PANIC_KEYWORD:
+        return "TOKEN_PANIC_KEYWORD";
     case TOKEN_LITERAL_NUMBER:
         return "TOKEN_LITERAL_NUMBER";
     case TOKEN_LITERAL_STRING:
@@ -417,6 +475,22 @@ char* tokentype_to_string(TokenType type) {
         return "TOKEN_LESS_EQUAL";
     case TOKEN_NOT_EQUAL:
         return "TOKEN_NOT_EQUAL";
+    case TOKEN_EXCLAMATION:
+        return "TOKEN_EXCLAMATION";
+    case TOKEN_QUESTION:
+        return "TOKEN_QUESTION";
+    case TOKEN_PERIOD:
+        return "TOKEN_PERIOD";
+    case TOKEN_COMMA:
+        return "TOKEN_COMMA";
+    case TOKEN_HASHTAG:
+        return "TOKEN_HASHTAG";
+    case TOKEN_VALUE_KEYWORD:
+        return "TOKEN_VALUE_KEYWORD";
+    case TOKEN_PACKED_KEYWORD:
+        return "TOKEN_PACKED_KEYWORD";
+    case TOKEN_UNMANAGED_KEYWORD:
+        return "TOKEN_UNMANAGED_KEYWORD";
     default:
         assert(false && "tokentype_to_string TokenType is not implemented");
         break;

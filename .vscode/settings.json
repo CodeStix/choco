@@ -5,6 +5,16 @@
         "list.h": "c",
         "ctype.h": "c",
         "types.h": "c",
-        "util.h": "c"
+        "util.h": "c",
+        "ast.h": "c",
+        "value.h": "c",
+        "map.h": "c",
+        "typeinfo": "c",
+        "*.tcc": "c",
+        "optional": "c",
+        "algorithm": "c",
+        "limits": "c",
+        "numeric": "c",
+        "streambuf": "c"
     }
 }

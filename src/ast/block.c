@@ -17,8 +17,17 @@ ASTBlock* ast_block_malloc(List* statements) {
 }
 
 ASTNode* ast_parse_statement(List* tokens, unsigned int* i) {
-    return NULL;
-};
+
+    // TODO
+    Token* tok = peek(tokens, i);
+    switch (token_type(tok)) {
+    case TOKEN_SYMBOL: {
+        return NULL;
+    }
+    default:
+        return NULL;
+    }
+}
 
 ASTNode* ast_parse_block(List* tokens, unsigned int* i) {
     unsigned int start_token = *i;
@@ -47,7 +56,7 @@ ASTNode* ast_parse_block(List* tokens, unsigned int* i) {
         ASTNode* statement = ast_parse_statement(tokens, i);
         if (statement == NULL) {
             printf("Invalid statement\n");
-            token_highlight(tok);
+            token_highlight(tok, tok);
             assert(false);
             return NULL;
         }
@@ -57,7 +66,7 @@ ASTNode* ast_parse_block(List* tokens, unsigned int* i) {
         tok = peek(tokens, i);
         if (token_type(tok) != TOKEN_SEMICOLON && token_type(tok) != TOKEN_CURLY_BRACKET_CLOSE) {
             printf("Expected ; or }\n");
-            token_highlight(tok);
+            token_highlight(tok, tok);
             assert(false);
             return NULL;
         }

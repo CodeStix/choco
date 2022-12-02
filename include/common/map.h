@@ -10,6 +10,8 @@ typedef struct MapIterator MapIterator;
 typedef unsigned long (*HashCodeCalculatorFunc)(void* data);
 typedef int (*ComparatorFunc)(void* a, void* b);
 
+#define MAP_DEFAULT_TABLE_SIZE 16
+
 Map* map_malloc(unsigned int table_size, ComparatorFunc comp_func, HashCodeCalculatorFunc hash_func);
 Map* map_malloc_string_comparator(unsigned int table_size);
 void* map_put(Map* map, void* key, void* value);
