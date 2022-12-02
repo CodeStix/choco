@@ -27,15 +27,19 @@ ASTFunction* ast_function_malloc(Token* name_token, ASTNode* parameter_type, AST
     return f;
 }
 
-void ast_function_to_string(ASTNode* node, char* output, size_t max_length) {
+void ast_function_print(ASTNode* node, bool verbose, unsigned int indent) {
     ASTFunction* func = (ASTFunction*)ast_node_data(node);
 
     unsigned int tok_len = 0;
     char* tok_value = token_value(func->name_token, &tok_len);
 
-    snprintf(output, max_length, "Function { name=%.*s, exported=%s, extern=%s }", tok_len, tok_value,
-             ast_modifiers_has(func->modifiers, MODIFIER_EXPORT) ? "yes" : "no",
-             ast_modifiers_has(func->modifiers, MODIFIER_EXTERN) ? "yes" : "no");
+    printf("%*sFunction { name=%.*s, exported=%s, extern=%s }\n", indent, "", tok_len, tok_value,
+           ast_modifiers_has(func->modifiers, MODIFIER_EXPORT) ? "yes" : "no",
+           ast_modifiers_has(func->modifiers, MODIFIER_EXTERN) ? "yes" : "no");
+
+    if (verbose) {
+        ast_node_print(func->body, true, indent + 2);
+    }
 }
 
 ASTNode* ast_parse_function(List* tokens, unsigned int* i) {

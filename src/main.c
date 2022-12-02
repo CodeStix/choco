@@ -20,7 +20,7 @@ int main() {
 
     ASTNode* root = ast_build(tokens, f);
 
-    ast_node_print(root);
+    ast_node_print(root, true, 0);
 
     list_free(tokens);
     sourcefile_free(f);

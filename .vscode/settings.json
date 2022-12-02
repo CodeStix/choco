@@ -17,6 +17,8 @@
         "numeric": "c",
         "streambuf": "c",
         "string.h": "c",
-        "operator.h": "c"
+        "operator.h": "c",
+        "string_view": "c",
+        "block.h": "c"
     }
 }

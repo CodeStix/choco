@@ -42,8 +42,7 @@ ASTNodeType ast_node_type(ASTNode* node);
 void* ast_node_data(ASTNode* node);
 void ast_node_set_data(ASTNode* node, void* new_data);
 void ast_node_free(ASTNode* node);
-bool ast_node_to_string(ASTNode* node, char* output, size_t max_length);
-void ast_node_print(ASTNode* node);
+void ast_node_print(ASTNode* node, bool verbose, unsigned int indent);
 
 char* ast_node_type_to_string(ASTNodeType type);
 

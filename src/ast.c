@@ -41,13 +41,16 @@ struct ASTNode {
     unsigned int end_token;
 };
 
-struct ASTNodeToStringEntry {
+struct ASTPrintEntry {
     ASTNodeType type;
-    void (*to_string)(ASTNode* node, char* output, size_t max_length);
+    void (*print)(ASTNode* node, bool verbose, unsigned int indent);
 };
-typedef struct ASTNodeToStringEntry ASTNodeToStringEntry;
+typedef struct ASTPrintEntry ASTPrintEntry;
 
-static ASTNodeToStringEntry node_to_string[] = {{AST_FILE, ast_file_to_string}, {AST_FUNCTION, ast_function_to_string}};
+static ASTPrintEntry node_to_string[] = {{AST_FILE, ast_file_print},
+                                         {AST_FUNCTION, ast_function_print},
+                                         {AST_BLOCK, ast_block_print},
+                                         {AST_DECLARATION, ast_declaration_print}};
 
 inline Token* peek(List* tokens, unsigned int* i) {
     return list_get(tokens, *i);
@@ -72,23 +75,16 @@ ASTNode* ast_node_malloc(ASTNodeType type, void* data, unsigned int start_token,
     return node;
 }
 
-bool ast_node_to_string(ASTNode* node, char* output, size_t max_length) {
+void ast_node_print(ASTNode* node, bool verbose, unsigned int indent) {
     for (int i = 0; i < sizeof(node_to_string) / sizeof(node_to_string[0]); i++) {
-        ASTNodeToStringEntry* entry = &node_to_string[i];
+        ASTPrintEntry* entry = &node_to_string[i];
         if (entry->type == node->type) {
-            entry->to_string(node, output, max_length);
-            return true;
+            entry->print(node, verbose, indent);
+            return;
         }
     }
 
-    printf("Warning: no to_string implementation for type %s\n", ast_node_type_to_string(node->type));
-    return false;
-}
-
-void ast_node_print(ASTNode* node) {
-    char buff[250];
-    assert(ast_node_to_string(node, buff, sizeof(buff)) == true);
-    puts(buff);
+    printf("%*s(no print implementation for type %s)\n", indent, "", ast_node_type_to_string(ast_node_type(node)));
 }
 
 ASTNodeType ast_node_type(ASTNode* node) {
@@ -117,6 +113,36 @@ ASTNode* ast_build(List* tokens, SourceFile* source) {
 
 char* ast_node_type_to_string(ASTNodeType type) {
     switch (type) {
+    case AST_FILE:
+        return "AST_FILE";
+    case AST_BLOCK:
+        return "AST_BLOCK";
+    case AST_FUNCTION:
+        return "AST_FUNCTION";
+    case AST_OPERATOR:
+        return "AST_OPERATOR";
+    case AST_UNARY_OPERATOR:
+        return "AST_UNARY_OPERATOR";
+    case AST_BRACKETS:
+        return "AST_BRACKETS";
+    case AST_LITERAL_NUMBER:
+        return "AST_LITERAL_NUMBER";
+    case AST_LITERAL_STRING:
+        return "AST_LITERAL_STRING";
+    case AST_SYMBOL:
+        return "AST_SYMBOL";
+    case AST_OBJECT:
+        return "AST_OBJECT";
+    case AST_OBJECT_FIELD:
+        return "AST_OBJECT_FIELD";
+    case AST_ARRAY:
+        return "AST_ARRAY";
+    case AST_ARRAY_SEGMENT:
+        return "AST_ARRAY_SEGMENT";
+    case AST_MODIFIERS:
+        return "AST_MODIFIERS";
+    case AST_DECLARATION:
+        return "AST_DECLARATION";
     default:
         assert(false && "ast_node_type_to_string ASTNodeType is not implemented");
         break;

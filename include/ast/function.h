@@ -12,7 +12,7 @@ typedef struct ASTFunction ASTFunction;
 ASTFunction* ast_function_malloc(Token* name_token, ASTNode* parameter_type, ASTNode* return_type, ASTNode* body,
                                  ASTNode* modifiers);
 
-void ast_function_to_string(ASTNode* node, char* output, size_t max_length);
+void ast_function_print(ASTNode* node, bool verbose, unsigned int indent);
 ASTNode* ast_parse_function(List* tokens, unsigned int* i);
 
 #endif   // AST_FUNCTION_H

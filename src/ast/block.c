@@ -13,13 +13,16 @@ struct ASTBlock {
 };
 
 struct ASTDeclaration {
+    Token* name_token;
     bool is_const;
     ASTNode* type_specifier;
     ASTNode* initial_value;
 };
 
-ASTDeclaration* ast_declaration_malloc(ASTNode* type_specifier, ASTNode* initial_value, bool is_const) {
+ASTDeclaration* ast_declaration_malloc(Token* name_token, ASTNode* type_specifier, ASTNode* initial_value,
+                                       bool is_const) {
     ASTDeclaration* d = (ASTDeclaration*)malloc(sizeof(ASTDeclaration));
+    d->name_token = name_token;
     d->is_const = is_const;
     d->type_specifier = type_specifier;
     d->initial_value = initial_value;
@@ -71,8 +74,33 @@ ASTNode* ast_parse_declaration(List* tokens, unsigned int* i) {
         assert(initial_value != NULL);
     }
 
-    return ast_node_malloc(AST_DECLARATION, ast_declaration_malloc(type_specifier, initial_value, is_const),
+    return ast_node_malloc(AST_DECLARATION, ast_declaration_malloc(name_tok, type_specifier, initial_value, is_const),
                            start_token, *i);
+}
+
+void ast_declaration_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTDeclaration* decl = (ASTDeclaration*)ast_node_data(node);
+
+    unsigned int tok_len = 0;
+    char* tok_value = token_value(decl->name_token, &tok_len);
+
+    printf("%*sDeclaration { name=%.*s, const=%s }\n", indent, "", tok_len, tok_value, decl->is_const ? "yes" : "no");
+
+    if (verbose) {
+        printf("%*sType specifier:\n", indent + 2, "");
+        if (decl->type_specifier != NULL) {
+            ast_node_print(decl->type_specifier, true, indent + 4);
+        } else {
+            printf("%*sNULL\n", indent + 4, "");
+        }
+
+        printf("%*sInitial value:\n", indent + 2, "");
+        if (decl->initial_value != NULL) {
+            ast_node_print(decl->initial_value, true, indent + 4);
+        } else {
+            printf("%*sNULL\n", indent + 4, "");
+        }
+    }
 }
 
 ASTNode* ast_parse_statement(List* tokens, unsigned int* i) {
@@ -92,6 +120,19 @@ ASTNode* ast_parse_statement(List* tokens, unsigned int* i) {
 
     default:
         return NULL;
+    }
+}
+
+void ast_block_print(ASTNode* node, bool verbose, unsigned int indent) {
+    ASTBlock* body = (ASTBlock*)ast_node_data(node);
+
+    printf("%*sBlock { statements=%u }\n", indent, "", list_length(body->statements_nodes));
+
+    if (verbose) {
+        for (unsigned int i = 0; i < list_length(body->statements_nodes); i++) {
+            ASTNode* n = list_get(body->statements_nodes, i);
+            ast_node_print(n, true, indent + 2);
+        }
     }
 }
 
